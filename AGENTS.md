@@ -1,6 +1,11 @@
 # oraculo
 
-Servidor local de LLMs rodando com `llama.cpp` via Docker, com API OpenAI-compatible na porta 8081 e interface web Open WebUI na porta 3000.
+Servidor local de LLMs com **llama.cpp** (inferência GPU), interface **Open WebUI**, gateway **OpenWA** (WhatsApp API com MCP) e automação **n8n** (workflows com MCP). Expondo:
+
+- **API OpenAI-compatible** (llama.cpp) → porta `8081`
+- **Open WebUI** → porta `8080`
+- **OpenWA API + MCP** → porta `2785` (localhost apenas)
+- **n8n** → porta `5678`
 
 ---
 
@@ -21,29 +26,32 @@ Mantenha a documentação sincronizada com o código. Documentação desatualiza
 
 ```
 oraculo/
-├── docker-compose.yml          # Definição dos serviços Docker (llama-cpp, open-webui)
+├── docker-compose.yml          # Definição dos serviços Docker (llama-cpp, open-webui, openwa, n8n)
 ├── manage.sh                   # Script de gerenciamento (llama-cpp)
 ├── .env                        # Variáveis de ambiente
 │
-└── models/
-    ├── models.ini              # Configurações dos modelos para o servidor llama.cpp
-    ├── MODELS_INSTALL.md       # Guia de instalação de modelos
-    ├── Bonsai-27B-Q1_0/
-    ├── Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/
-    ├── Ornith-1.0-35B-GGUF/
-    ├── ornith-1.0-9b-Q4_K_M/
-    ├── Qwen3.5-9B-UD-Q4_K_XL/
-    ├── Qwen3.6-28B-REAP20-A3B-Q4_K_M/
-    ├── Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/
-    ├── unsloth_Qwen3.6_35B_A3B/
-    └── unsloth_Qwen3.6_35B_A3B_MTP/
+├── models/
+│   ├── models.ini              # Configurações dos modelos para o servidor llama.cpp
+│   ├── MODELS_INSTALL.md       # Guia de instalação de modelos
+│   ├── Bonsai-27B-Q1_0/
+│   ├── Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/
+│   ├── Ornith-1.0-35B-GGUF/
+│   ├── ornith-1.0-9b-Q4_K_M/
+│   ├── Qwen3.5-9B-UD-Q4_K_XL/
+│   ├── Qwen3.6-28B-REAP20-A3B-Q4_K_M/
+│   ├── Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/
+│   ├── unsloth_Qwen3.6_35B_A3B/
+│   └── unsloth_Qwen3.6_35B_A3B_MTP/
+│
+├── DOCKER.md                   # Documentação Docker detalhada
+└── README.md                   # Guia rápido de uso
 ```
 
 ---
 
 ## docker-compose.yml
 
-Define **um serviço** para inferência de LLM com GPU:
+Define **quatro serviços**: llama-cpp (inferência GPU), open-webui (interface web), openwa (WhatsApp API com MCP) e n8n (automação de workflows com MCP):
 
 ### Serviço `llama-cpp` — Servidor de Inferência
 
@@ -57,6 +65,83 @@ Define **um serviço** para inferência de LLM com GPU:
 | **Command**   | `llama-server -s --verbosity 3 --models-preset /app/models.ini --models-max 1 --host 0.0.0.0 --port 8081` |
 
 > O servidor expõe uma API OpenAI-compatible. Use `-s` para modo server-only (sem terminal interativo).
+
+### Serviço `open-webui` — Interface Web
+
+| Item          | Valor                                              |
+|---------------|-----------------------------------------------------|
+| **Imagem**    | `ghcr.io/open-webui/open-webui:main`              |
+| **Container** | `open-webui`                                       |
+| **Porta**     | `8080` (network_mode: host)                        |
+| **Rede**      | `host`                                             |
+| **Volumes**   | `open-webui-data → /app/backend/data`              |
+| **Env**       | `OAI_API_BASE=http://localhost:8081/v1`           |
+
+Interface web para interagir com os LLMs via navegador. Configurada para conectar ao llama-cpp automaticamente.
+
+> **Importante**: `WEBUI_SECRET_KEY` é obrigatório em setups Docker. Sem ele, ferramentas MCP conectadas via OAuth não persistem tokens entre reinicializações.
+
+### Serviço `openwa` — WhatsApp API Gateway com MCP
+
+| Item          | Valor                                              |
+|---------------|-----------------------------------------------------|
+| **Imagem**    | `ghcr.io/rmyndharis/openwa:main`                  |
+| **Container** | `openwa`                                           |
+| **Porta**     | `2785` (127.0.0.1:2785)                           |
+| **Rede**      | `openwa-network` + `openwa-internal-docker`        |
+| **Volumes**   | `openwa-data → /app/data`, `openwa-sessions → /app/data/sessions` |
+| **Env**       | `MCP_ENABLED=true`, `MCP_READONLY=false`           |
+
+Gateway WhatsApp que expõe ~39 ferramentas via **MCP Streamable HTTP** em `POST /mcp`.
+
+**Ferramentas disponíveis**:
+- **Sessão**: list, get, chats, stats, mark read/unread, typing
+- **Mensagem**: list, history, reactions, send (text/image/video/audio/document/location/contact/sticker/template), reply, forward, react
+- **Contato**: list, get, check-number, resolve-phone, profile-picture, block/unblock
+- **Grupo**: list, get, invite-code, create, add participants, set subject/description
+
+**Autenticação**: API key via header `X-API-Key` ou `Authorization: Bearer <key>`. A chave é gerada na primeira inicialização e salva em `openwa-data/.api-key`.
+
+**Modo de operação**: Por padrão, MCP é **read-only**. Defina `MCP_READONLY=false` para expor ferramentas de escrita (enviar mensagens, etc.).
+
+### Serviço `openwa-docker-proxy` — Proxy Seguro do Docker Socket
+
+| Item          | Valor                                              |
+|---------------|-----------------------------------------------------|
+| **Imagem**    | `tecnativa/docker-socket-proxy:v0.4.2`            |
+| **Container** | `openwa-docker-proxy`                              |
+| **Rede**      | `openwa-network` + `openwa-internal-docker` (internal) |
+| **Volumes**   | `/var/run/docker.sock → /var/run/docker.sock:ro`  |
+
+Proxy restrito que expõe apenas operações necessárias (CONTAINERS, IMAGES, VOLUMES, INFO, PING, POST, DELETE). É o **único** container com acesso ao Docker socket.
+
+### Serviço `n8n` — Automação de Workflows com MCP
+
+| Item          | Valor                                              |
+|---------------|-----------------------------------------------------|
+| **Imagem**    | `docker.n8n.io/n8nio/n8n`                          |
+| **Container** | `n8n`                                              |
+| **Porta**     | `5678` (network_mode: host)                        |
+| **Rede**      | `host`                                             |
+| **Volumes**   | `n8n_data → /home/node/.n8n`                       |
+| **Env**       | `GENERIC_TIMEZONE=America/Sao_Paulo`, `TZ=America/Sao_Paulo` |
+
+Interface de automação com +300 integrações (Slack, Gmail, GitHub, Notion, etc.). **MCP nativo** exposto em `http://localhost:5678/mcp-server/http`.
+
+**Configuração inicial obrigatória**:
+1. Acesse http://localhost:5678 e crie conta admin
+2. **Settings → Instance-level MCP** → ative **Enable MCP access**
+3. Clique em **Connection details** → copie o **Access Token**
+4. Habilite workflows para MCP: workflow → `...` → **Settings** → **Available in MCP**
+
+**Ferramentas MCP disponíveis**:
+- **Workflow**: search, get, execute, test, publish, unpublish, create_from_code, update
+- **Execução**: get_execution, search_executions
+- **Dados**: list_credentials, search_projects, search_folders, list_tags
+- **Nodes**: search_nodes, get_node_types, resolve_node_data
+- **SDK**: get_sdk_reference, validate_workflow, validate_nodes, get_guidance
+
+**Acesso**: http://localhost:5678
 
 ---
 
@@ -232,6 +317,63 @@ curl -X POST http://localhost:8081/v1/load_model \
 # Unload modelo atual
 curl -X POST http://localhost:8081/v1/unload_model
 ```
+
+---
+
+## OpenWA MCP — Integração com Open WebUI
+
+### Configurar MCP no Open WebUI
+
+Após iniciar o stack, configure o MCP no Open WebUI:
+
+1. Acesse **http://localhost:8080**
+2. Faça login como **administrador**
+3. Vá em **⚙️ Admin Settings → External Tools**
+4. Clique em **+ (Add Server)**
+5. Configure:
+
+| Campo | Valor |
+|-------|-------|
+| **Type** | `MCP (Streamable HTTP)` |
+| **Server URL** | `http://localhost:2785/mcp` |
+| **Auth** | `Bearer <API_KEY>` |
+
+6. A **API Key** está em `openwa-data/.api-key` dentro do container:
+
+```bash
+docker exec openwa cat /app/data/.api-key
+```
+
+7. Clique em **Save** e reinicie o Open WebUI se solicitado.
+
+> **⚠️ Importante**: Use o tipo **MCP (Streamable HTTP)**. Usar OpenAPI type causa crash na UI ou loading infinito.
+
+### Testar MCP via curl
+
+```bash
+# Obter API key
+API_KEY=$(docker exec openwa cat /app/data/.api-key)
+
+# Testar endpoint MCP
+curl -X POST http://localhost:2785/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $API_KEY" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+```
+
+### Variáveis de Ambiente OpenWA
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `MCP_ENABLED` | `false` | Habilita o servidor MCP |
+| `MCP_READONLY` | `true` | Modo read-only (false = expor ferramentas de escrita) |
+| `MCP_RATE_LIMIT_MAX` | `60` | Máx de tool calls por key por janela |
+| `MCP_RATE_LIMIT_WINDOW_MS` | `60000` | Tamanho da janela de rate limit (ms) |
+| `MCP_IP_RATE_LIMIT_MAX` | `120` | Máx de requests por IP (pré-autenticação) |
+| `MCP_IP_RATE_LIMIT_WINDOW_MS` | `60000` | Janela de rate limit por IP (ms) |
+| `AUTO_START_SESSIONS` | `false` | Auto-reconectar sessões autenticadas no boot |
+| `DATABASE_TYPE` | `sqlite` | sqlite ou postgres |
+| `API_PORT` | `2785` | Porta host mapeada |
 
 ---
 

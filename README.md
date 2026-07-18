@@ -1,6 +1,11 @@
 # Oráculo
 
-Servidor local de LLMs rodando com **llama.cpp** via Docker, expondo API OpenAI-compatible na porta `8081` e interface web **Open WebUI** na porta `8080` (modo host).
+Servidor local de LLMs com **llama.cpp** (inferência GPU), interface **Open WebUI**, gateway **OpenWA** (WhatsApp API com MCP) e automação **n8n** (workflows com MCP). Expondo:
+
+- **API OpenAI-compatible** (llama.cpp) → porta `8081`
+- **Open WebUI** → porta `8080`
+- **OpenWA API + MCP** → porta `2785` (localhost apenas)
+- **n8n** → porta `5678`
 
 ---
 
@@ -11,7 +16,7 @@ Servidor local de LLMs rodando com **llama.cpp** via Docker, expondo API OpenAI-
 | Componente | Mínimo | Recomendado | Testado |
 |------------|--------|-------------|---------|
 | **GPU** | NVIDIA com 8 GB VRAM | NVIDIA com 24+ GB VRAM | NVIDIA RTX 3090 (24 GB) |
-| **RAM** | 16 GB | 32 GB+ | 32 GB |
+| **RAM** | 18 GB | 34 GB+ | 32 GB |
 | **Disco** | 50 GB livre | 100 GB+ | — |
 
 > Modelos quantizados (Q4_K_M) rodam com ~8-12 GB VRAM. Modelos MoE (35B-A3B) beneficiam-se de mais VRAM para melhor throughput.
@@ -83,6 +88,12 @@ curl http://localhost:8081/v1/models
 
 # Acessar Open WebUI
 # Abrir http://localhost:8080 no navegador
+
+# Verificar OpenWA
+curl http://localhost:2785/api/health/ready
+
+# Acessar n8n
+# Abrir http://localhost:5678 no navegador
 ```
 
 ---
@@ -147,6 +158,62 @@ Interface web para interagir com os modelos via navegador.
 | `docker compose ps` | Ver status |
 | `docker logs llama-cpp` | Ver logs do llama-cpp |
 | `docker logs open-webui` | Ver logs do open-webui |
+| `docker logs openwa` | Ver logs do openwa |
+| `docker logs n8n` | Ver logs do n8n |
+
+## OpenWA — WhatsApp com MCP
+
+O OpenWA expõe ~39 ferramentas de WhatsApp via **MCP Streamable HTTP** para uso no Open WebUI:
+
+| Item | Valor |
+|------|-------|
+| **URL API** | `http://localhost:2785` |
+| **Endpoint MCP** | `POST http://localhost:2785/mcp` |
+| **Container** | `openwa` |
+| **Porta** | `2785` (127.0.0.1 — localhost apenas) |
+
+### Configurar MCP no Open WebUI
+
+1. Acesse **http://localhost:8080** como admin
+2. **⚙️ Admin Settings → External Tools → + (Add Server)**
+3. **Type**: `MCP (Streamable HTTP)`
+4. **Server URL**: `http://localhost:2785/mcp`
+5. **Auth**: `Bearer <API_KEY>` (obter com `docker exec openwa cat /app/data/.api-key`)
+6. **Save** → reiniciar se solicitado
+
+> Use **MCP (Streamable HTTP)**, não OpenAPI. OpenAPI causa crash na UI.
+
+Ferramentas disponíveis: list/get sessions, send messages (text/image/video/audio), chats, contacts, groups, webhooks.
+
+---
+
+## n8n — Automação de Workflows
+
+Interface de automação com +300 integrações (Slack, Gmail, GitHub, Notion, etc.) e **MCP nativo**.
+
+| Item | Valor |
+|------|-------|
+| **URL** | `http://localhost:5678` |
+| **Endpoint MCP** | `http://localhost:5678/mcp-server/http` |
+| **Container** | `n8n` |
+| **Porta** | `5678` (modo host) |
+
+### Configurar MCP do n8n no Open WebUI
+
+1. Acesse **http://localhost:5678** e crie uma conta admin
+2. Vá em **Settings → Instance-level MCP** e ative **Enable MCP access**
+3. Clique em **Connection details** e copie o **Access Token** (ou configure OAuth2)
+4. Habilite workflows individuais para MCP: abra o workflow → `...` → **Settings** → **Available in MCP**
+5. Acesse **http://localhost:8080** como admin no Open WebUI
+6. **⚙️ Admin Settings → External Tools → + (Add Server)**
+7. **Type**: `MCP (Streamable HTTP)`
+8. **Server URL**: `http://localhost:5678/mcp-server/http`
+9. **Auth**: `Bearer <YOUR_N8N_MCP_TOKEN>` (token obtido no passo 4)
+10. **Save** → reiniciar se solicitado
+
+> Use **MCP (Streamable HTTP)**, não OpenAPI. OpenAPI causa crash na UI.
+
+Ferramentas MCP disponíveis: search/get/execute workflows, gerenciar credenciais, nodes, projetos, execuções, data tables.
 
 ---
 

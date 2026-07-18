@@ -33,13 +33,103 @@ services:
     restart: always
     environment:
       - OAI_API_BASE=http://localhost:8081/v1
-      - WEBUI_SECRET_KEY=oraculo-secret-key
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
     volumes:
       - open-webui-data:/app/backend/data
     depends_on:
       - llama-cpp
 
+  # =========================================================
+  # n8n — Automação de workflows com MCP nativo
+  # =========================================================
+  # Interface web: http://localhost:5678
+  # MCP Streamable HTTP: http://localhost:5678/mcp-server/http
+  # Suporta +300 integrações (Slack, Gmail, GitHub, Notion, etc.)
+  # =========================================================
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    network_mode: host
+    restart: always
+    environment:
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      - TZ=America/Sao_Paulo
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  # =========================================================
+  # openwa-docker-proxy — Proxy seguro para Docker socket
+  # =========================================================
+  # Expose apenas as operações necessárias (containers, images, volumes,
+  # info, ping, post, delete). Tudo mais é negado por padrão.
+  # Este container é o ÚNICO com acesso ao Docker socket.
+  # =========================================================
+  openwa-docker-proxy:
+    image: tecnativa/docker-socket-proxy:v0.4.2
+    container_name: openwa-docker-proxy
+    restart: unless-stopped
+    networks:
+      - openwa-network
+      - openwa-internal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      VOLUMES: 1
+      INFO: 1
+      PING: 1
+      POST: 1
+      DELETE: 1
+      # Tudo mais é negado (AUTH, SECRETS, NETWORKS, PLUGINS, SWARM, etc.)
+
+  # =========================================================
+  # openwa — WhatsApp API Gateway com MCP habilitado
+  # =========================================================
+  # Exposto em http://localhost:2785
+  # MCP Streamable HTTP: POST http://localhost:2785/mcp
+  # Autenticação: header X-API-Key ou Authorization: Bearer <key>
+  # A API key é gerada na primeira inicialização e salva em openwa-data/.api-key
+  # =========================================================
+  openwa:
+    image: ghcr.io/rmyndharis/openwa:main
+    container_name: openwa
+    restart: unless-stopped
+    stop_grace_period: 45s
+    ports:
+      - "127.0.0.1:2785:2785"
+    networks:
+      - openwa-network
+      - openwa-internal
+    environment:
+      - NODE_ENV=production
+      - PORT=2785
+      - LOG_LEVEL=info
+      - MCP_ENABLED=true
+      - MCP_READONLY=false
+      - AUTO_START_SESSIONS=false
+      - API_PORT=2785
+      - DOCKER_HOST=tcp://openwa-docker-proxy:2375
+      - DATABASE_TYPE=sqlite
+    volumes:
+      - openwa-data:/app/data
+      - openwa-sessions:/app/data/sessions
+    depends_on:
+      - openwa-docker-proxy
+
+networks:
+  # Rede interna — apenas openwa e openwa-docker-proxy (sem acesso externo)
+  openwa-internal:
+    name: openwa-internal-docker
+    internal: true
+
+  # Rede externa — openwa e outros containers precisam se comunicar
+  openwa-network:
+    name: openwa-network
+
 volumes:
   open-webui-data:
-
-
+  openwa-data:
+  openwa-sessions:
+  n8n_data:
