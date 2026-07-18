@@ -1,0 +1,27 @@
+services:
+  # =========================================================
+  # llama-cpp — Servidor de inferência (llama.cpp)
+  # =========================================================
+  llama-cpp:
+    image: ghcr.io/ggml-org/llama.cpp:full-cuda
+    container_name: llama-cpp
+    privileged: true
+    environment:
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - NVIDIA_VISIBLE_DEVICES=all
+    restart: always
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./models:/models
+      - ./models.ini:/app/models.ini
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: ["-s", "--verbosity", "3", "--models-preset", "/app/models.ini", "--models-max", "1", "--host", "0.0.0.0", "--port", "8081"]
+
+

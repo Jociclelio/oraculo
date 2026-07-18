@@ -1,0 +1,10 @@
+# Modelos GGUF (arquivos grandes)
+models/*
+!models/.gitkeep
+
+# Dependências e caches
+.opencode/
+.pi/
+
+# Arquivos de ambiente (opcional - descomente se quiser ignorar)
+# .env
