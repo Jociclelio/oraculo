@@ -4,6 +4,19 @@ Servidor local de LLMs rodando com `llama.cpp` via Docker, com API OpenAI-compat
 
 ---
 
+## Documentação do Repositório
+
+**Qualquer mudança no repositório deve ser descrita e atualizada nos arquivos de documentação correspondentes.**
+
+- Alterações no `docker-compose.yml` → atualizar `DOCKER.md`
+- Alterações no `models.ini` ou modelos → atualizar `AGENTS.md`
+- Alterações no `manage.sh` ou fluxo de uso → atualizar `README.md`
+- Novos requisitos de hardware/software → atualizar `README.md`
+
+Mantenha a documentação sincronizada com o código. Documentação desatualizada gera confusão e perda de conhecimento.
+
+---
+
 ## Estrutura do Repositório
 
 ```
