@@ -1,6 +1,6 @@
 # Docker — Servidor LLM com llama.cpp
 
-Servidor local de LLM com **llama.cpp** (inferência GPU) via Docker, expondo API OpenAI-compatible na porta 8081 e interface web **Open WebUI** na porta 3000.
+Servidor local de LLM com **llama.cpp** (inferência GPU) via Docker, expondo API OpenAI-compatible na porta 8081 e interface web **Open WebUI** na porta 8080 (modo host).
 
 ---
 
@@ -29,11 +29,12 @@ Serve uma **API OpenAI-compatible** para geração de texto, chat e embeddings.
 
 - **Imagem**: `ghcr.io/open-webui/open-webui:main`
 - **Container**: `open-webui`
-- **Porta**: `3000`
+- **Porta**: `8080` (modo host)
 - **Volume**: `open-webui-data → /app/backend/data` (dados persistentes)
 - **Dependência**: `llama-cpp`
+- **Rede**: `host` (conexão direta via `localhost`)
 
-Interface web para interagir com os modelos via navegador. Configurada automaticamente para conectar ao llama-cpp.
+Interface web para interagir com os modelos via navegador. Configurada automaticamente para conectar ao llama-cpp via `http://localhost:8081/v1`.
 
 ---
 
@@ -131,7 +132,7 @@ curl -X POST http://localhost:8081/v1/unload_model
 
 ## Open WebUI
 
-Acessar a interface web em **http://localhost:3000**.
+Acessar a interface web em **http://localhost:8080**.
 
 Primeiro acesso: criar conta de administrador. O Open WebUI já vem configurado para conectar ao llama-cpp automaticamente.
 
@@ -225,11 +226,14 @@ docker logs open-webui
 ### Open WebUI não conecta ao llama-cpp
 
 ```bash
-# Verificar se o llama-cpp está rodando
-docker ps | grep llama-cpp
+# Verificar se ambos estão rodando
+docker compose ps
 
 # Verificar se a API está respondendo
 curl http://localhost:8081/v1/models
+
+# Verificar conexão do open-webui para o llama-cpp
+docker exec open-webui curl -s http://localhost:8081/v1/models
 
 # Reiniciar o open-webui
 docker restart open-webui

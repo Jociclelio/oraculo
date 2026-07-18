@@ -1,6 +1,6 @@
 # Oráculo
 
-Servidor local de LLMs rodando com **llama.cpp** via Docker, expondo API OpenAI-compatible na porta `8081` e interface web **Open WebUI** na porta `3000`.
+Servidor local de LLMs rodando com **llama.cpp** via Docker, expondo API OpenAI-compatible na porta `8081` e interface web **Open WebUI** na porta `8080` (modo host).
 
 ---
 
@@ -82,7 +82,7 @@ docker compose ps
 curl http://localhost:8081/v1/models
 
 # Acessar Open WebUI
-# Abrir http://localhost:3000 no navegador
+# Abrir http://localhost:8080 no navegador
 ```
 
 ---
@@ -128,9 +128,9 @@ Interface web para interagir com os modelos via navegador.
 
 | Item | Valor |
 |------|-------|
-| **URL** | `http://localhost:3000` |
+| **URL** | `http://localhost:8080` |
 | **Container** | `open-webui` |
-| **Porta** | `3000` |
+| **Porta** | `8080` (modo host) |
 
 > O Open WebUI está pré-configurado para conectar ao llama-cpp na porta 8081.
 
