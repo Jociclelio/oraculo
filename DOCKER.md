@@ -1,6 +1,6 @@
 # Docker — Servidor LLM com llama.cpp
 
-Servidor local de LLM com **llama.cpp** (inferência GPU) via Docker, expondo API OpenAI-compatible na porta 8081.
+Servidor local de LLM com **llama.cpp** (inferência GPU) via Docker, expondo API OpenAI-compatible na porta 8081 e interface web **Open WebUI** na porta 3000.
 
 ---
 
@@ -12,7 +12,7 @@ Servidor local de LLM com **llama.cpp** (inferência GPU) via Docker, expondo AP
 
 ---
 
-## Serviço
+## Serviços
 
 ### llama-cpp — Inferência GPU
 
@@ -25,19 +25,44 @@ Servidor local de LLM com **llama.cpp** (inferência GPU) via Docker, expondo AP
 
 Serve uma **API OpenAI-compatible** para geração de texto, chat e embeddings.
 
+### open-webui — Interface Web
+
+- **Imagem**: `ghcr.io/open-webui/open-webui:main`
+- **Container**: `open-webui`
+- **Porta**: `3000`
+- **Volume**: `open-webui-data → /app/backend/data` (dados persistentes)
+- **Dependência**: `llama-cpp`
+
+Interface web para interagir com os modelos via navegador. Configurada automaticamente para conectar ao llama-cpp.
+
 ---
 
 ## Gerenciamento
 
-```bash
-# Iniciar servidor
-./manage.sh start
+### Docker Compose (todos os serviços)
 
-# Parar servidor
-./manage.sh stop
+```bash
+# Iniciar todos os serviços
+docker compose up -d
+
+# Parar todos os serviços
+docker compose down
 
 # Ver status
 docker compose ps
+
+# Ver logs
+docker compose logs -f
+```
+
+### Script de gerenciamento (apenas llama-cpp)
+
+```bash
+# Iniciar servidor llama-cpp
+./manage.sh start
+
+# Parar servidor llama-cpp
+./manage.sh stop
 ```
 
 ---
@@ -104,6 +129,21 @@ curl -X POST http://localhost:8081/v1/unload_model
 
 ---
 
+## Open WebUI
+
+Acessar a interface web em **http://localhost:3000**.
+
+Primeiro acesso: criar conta de administrador. O Open WebUI já vem configurado para conectar ao llama-cpp automaticamente.
+
+Para adicionar outros backends de API, ir em **Settings → Connections → OpenAI API** e configurar:
+
+| Campo | Valor |
+|-------|-------|
+| API Base URL | `http://localhost:8081/v1` |
+| API Key | `llama-cpp-local` |
+
+---
+
 ## Estrutura de Dados
 
 ```
@@ -117,11 +157,13 @@ oraculo/
 │   ├── Qwen3.6-28B-REAP20-A3B-Q4_K_M/
 │   ├── Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/
 │   ├── unsloth_Qwen3.6_35B_A3B/
-│   └── unsloth_Qwen3.6_35B_A3B_MTP/
+│   ├── unsloth_Qwen3.6_35B_A3B_MTP/
+│   ├── models.ini            # Configuração dos modelos do llama.cpp
+│   └── MODELS_INSTALL.md     # Guia de instalação de modelos
 │
-    ├── models.ini              # Configuração dos modelos do llama.cpp
-├── docker-compose.yml        # Definição do serviço
-└── manage.sh                 # Script de gerenciamento
+├── docker-compose.yml        # Definição dos serviços
+├── manage.sh                 # Script de gerenciamento (llama-cpp)
+└── .env                      # Variáveis de ambiente
 ```
 
 ---
@@ -175,4 +217,20 @@ rm -rf models/NOME_DO_MODELO/
 ```bash
 # Logs do llama-cpp
 docker logs llama-cpp
+
+# Logs do open-webui
+docker logs open-webui
+```
+
+### Open WebUI não conecta ao llama-cpp
+
+```bash
+# Verificar se o llama-cpp está rodando
+docker ps | grep llama-cpp
+
+# Verificar se a API está respondendo
+curl http://localhost:8081/v1/models
+
+# Reiniciar o open-webui
+docker restart open-webui
 ```

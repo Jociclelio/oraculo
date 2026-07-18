@@ -1,6 +1,6 @@
 # Oráculo
 
-Servidor local de LLMs rodando com **llama.cpp** via Docker, expondo API OpenAI-compatible na porta `8081`.
+Servidor local de LLMs rodando com **llama.cpp** via Docker, expondo API OpenAI-compatible na porta `8081` e interface web **Open WebUI** na porta `3000`.
 
 ---
 
@@ -61,20 +61,28 @@ models/
 └── unsloth_Qwen3.6_35B_A3B_MTP/
 ```
 
-### 4. Iniciar o servidor
+### 4. Iniciar os serviços
 
 ```bash
+# Iniciar com Docker Compose (recomendado)
+docker compose up -d
+
+# Ou usar o script de gerenciamento
+cd llama-cpp-server
 ./manage.sh start
 ```
 
 ### 5. Verificar que está rodando
 
 ```bash
-# Status do container
+# Status dos containers
 docker compose ps
 
 # Testar API
 curl http://localhost:8081/v1/models
+
+# Acessar Open WebUI
+# Abrir http://localhost:3000 no navegador
 ```
 
 ---
@@ -114,14 +122,31 @@ print(response.choices[0].message.content)
 
 ---
 
+## Open WebUI
+
+Interface web para interagir com os modelos via navegador.
+
+| Item | Valor |
+|------|-------|
+| **URL** | `http://localhost:3000` |
+| **Container** | `open-webui` |
+| **Porta** | `3000` |
+
+> O Open WebUI está pré-configurado para conectar ao llama-cpp na porta 8081.
+
+---
+
 ## Gerenciamento
 
 | Comando | Descrição |
 |---------|-----------|
-| `./manage.sh start` | Iniciar servidor |
-| `./manage.sh stop` | Parar servidor |
+| `./manage.sh start` | Iniciar servidor llama-cpp |
+| `./manage.sh stop` | Parar servidor llama-cpp |
+| `docker compose up -d` | Iniciar todos os serviços |
+| `docker compose down` | Parar todos os serviços |
 | `docker compose ps` | Ver status |
-| `docker logs llama-cpp` | Ver logs |
+| `docker logs llama-cpp` | Ver logs do llama-cpp |
+| `docker logs open-webui` | Ver logs do open-webui |
 
 ---
 

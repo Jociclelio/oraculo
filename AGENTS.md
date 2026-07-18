@@ -1,6 +1,6 @@
 # oraculo
 
-Servidor local de LLMs rodando com `llama.cpp` via Docker, com API OpenAI-compatible na porta 8081.
+Servidor local de LLMs rodando com `llama.cpp` via Docker, com API OpenAI-compatible na porta 8081 e interface web Open WebUI na porta 3000.
 
 ---
 
@@ -21,12 +21,13 @@ Mantenha a documentação sincronizada com o código. Documentação desatualiza
 
 ```
 oraculo/
-├── docker-compose.yml          # Definição do serviço Docker (llama-cpp)
-├── manage.sh                   # Script de gerenciamento (start/stop)
+├── docker-compose.yml          # Definição dos serviços Docker (llama-cpp, open-webui)
+├── manage.sh                   # Script de gerenciamento (llama-cpp)
 ├── .env                        # Variáveis de ambiente
 │
 └── models/
-    ├── models.ini              # Configurações dos modelos para o servidor llama.cpp                     # Modelos GGUF e arquivos auxiliares (mmproj, mtp, etc.)
+    ├── models.ini              # Configurações dos modelos para o servidor llama.cpp
+    ├── MODELS_INSTALL.md       # Guia de instalação de modelos
     ├── Bonsai-27B-Q1_0/
     ├── Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/
     ├── Ornith-1.0-35B-GGUF/
