@@ -190,4 +190,4 @@ du -sh models/*/
 |---------|-----------|
 | [`AGENTS.md`](AGENTS.md) | Documentação completa do projeto |
 | [`DOCKER.md`](DOCKER.md) | Guia focado em Docker |
-| [`models.ini`](models.ini) | Configuração dos modelos |
+| [`models/models.ini`](models/models.ini) | Configuração dos modelos |

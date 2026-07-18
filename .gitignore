@@ -1,5 +1,7 @@
 # Modelos GGUF (arquivos grandes)
 models/*
+!models/*.ini
+!models/*.md
 !models/.gitkeep
 
 # Dependências e caches

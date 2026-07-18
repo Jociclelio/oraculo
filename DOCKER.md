@@ -21,7 +21,7 @@ Servidor local de LLM com **llama.cpp** (inferência GPU) via Docker, expondo AP
 - **Porta**: `8081`
 - **GPU**: 1× NVIDIA GPU
 - **Volume**: `./models → /models` (modelos GGUF)
-- **Config**: `./models.ini → /app/models.ini`
+- **Config**: `./models/models.ini → /app/models.ini`
 
 Serve uma **API OpenAI-compatible** para geração de texto, chat e embeddings.
 
@@ -119,7 +119,7 @@ oraculo/
 │   ├── unsloth_Qwen3.6_35B_A3B/
 │   └── unsloth_Qwen3.6_35B_A3B_MTP/
 │
-├── models.ini                # Configuração dos modelos do llama.cpp
+    ├── models.ini              # Configuração dos modelos do llama.cpp
 ├── docker-compose.yml        # Definição do serviço
 └── manage.sh                 # Script de gerenciamento
 ```
@@ -130,7 +130,7 @@ oraculo/
 
 ```bash
 # Backup da config dos modelos
-tar -czf models-config-backup.tar.gz models.ini
+tar -czf models-config-backup.tar.gz models/models.ini
 
 # Restaurar
 tar -xzf models-config-backup.tar.gz

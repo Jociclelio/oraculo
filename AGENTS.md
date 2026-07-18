@@ -23,10 +23,10 @@ Mantenha a documentação sincronizada com o código. Documentação desatualiza
 oraculo/
 ├── docker-compose.yml          # Definição do serviço Docker (llama-cpp)
 ├── manage.sh                   # Script de gerenciamento (start/stop)
-├── models.ini                  # Configurações dos modelos para o servidor llama.cpp
 ├── .env                        # Variáveis de ambiente
 │
-└── models/                     # Modelos GGUF e arquivos auxiliares (mmproj, mtp, etc.)
+└── models/
+    ├── models.ini              # Configurações dos modelos para o servidor llama.cpp                     # Modelos GGUF e arquivos auxiliares (mmproj, mtp, etc.)
     ├── Bonsai-27B-Q1_0/
     ├── Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/
     ├── Ornith-1.0-35B-GGUF/
