@@ -15,7 +15,7 @@ Servidor local de LLMs com **llama.cpp** (inferência GPU), interface **Open Web
 
 | Componente | Mínimo | Recomendado | Testado |
 |------------|--------|-------------|---------|
-| **GPU** | NVIDIA com 8 GB VRAM | NVIDIA com 24+ GB VRAM | NVIDIA RTX 3090 (24 GB) |
+| **GPU** | NVIDIA com 8 GB VRAM | NVIDIA com 24+ GB VRAM | NVIDIA RTX 3060 (12 GB) |
 | **RAM** | 18 GB | 34 GB+ | 32 GB |
 | **Disco** | 50 GB livre | 100 GB+ | — |
 
