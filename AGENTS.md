@@ -6,7 +6,6 @@ Servidor local de LLMs com **llama.cpp** (inferência GPU), interface **Open Web
 - **Open WebUI** → porta `8080`
 - **OpenWA API + MCP** → porta `2785` (localhost apenas)
 - **n8n** → porta `5678`
-- **Qwen3-TTS API** → porta `8880` (tts-service)
 
 ---
 
@@ -44,10 +43,6 @@ oraculo/
 │   ├── unsloth_Qwen3.6_35B_A3B/
 │   └── unsloth_Qwen3.6_35B_A3B_MTP/
 │
-├── tts-service/                # Qwen3-TTS OpenAI-compatible API (GPU/CUDA)
-│   ├── docker-compose.yml      # Deploy do TTS com GPU
-│   └── Dockerfile              # Multi-stage build (CUDA + CPU fallback)
-│
 ├── DOCKER.md                   # Documentação Docker detalhada
 └── README.md                   # Guia rápido de uso
 ```
@@ -56,9 +51,7 @@ oraculo/
 
 ## docker-compose.yml
 
-Define **quatro serviços** no stack principal: llama-cpp (inferência GPU), open-webui (interface web), openwa (WhatsApp API com MCP) e n8n (automação de workflows com MCP).
-
-O **Qwen3-TTS** é deployado separadamente via `tts-service/docker-compose.yml`.
+Define **quatro serviços**: llama-cpp (inferência GPU), open-webui (interface web), openwa (WhatsApp API com MCP) e n8n (automação de workflows com MCP):
 
 ### Serviço `llama-cpp` — Servidor de Inferência
 
@@ -149,60 +142,6 @@ Interface de automação com +300 integrações (Slack, Gmail, GitHub, Notion, e
 - **SDK**: get_sdk_reference, validate_workflow, validate_nodes, get_guidance
 
 **Acesso**: http://localhost:5678
-
----
-
-## Qwen3-TTS — Serviço de Texto para Fala
-
-Deployado separadamente via `tts-service/docker-compose.yml`.
-
-### Serviço `qwen3-tts-gpu` — OpenAI-compatible TTS API
-
-| Item          | Valor                                              |
-|---------------|-----------------------------------------------------|
-| **Imagem**    | `tts-service-qwen3-tts-gpu:latest` (build local)   |
-| **Container** | `qwen3-tts-gpu`                                    |
-| **Porta**     | `8880` (network_mode: host)                        |
-| **GPU**       | 1× NVIDIA GPU (via NVIDIA Container Toolkit)       |
-| **Volumes**   | `huggingface-cache → /root/.cache/huggingface`     |
-| **Health**    | `http://localhost:8880/health`                     |
-
-API OpenAI-compatible para síntese de voz. Backend: Qwen3-TTS-0.6B com CUDA.
-
-**Endpoints**:
-- `POST /v1/audio/speech` — Gera áudio a partir de texto
-- `GET /health` — Verifica status do serviço
-
-**Exemplo de uso**:
-```bash
-curl -X POST http://localhost:8880/v1/audio/speech \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "qwen3-tts",
-    "input": "Olá, este é um teste.",
-    "voice": "vivian",
-    "response_format": "mp3"
-  }' -o output.mp3
-```
-
-**Modelos suportados**: Qwen3-TTS 0.6B (~1.2GB VRAM), 1.7B (~3.4GB), 2B (~4GB).
-
-**VRAM compartilhada**: TTS usa ~2GB VRAM. llama-cpp ~9.5GB. Total ~11.5GB/12GB.
-
-### Gerenciando o TTS
-
-```bash
-# Build e deploy
-cd /home/jocic/oraculo/tts-service
-docker compose up -d --build
-
-# Verificar status
-docker compose ps
-curl http://localhost:8880/health
-
-# Parar
-docker compose down
-```
 
 ---
 
@@ -438,28 +377,6 @@ curl -X POST http://localhost:2785/mcp \
 
 ---
 
-## Open WebUI — Configuração de Áudio (TTS)
-
-Configure o Open WebUI para usar o Qwen3-TTS como engine de texto para fala:
-
-1. Acesse **http://localhost:8080**
-2. Faça login como **administrador**
-3. Vá em **⚙️ Settings → Audio**
-4. Configure:
-
-| Campo | Valor |
-|-------|-------|
-| **TTS Engine** | `openai` |
-| **OpenAI Audio Base URL** | `http://localhost:8880/v1` |
-| **OpenAI Audio Model** | `qwen3-tts` |
-| **Voice** | `vivian` |
-
-5. Salve e teste com uma mensagem de chat.
-
-> **Nota**: O Qwen3-TTS suporta vozes: `vivian`, `michael`, `default`. Use `vivian` para português.
-
----
-
 ## Troubleshooting
 
 ### GPU não é reconhecida
@@ -491,50 +408,3 @@ du -sh models/*/
 # Limpar modelos não usados
 rm -rf models/NOME_DO_MODELO/
 ```
-
-### TTS não responde
-
-```bash
-# Verificar status do container
-cd /home/jocic/oraculo/tts-service
-docker compose ps
-docker compose logs qwen3-tts-gpu
-
-# Testar health endpoint
-curl http://localhost:8880/health
-
-# Reiniciar o serviço
-docker compose restart qwen3-tts-gpu
-```
-
-### Erro de permissão no HuggingFace cache
-
-```bash
-# Corrigir permissões do volume
-docker run --rm -v huggingface-cache:/data alpine chown -R 1000:1000 /data
-```
-
-### VRAM insuficiente (TTS + llama-cpp)
-
-```bash
-# Verificar uso de VRAM
-nvidia-smi
-
-# Opções:
-# 1. Parar llama-cpp para liberar VRAM para TTS
-./manage.sh stop
-
-# 2. Reduzir VRAM do llama-cpp (menor ctx-size ou modelo menor)
-# Editar models.ini: ctx-size = 32768 ou ngl = 30
-
-# 3. Usar TTS em CPU (sem GPU) - mais lento mas funciona
-# Editar tts-service/docker-compose.yml: remover deploy.resources.reservations
-```
-
-### Open WebUI não gera áudio
-
-1. Verificar se TTS está saudável: `curl http://localhost:8880/health`
-2. Verificar configurações de áudio no Open WebUI (Settings → Audio)
-3. Base URL deve ser: `http://localhost:8880/v1`
-4. Model deve ser: `qwen3-tts`
-5. Voice sugerida: `vivian` (português)

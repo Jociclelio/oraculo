@@ -10,4 +10,3 @@ models/*
 
 # Arquivos de ambiente (opcional - descomente se quiser ignorar)
 # .env
-tts-service/
