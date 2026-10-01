@@ -1,0 +1,13 @@
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json > /dev/null << 'EOF'
+{
+    "default-runtime": "nvidia",
+    "runtimes": {
+        "nvidia": {
+            "args": [],
+            "path": "nvidia-container-runtime"
+        }
+    }
+}
+EOF
+sudo systemctl restart docker

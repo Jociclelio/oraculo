@@ -21,11 +21,13 @@ Stack Docker com **llama.cpp** (inferência GPU), **Open WebUI** (interface web)
 - **Imagem**: `ghcr.io/ggml-org/llama.cpp:full-cuda`
 - **Container**: `llama-cpp`
 - **Porta**: `8081`
-- **GPU**: 1× NVIDIA GPU
+- **GPU**: 1× NVIDIA GPU (via env vars `NVIDIA_VISIBLE_DEVICES=all` + `NVIDIA_DRIVER_CAPABILITIES=compute,utility`, usando o runtime `nvidia` padrão do daemon)
 - **Volume**: `./models → /models` (modelos GGUF)
 - **Config**: `./models/models.ini → /app/models.ini`
 
 Serve uma **API OpenAI-compatible** para geração de texto, chat e embeddings.
+
+> **Importante**: Não usar o bloco `deploy.resources.reservations.devices` (equivalente a `--gpus`) neste serviço. Quando o daemon usa o runtime `nvidia` como padrão, o `--gpus` injeta a capability `graphics`, que tenta montar `libnvidia-gtk3.so.<versão>` no container. Se o host não tiver essa biblioteca (ex.: driver atualizado sem o pacote GTK correspondente), o container falha ao iniciar com `failed to fulfil mount request: open /usr/lib/libnvidia-gtk3.so...`. A configuração via env vars evita esse problema e expõe apenas `compute` (inferência) + `utility` (nvidia-smi).
 
 ### open-webui — Interface Web
 
@@ -311,11 +313,9 @@ Para adicionar outros backends de API, ir em **Settings → Connections → Open
 ```
 oraculo/
 ├── models/                   # Modelos GGUF (compartilhados)
-│   ├── Bonsai-27B-Q1_0/
 │   ├── Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/
-│   ├── Ornith-1.0-35B-GGUF/
-│   ├── ornith-1.0-9b-Q4_K_M/
-│   ├── Qwen3.5-9B-UD-Q4_K_XL/
+│   ├── Ornith-1.5-9B-Q4_K_M/
+│   ├── Ornith-1.5-35B-A3B-Q4_K_M/
 │   ├── Qwen3.6-28B-REAP20-A3B-Q4_K_M/
 │   ├── Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/
 │   ├── unsloth_Qwen3.6_35B_A3B/

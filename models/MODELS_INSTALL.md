@@ -10,8 +10,10 @@ Este guia explica como instalar e configurar modelos GGUF no servidor oráculo.
 models/
 ├── models.ini                # Configuração do servidor llama.cpp
 ├── MODELS_INSTALL.md         # Este arquivo
-├── Bonsai-27B-Q1_0/
-│   └── modelo.gguf
+├── Ornith-1.5-9B-Q4_K_M/
+│   └── Ornith-1.5-9B-Q4_K_M.gguf
+├── Ornith-1.5-35B-A3B-Q4_K_M/
+│   └── Ornith-1.5-35B-Q4_K_M.gguf
 ├── Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/
 │   └── modelo.gguf
 └── ...

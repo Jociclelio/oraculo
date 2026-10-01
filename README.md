@@ -55,11 +55,9 @@ Coloque os arquivos `.gguf` nos respectivos diretórios:
 
 ```
 models/
-├── Bonsai-27B-Q1_0/
 ├── Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/
-├── Ornith-1.0-35B-GGUF/
-├── ornith-1.0-9b-Q4_K_M/
-├── Qwen3.5-9B-UD-Q4_K_XL/
+├── Ornith-1.5-9B-Q4_K_M/
+├── Ornith-1.5-35B-A3B-Q4_K_M/
 ├── Qwen3.6-28B-REAP20-A3B-Q4_K_M/
 ├── Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/
 ├── unsloth_Qwen3.6_35B_A3B/
@@ -236,14 +234,14 @@ curl -X POST http://localhost:8081/v1/unload_model
 | Modelo | Contexto | Notas |
 |--------|----------|-------|
 | Gemma4_12B | 49152 | Multimodal (texto) |
+| Gemma4_12B_MTP | 196608 | MTP speculative decoding / ~100 tok/s / cache split q8_0+f16 (máx. validado na RTX 3060 12GB c/ Wayland) |
 | Gemma4_12B_Hauhau | 49152 | Multimodal (texto, imagem, áudio) |
 | Qwen3.6_28B_A3B | 49152 | MoE (28 experts CPU) |
 | Qwen3.6_35B_General | 49152 | MoE / temp=1.0 |
 | Qwen3.6_35B_Code | 49152 | MoE / temp=0.6 |
 | Qwen3.6_35B_It_General | 49152 | MoE / temp=0.7 |
-| Ornith1.0_9B | 65536 | Contexto expandido |
-| Ornith_1.0_35B | 49152 | MoE / temp=0.6 |
-| Bonsai-27B_Q1_0 | 49152 | Alta compressão |
+| Ornith1.5_9B | 65536 | Q4_K_M |
+| Ornith1.5_35B | 49152 | Q4_K_M / MoE |
 
 Configurações completas em [`models.ini`](models.ini).
 

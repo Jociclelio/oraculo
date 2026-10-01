@@ -8,19 +8,12 @@ services:
     privileged: true
     network_mode: host
     environment:
-      - NVIDIA_DRIVER_CAPABILITIES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - NVIDIA_VISIBLE_DEVICES=all
     restart: always
     volumes:
       - ./models:/models
       - ./models/models.ini:/app/models.ini
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     command: ["-s", "--verbosity", "3", "--models-preset", "/app/models.ini", "--models-max", "1", "--host", "0.0.0.0", "--port", "8081"]
 
   # =========================================================
