@@ -1,6 +1,11 @@
 # Instalação de Modelos LLM
 
-Este guia explica como instalar e configurar modelos GGUF no servidor oráculo.
+Este guia explica como instalar modelos GGUF no servidor oráculo e expô-los
+pelo **llama-swap** (proxy em `127.0.0.1:8081` que sobe um container
+efêmero por modelo). Os parâmetros de cada modelo vivem em
+[`../llama-swap/config.yaml`](../llama-swap/config.yaml) — o antigo
+`models.ini` está **desativado/histórico** (mantido no repo só como
+referência do serviço `llama-cpp` removido).
 
 ---
 
@@ -8,18 +13,22 @@ Este guia explica como instalar e configurar modelos GGUF no servidor oráculo.
 
 ```
 models/
-├── models.ini                # Configuração do servidor llama.cpp
+├── models.ini                # HISTÓRICO (desativado) — parâmetros migraram p/ llama-swap/config.yaml
 ├── MODELS_INSTALL.md         # Este arquivo
 ├── Ornith-1.5-9B-Q4_K_M/
 │   └── Ornith-1.5-9B-Q4_K_M.gguf
 ├── Ornith-1.5-35B-A3B-Q4_K_M/
-│   └── Ornith-1.5-35B-Q4_K_M.gguf
+│   └── Ornith-1.5-35B-A3B-Q4_K_M.gguf
 ├── Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/
 │   └── modelo.gguf
+├── Ternary-Bonsai-2-27B-gguf/          # Bonsai 2 (ver seção própria abaixo)
+│   ├── Ternary-Bonsai-2-27B-PTQ1_0.gguf
+│   ├── Ternary-Bonsai-2-27B-PQ2_0.gguf
+│   └── Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf
 └── ...
 ```
 
-Cada modelo tem sua própria subpasta contendo o arquivo `.gguf` e arquivos auxiliares (mmproj, mtp, etc.).
+Cada modelo tem sua própria subpasta contendo o arquivo `.gguf` e arquivos auxiliares (mmproj, mtp, etc.). O monte `./models:/models` é compartilhado por todos os containers de modelo do llama-swap.
 
 ---
 
@@ -27,6 +36,7 @@ Cada modelo tem sua própria subpasta contendo o arquivo `.gguf` e arquivos auxi
 
 - **10-100 GB** de disco livre por modelo (dependendo do tamanho e quantização)
 - Acesso à internet para download dos modelos
+- Para downloads do Hugging Face: `huggingface_hub` (`hf download`) ou `wget`/`curl`
 
 ---
 
@@ -34,7 +44,8 @@ Cada modelo tem sua própria subpasta contendo o arquivo `.gguf` e arquivos auxi
 
 ### 1. Escolher o Modelo
 
-Consulte a lista de modelos disponíveis em [`AGENTS.md`](../AGENTS.md#modelos-disponíveis).
+Consulte a tabela de entries em [`AGENTS.md`](../AGENTS.md#modelos-llama-swapconfigyaml)
+e o próprio [`llama-swap/config.yaml`](../llama-swap/config.yaml).
 
 ### 2. Criar a Pasta do Modelo
 
@@ -51,56 +62,129 @@ cd models/NOME_DO_MODELO/
 wget https://huggingface.co/usuario/modelo/resolve/main/modelo.gguf
 ```
 
-> **Dica:** Modelos quantizados (Q4_K_M, Q5_K_M) oferecem bom equilíbrio entre qualidade e tamanho.
-
-### 4. Configurar no models.ini
-
-Adicione uma seção no arquivo [`models.ini`](models.ini) com as configurações do modelo:
-
-```ini
-[NOME_DO_MODELO]
-model = /models/NOME_DO_MODELO/modelo.gguf
-ctx-size = 49152
-ngl = all
-temp = 0.7
-top-p = 0.95
-top-k = 64
-```
-
-### 5. Recarregar o Servidor
+Ou, com o CLI do Hugging Face (recomendado; retoma downloads):
 
 ```bash
-# Recarregar o modelo sem reiniciar o container
-curl -X POST http://localhost:8081/v1/load_model \
-  -H "Content-Type: application/json" \
-  -d '{"model_alias": "NOME_DO_MODELO"}'
+hf download usuario/modelo arquivo.gguf --local-dir models/NOME_DO_MODELO
 ```
+
+> **Dica:** Modelos quantizados (Q4_K_M, Q5_K_M) oferecem bom equilíbrio entre qualidade e tamanho.
+
+### 4. Criar a Entry no llama-swap/config.yaml
+
+Adicione uma entry em [`llama-swap/config.yaml`](../llama-swap/config.yaml)
+usando uma das macros — `docker-stock` (llama.cpp oficial) ou
+`docker-prismml` (fork PrismML, obrigatório para Bonsai):
+
+```yaml
+  NOME_DO_MODELO:
+    cmd: |
+      ${docker-stock}
+      -m /models/NOME_DO_MODELO/modelo.gguf
+      -c 49152 -ngl 99
+    cmdStop: ${docker-stop}
+    ttl: 300
+```
+
+### 5. Reiniciar o proxy e testar
+
+```bash
+./manage.sh restart                       # recarrega o config.yaml
+curl http://localhost:8081/v1/models      # a entry deve aparecer
+```
+
+Não há `load_model`: o modelo carrega automaticamente no primeiro request à
+entry (e descarrega após `ttl: 300` s ocioso).
+
+---
+
+## Bonsai 2 27B (GGUFs ternários — engine PrismML)
+
+Os GGUFs do **Bonsai 2 27B** (PrismML) vivem em
+`models/Ternary-Bonsai-2-27B-gguf/`. Origem: `prism-ml/Ternary-Bonsai-2-27B-gguf`
+no Hugging Face:
+
+```bash
+hf download prism-ml/Ternary-Bonsai-2-27B-gguf \
+  Ternary-Bonsai-2-27B-PTQ1_0.gguf \
+  Ternary-Bonsai-2-27B-PQ2_0.gguf \
+  Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf \
+  --local-dir models/Ternary-Bonsai-2-27B-gguf
+```
+
+| Arquivo | Tamanho | Uso |
+|---------|---------|-----|
+| `Ternary-Bonsai-2-27B-PTQ1_0.gguf` | ~5,6 GB | entry primária `bonsai-27b` (+ mmproj, visão) |
+| `Ternary-Bonsai-2-27B-PQ2_0.gguf` | ~6,8 GB | entry secundária `bonsai-27b-pq2_0` (mais rápida em Ampere) |
+| `Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf` | ~601 MB | visão (mmproj da entry primária) |
+
+> ⚠️ **Regra dura — nunca engine stock**: GGUFs ternários PTQ1_0/PQ2_0 só
+> funcionam no fork **PrismML-Eng/llama.cpp** (kernels ternários + Hadamard).
+> A imagem stock recusa esses quantizados ou carrega como `Q2_0` legacy
+> gerando lixo. As entries `bonsai-27b`/`bonsai-27b-pq2_0` usam a imagem
+> local `llama.cpp-prismml:latest` (build em `engines/llama.cpp-prismml/`,
+> fork pinado no commit `84445367f`). Se a imagem não existir, construa:
+> `./engines/llama.cpp-prismml/build.sh`.
+
+> **MTP do Bonsai não foi baixado** (arquivo draft MTP ~7 GB no repo
+> upstream; fora de escopo do plano llama-swap-multi-engine). As entries
+> atuais não usam `--model-draft`.
+
+Nesta máquina os arquivos foram **migrados** de `/home/jocic/bonsai-llm/models/`
+(task 004 do plano) — o comando `hf download` acima é o caminho para
+instalação nova.
+
+---
+
+## Strata (Qwen3.8-Flash-Next) — não baixado
+
+O modelo **Strata não foi baixado** (~58 GB na variante Coder IQ1_M; decisão
+de escopo do plano). A infraestrutura está pronta em
+[`../strata/`](../strata/) (Dockerfile pinado + `README.md` com os passos de
+instalação futura) e a entry `Strata:` permanece **comentada** no
+`llama-swap/config.yaml`. Para ativar: seguir `strata/README.md` e
+descomentar a entry.
 
 ---
 
 ## Parâmetros Comuns
 
-| Parâmetro | Descrição | Valores típicos |
-|-----------|-----------|-----------------|
-| `model` | Caminho ao `.gguf` | `/models/NOME/modelo.gguf` |
-| `ctx-size` | Tamanho do contexto | `49152`, `65536` |
-| `ngl` | Camadas na GPU | `all`, `45`, `80` |
-| `temp` | Temperatura | `0.6` (código), `1.0` (geral) |
-| `top-p` | Amostragem top-p | `0.9`, `0.95` |
-| `top-k` | Amostragem top-k | `16`, `32`, `64` |
-| `mmproj` | Arquivo multimodal | `/models/NOME/mmproj-model-f16.gguf` |
-| `model-draft` | Modelo draft (MTP) | `/models/NOME/modelo-draft.gguf` |
+Os parâmetros de cada entry vivem comentados no
+[`llama-swap/config.yaml`](../llama-swap/config.yaml). Flags do
+`llama-server` usadas nas entries (coluna direita = antigo parâmetro do
+`models.ini`, hoje só histórico):
+
+| Flag | Descrição | Valores típicos | (models.ini) |
+|------|-----------|-----------------|--------------|
+| `-m` | Caminho ao `.gguf` (dentro do container) | `/models/NOME/modelo.gguf` | `model` |
+| `-c` | Tamanho do contexto | `49152`, `65536` | `ctx-size` |
+| `-ngl 99` | Camadas na GPU (todas) | `99` | `ngl = all` |
+| `--temp` | Temperatura | `0.6` (código), `1.0` (geral) | `temp` |
+| `--top-p` | Amostragem top-p | `0.9`, `0.95` | `top-p` |
+| `--top-k` | Amostragem top-k | `16`, `32`, `64` | `top-k` |
+| `--mmproj` | Arquivo multimodal | `/models/NOME/mmproj-*.gguf` | `mmproj` |
+| `--model-draft` | Modelo draft (MTP/DFlash) | `/models/NOME/draft.gguf` | `model-draft` |
+| `-ncmoe` | Experts MoE na CPU | `24`, `28`, `32` | `n-cpu-moe` |
+| `-b` / `-ub` | Batch / micro-batch | `4096` / `256-512` | `batch-size`/`ubatch-size` |
+
+Flags globais (flash-attn, jinja, `-np 1`, KV q8_0, cache-reuse/ram,
+threads) já vêm nas macros `docker-stock`/`docker-prismml`.
 
 ---
 
 ## Modelos Multimodais
 
-Modelos com capacidade visual (imagem) requerem um arquivo `mmproj`:
+Modelos com capacidade visual (imagem) requerem um arquivo `mmproj` na entry:
 
-```ini
-[NOME_MULTIMODAL]
-model = /models/NOME/modelo.gguf
-mmproj = /models/NOME/mmproj-model-f16.gguf
+```yaml
+  NOME_MULTIMODAL:
+    cmd: |
+      ${docker-stock}
+      -m /models/NOME/modelo.gguf
+      --mmproj /models/NOME/mmproj-model-f16.gguf
+      -c 49152 -ngl 99
+    cmdStop: ${docker-stop}
+    ttl: 300
 ```
 
 Baixe o arquivo mmproj do mesmo repositório Hugging Face do modelo.
@@ -109,37 +193,38 @@ Baixe o arquivo mmproj do mesmo repositório Hugging Face do modelo.
 
 ## Modelos MoE (Mixture of Experts)
 
-Modelos MoE (ex: Qwen 35B-A3B) usam `n-cpu-moe` para distribuir experts na CPU:
+Modelos MoE (ex: Qwen 35B-A3B) usam `-ncmoe` para distribuir experts na CPU:
 
-```ini
-[NOME_MOE]
-model = /models/NOME/modelo.gguf
-n-cpu-moe = 24
+```yaml
+      -m /models/NOME/modelo.gguf
+      -c 49152 -ngl 99 -ncmoe 28
 ```
 
 ---
 
 ## Modelos com MTP (Multi-Token Prediction)
 
-Para acelerar a geração, use um modelo draft:
+Para acelerar a geração, use um drafter na entry (ex.: `Gemma4_12B_MTP`):
 
-```ini
-[NOME_MTP]
-model = /models/NOME/modelo.gguf
-model-draft = /models/NOME/modelo-draft.gguf
+```yaml
+      -m /models/NOME/modelo.gguf
+      --model-draft /models/NOME/modelo-draft.gguf
+      --spec-type draft-mtp --spec-draft-n-max 4
 ```
+
+(No Bonsai 2 o drafter MTP **não foi baixado** — ver seção Bonsai.)
 
 ---
 
 ## Verificação
 
-Após instalar, verifique se o modelo está funcionando:
+Após instalar + entry + `./manage.sh restart`, verifique:
 
 ```bash
-# Listar modelos
+# Listar entries
 curl http://localhost:8081/v1/models
 
-# Testar inferência
+# Testar inferência (o primeiro request dispara a carga do container)
 curl http://localhost:8081/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
@@ -147,13 +232,20 @@ curl http://localhost:8081/v1/chat/completions \
     "messages": [{"role": "user", "content": "Olá!"}],
     "temperature": 0.7
   }'
+
+# Logs do container do modelo (enquanto Up)
+docker logs ls-NOME_DO_MODELO
 ```
+
+> Se a carga falhar com `exit 125` na primeira tentativa após restart, é o
+> flake documentado no README/AGENTS (troubleshooting): repetir o request ou
+> `./manage.sh restart`.
 
 ---
 
 ## Dicas
 
 - **Quantização**: Q4_K_M é o ponto de equilíbrio entre qualidade e tamanho. Q3 pode perder qualidade, Q5/Q6 é mais pesado sem ganho significativo.
-- **Contexto**: `ctx-size` maior consome mais memória. Use 49152 como padrão, 65536 apenas se a GPU permitir.
-- **Flash Attention**: Ative com `flash-attn = on` (configuração global no `[*]`) para melhor performance.
+- **Contexto**: `-c` maior consome mais memória. Use 49152 como padrão, 65536 apenas se a GPU permitir (meta do plano: ctx ≥ 64k razoável; Bonsai PTQ1_0 validado a 65536 com ~9,1 GiB de VRAM no processo).
+- **Flash Attention**: já vem ativado nas macros (`-fa on`).
 - **Monitorar VRAM**: Use `nvidia-smi` para verificar o uso de memória durante a inferência.

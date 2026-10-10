@@ -1,6 +1,11 @@
-# Docker — Stack Oraculo (llama-cpp + Open WebUI + agentes)
+# Docker — Stack Oraculo (Open WebUI + agentes; serving via llama-swap no host)
 
-Stack Docker com **llama.cpp** (inferência GPU), **Open WebUI** (interface web), **Open Terminal** (substrato de execução agêntica), **SearXNG** (busca web) e **OpenWa** (gateway WhatsApp com MCP).
+Stack Docker com **Open WebUI** (interface web), **Open Terminal** (substrato
+de execução agêntica), **SearXNG** (busca web) e **OpenWa** (gateway WhatsApp
+com MCP). O **serving de LLM saiu do compose**: o antigo serviço `llama-cpp`
+foi substituído pelo **llama-swap**, um **processo de host** (fora do
+`docker-compose.yml`) que sobe **containers Docker efêmeros por modelo**
+sob demanda.
 
 ---
 
@@ -27,20 +32,13 @@ cp .env.example .env   # ou criar manualmente
 
 ---
 
-## Serviços
+## Serviços (5 — sem `llama-cpp`)
 
-### llama-cpp — Inferência GPU
-
-- **Imagem**: `ghcr.io/ggml-org/llama.cpp:full-cuda`
-- **Container**: `llama-cpp`
-- **Porta**: `8081`
-- **GPU**: 1× NVIDIA GPU (via env vars `NVIDIA_VISIBLE_DEVICES=all` + `NVIDIA_DRIVER_CAPABILITIES=compute,utility`, usando o runtime `nvidia` padrão do daemon)
-- **Volume**: `./models → /models` (modelos GGUF)
-- **Config**: `./models/models.ini → /app/models.ini`
-
-Serve uma **API OpenAI-compatible** para geração de texto, chat e embeddings.
-
-> **Importante**: Não usar o bloco `deploy.resources.reservations.devices` (equivalente a `--gpus`) neste serviço. Quando o daemon usa o runtime `nvidia` como padrão, o `--gpus` injeta a capability `graphics`, que tenta montar `libnvidia-gtk3.so.<versão>` no container. Se o host não tiver essa biblioteca (ex.: driver atualizado sem o pacote GTK correspondente), o container falha ao iniciar com `failed to fulfil mount request: open /usr/lib/libnvidia-gtk3.so...`. A configuração via env vars evita esse problema e expõe apenas `compute` (inferência) + `utility` (nvidia-smi).
+> **Mudança de arquitetura (task 006 do plano llama-swap-multi-engine)**: o
+> serviço `llama-cpp` e o mount do `models.ini` foram **removidos** do
+> compose. O serving passou a ser o **llama-swap, processo de host** (seção
+> abaixo). `docker compose config --services` → `open-webui`,
+> `open-terminal`, `searxng`, `openwa`, `openwa-docker-proxy`.
 
 ### open-webui — Interface Web
 
@@ -48,16 +46,16 @@ Serve uma **API OpenAI-compatible** para geração de texto, chat e embeddings.
 - **Container**: `open-webui`
 - **Porta**: `8080` (rede host)
 - **Volume**: `open-webui-data → /app/backend/data`
-- **Dependência**: `llama-cpp`
+- **Dependência**: `searxng` (o serving llama-swap não é serviço do compose)
 - **Rede**: `host`
 
-Interface web para interagir com os modelos. Configurada para conectar ao llama-cpp via `http://localhost:8081/v1`.
+Interface web para interagir com os modelos. Configurada para conectar ao proxy llama-swap via `http://localhost:8081/v1`.
 
 **Variáveis de ambiente**:
 
 | Variável | Valor | Descrição |
 |----------|-------|-----------|
-| `OAI_API_BASE` | `http://localhost:8081/v1` | URL da API llama.cpp |
+| `OAI_API_BASE` | `http://localhost:8081/v1` | URL da API do llama-swap (proxy único) |
 | `WEBUI_SECRET_KEY` | (gerado) | Chave secreta para persistência de tokens OAuth/MCP |
 | `WEBSEARCH_ENGINE` | `searxng` | Motor de busca web nativo (usa o SearXNG) |
 | `SEARXNG_QUERY_URL` | `http://localhost:8888/search?q=<query>` | Endpoint de busca do SearXNG |
@@ -116,31 +114,61 @@ Gateway WhatsApp com MCP habilitado. Sessões não iniciam automaticamente (`AUT
 - **Container**: `openwa-docker-proxy`
 - **Acesso**: somente leitura ao Docker socket, com operações mínimas liberadas (`CONTAINERS`, `IMAGES`, `VOLUMES`, `INFO`, `PING`, `POST`, `DELETE`)
 
-Único container com acesso ao Docker socket; o openwa o usa via `DOCKER_HOST=tcp://openwa-docker-proxy:2375`.
+Único container **do compose** com acesso ao Docker socket; o openwa o usa via `DOCKER_HOST=tcp://openwa-docker-proxy:2375`. (Os containers de modelo criados pelo llama-swap usam o socket diretamente pelo daemon, via CLI `docker` no host.)
+
+---
+
+## Serving fora do compose — llama-swap (processo de host)
+
+O llama-swap é um binário em `bin/llama-swap` (instalado por
+`./llama-swap/install.sh`), iniciado por `./manage.sh start` com
+`-listen 127.0.0.1:8081 -config llama-swap/config.yaml`. Para cada modelo
+requerido ele executa o `cmd` da entry (um `docker run --rm --name
+ls-<Modelo> ...`), aguarda o health check e roteia a API; ao trocar de
+modelo, o container anterior é encerrado (`cmdStop: docker rm -f
+ls-<Modelo>`) — **só 1 modelo carregado por vez**, descarregado também após
+`ttl: 300` s ocioso.
+
+- **Engines**: imagem stock `ghcr.io/ggml-org/llama.cpp:full-cuda` (macro
+  `docker-stock`), imagem local do fork PrismML `llama.cpp-prismml:latest`
+  para os Bonsai (build em `engines/llama.cpp-prismml/`, commit pinado
+  `84445367f` — **nunca stock** para Bonsai) e Strata (entry comentada,
+  infra em `strata/`).
+- **Monte**: os containers de modelo montam `./models:/models` (mesmo monte
+  do antigo serviço); o `models.ini` não é mais montado em lugar nenhum —
+  os parâmetros vivem em `llama-swap/config.yaml`.
+- **Portas**: os containers publicam apenas no loopback (`127.0.0.1:${PORT}`,
+  tipicamente `:58xx`); o único ponto de entrada é o proxy em `:8081`.
+- **Posicionamento**: stack para **1 usuário por vez** (`-np 1` default;
+  `np>1` só como exceção comentada no config).
+
+Detalhes de entries/parâmetros: [`llama-swap/config.yaml`](llama-swap/config.yaml) e seção llama-swap do [`AGENTS.md`](AGENTS.md).
 
 ### Redes
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Host Network                              │
-│  llama-cpp (8081) ←→ open-webui (8080) ←→ searxng (8888)    │
-│  open-terminal (8000) — bridge, só localhost                 │
-│  (llama-cpp, open-webui: network_mode: host)                 │
-└─────────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────────┐
-│  openwa-network      ←→  openwa + openwa-docker-proxy        │
-│  openwa-internal-docker (internal: true, sem saída externa)  │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  Host                                                            │
+│   llama-swap (proxy, 127.0.0.1:8081) — processo de host          │
+│   open-webui (8080, network_mode: host)                          │
+│   containers efêmeros ls-<Modelo> (127.0.0.1:58xx→8080)          │
+│     ↑ criados/destruídos pelo llama-swap (fora do compose)       │
+│   searxng (8888) · open-terminal (8000) — bridge, só localhost   │
+└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  openwa-network      ←→  openwa + openwa-docker-proxy            │
+│  openwa-internal-docker (internal: true, sem saída externa)      │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Gerenciamento
 
-### Docker Compose (todos os serviços)
+### Docker Compose (serviços auxiliares)
 
 ```bash
-# Iniciar todos os serviços
+# Iniciar todos os serviços do compose
 docker compose up -d
 
 # Parar todos os serviços
@@ -159,26 +187,28 @@ docker compose logs -f
 docker compose restart open-webui
 ```
 
-### Script de gerenciamento (apenas llama-cpp)
+### Script de gerenciamento (llama-swap — serving)
 
 ```bash
-# Iniciar servidor llama-cpp
-./manage.sh start
-
-# Parar servidor llama-cpp
-./manage.sh stop
+./manage.sh start     # inicia o llama-swap em background (pidfile + logs/llama-swap.log)
+./manage.sh stop      # encerra via pidfile (SIGTERM → SIGKILL)
+./manage.sh restart   # para e inicia de novo
+./manage.sh status    # mostra se está rodando
 ```
 
 ---
 
 ## API OpenAI-Compatible
 
+A API é exposta pelo proxy llama-swap em `127.0.0.1:8081`; o roteamento para
+o container do modelo é transparente para o cliente.
+
 ### Endpoints
 
 | Endpoint | Método | Descrição |
 |----------|--------|-----------|
-| `/v1/models` | GET | Lista modelos configurados |
-| `/v1/chat/completions` | POST | Chat / geração de texto |
+| `/v1/models` | GET | Lista as entries configuradas no `llama-swap/config.yaml` |
+| `/v1/chat/completions` | POST | Chat / geração de texto (carrega/swap o modelo solicitado) |
 | `/v1/embeddings` | POST | Embeddings |
 
 ### Exemplos
@@ -217,21 +247,18 @@ print(response.choices[0].message.content)
 
 ---
 
----
-
 ## Gerenciar Modelos
 
-O servidor suporta múltiplos modelos no `models.ini`, mas carrega apenas 1 por vez (`--models-max 1`).
+O llama-swap mantém **1 modelo carregado por vez** (como o antigo
+`--models-max 1`), mas o swap é **automático por request**: pedir outro
+`model` descarrega o anterior e sobe o novo. Não existem mais os endpoints
+`load_model`/`unload_model` do serviço antigo, nem `models.ini` para editar —
+os parâmetros de cada modelo vivem em [`llama-swap/config.yaml`](llama-swap/config.yaml)
+(entries `cmd`/`cmdStop`/`ttl`).
 
-```bash
-# Carregar modelo
-curl -X POST http://localhost:8081/v1/load_model \
-  -H "Content-Type: application/json" \
-  -d '{"model_alias": "Qwen3.6_35B_General"}'
-
-# Unload modelo atual
-curl -X POST http://localhost:8081/v1/unload_model
-```
+Para adicionar um modelo novo: baixar o GGUF (guia em
+[`models/MODELS_INSTALL.md`](models/MODELS_INSTALL.md)), criar a entry no
+config e `./manage.sh restart`.
 
 ---
 
@@ -239,7 +266,7 @@ curl -X POST http://localhost:8081/v1/unload_model
 
 Acessar a interface web em **http://localhost:8080**.
 
-Primeiro acesso: criar conta de administrador. O Open WebUI já vem configurado para conectar ao llama-cpp automaticamente.
+Primeiro acesso: criar conta de administrador. O Open WebUI já vem configurado para conectar ao proxy llama-swap automaticamente.
 
 Para adicionar outros backends de API, ir em **Settings → Connections → OpenAI API** e configurar:
 
@@ -254,16 +281,24 @@ Para adicionar outros backends de API, ir em **Settings → Connections → Open
 
 ```
 oraculo/
-├── models/                   # Modelos GGUF (compartilhados)
+├── models/                   # Modelos GGUF (montados nos containers efêmeros)
 │   ├── .../
-│   ├── models.ini            # Configuração dos modelos do llama.cpp
+│   ├── models.ini            # HISTÓRICO (desativado) — parâmetros migraram p/ config.yaml
 │   └── MODELS_INSTALL.md     # Guia de instalação de modelos
+│
+├── llama-swap/
+│   ├── install.sh            # instala o binário de release em bin/
+│   └── config.yaml           # entries dos modelos (fonte da verdade)
+├── bin/llama-swap            # binário (gitignored)
+├── logs/                     # llama-swap.log + pidfile (gitignored)
+├── engines/llama.cpp-prismml/# engine Docker dedicada do fork PrismML (Bonsai)
+├── strata/                   # infra Strata (Dockerfile + README; modelo não baixado)
 │
 ├── searxng/
 │   └── settings.yml          # Config do SearXNG (formats json p/ Open WebUI)
 │
-├── docker-compose.yml        # Definição dos serviços
-├── manage.sh                 # Script de gerenciamento (llama-cpp)
+├── docker-compose.yml        # Serviços auxiliares (sem llama-cpp)
+├── manage.sh                 # Script de gerenciamento do llama-swap
 ├── .env                      # Variáveis de ambiente
 ├── DOCKER.md                 # Documentação Docker
 └── README.md                 # Guia rápido de uso
@@ -274,14 +309,14 @@ oraculo/
 ## Backup
 
 ```bash
-# Backup da config dos modelos
-tar -czf models-config-backup.tar.gz models/models.ini
+# Backup da config de serving (entries/parâmetros)
+tar -czf llama-swap-config-backup.tar.gz llama-swap/config.yaml
 
 # Backup do Open WebUI
 docker exec open-webui tar -czf /tmp/openwebui-backup.tar.gz /app/backend/data
 
 # Restaurar
-tar -xzf models-config-backup.tar.gz
+tar -xzf llama-swap-config-backup.tar.gz
 ```
 
 ---
@@ -294,19 +329,37 @@ tar -xzf models-config-backup.tar.gz
 # Verificar NVIDIA Container Toolkit
 docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu22.04 nvidia-smi
 
-# Verificar se o container tem acesso à GPU
-docker inspect llama-cpp | grep -A5 GPU
+# Verificar se o container do modelo em curso tem acesso à GPU
+docker inspect ls-<Modelo> | grep -A5 GPU
 ```
 
 ### Modelo não carrega
 
 ```bash
-# Verificar se o arquivo .gguf existe no volume
-docker exec llama-cpp ls -la /models/
+# Verificar se o arquivo .gguf existe em models/ (montado em /models)
+ls -la models/<dir-do-modelo>/
 
-# Ver logs
-docker logs llama-cpp
+# Ver o log do proxy (swap, health checks, erros de carga)
+tail -n 50 logs/llama-swap.log
+
+# Ver o log do container do modelo (enquanto Up)
+docker logs ls-<Modelo>
 ```
+
+### Falha intermitente `exit 125` na primeira carga após restart
+
+Flake **recorrente** documentado na validação e2e (task 007 do plano
+llama-swap-multi-engine): após `./manage.sh start`, a primeira carga de um
+modelo falha às vezes com `upstream command exited prematurely` (o
+`docker run` do llama-swap sai com `code=125`); visto entre sessões em
+`Ornith1.5_9B_MTP`, `bonsai-27b` e `Gemma4_12B`. Em parte das ocorrências o
+retry/health-check seguinte recupera sozinho; nas demais, o sucesso só vem em
+sessão posterior. **Causa indeterminada** — a hipótese de container órfão
+(conflito de nome `ls-<Modelo>`) foi enfraquecida pelo log: o start já roda
+`docker rm -f ls-<Modelo>` antes do `docker run` e mesmo assim houve
+`exit 125`. Workaround: repetir o request ou `./manage.sh restart`; se
+houver container órfão manual, `docker rm -f ls-<Modelo>`. Ao reproduzir,
+capturar stderr do `docker run` / `docker events` (follow-up do plano).
 
 ### Storage cheio
 
@@ -321,13 +374,12 @@ rm -rf models/NOME_DO_MODELO/
 ### Logs
 
 ```bash
-# Logs do llama-cpp
-docker logs llama-cpp
+# Logs do proxy llama-swap (e dos modelos: cada container efêmero)
+tail -f logs/llama-swap.log
+docker logs ls-<Modelo>
 
 # Logs do open-webui
 docker logs open-webui
-
-
 ```
 
 ### Busca web não funciona no Open WebUI
@@ -353,20 +405,18 @@ docker exec open-webui curl -s http://localhost:8000/health
 docker logs open-terminal | grep -i "api key"
 ```
 
-### Open WebUI não conecta ao llama-cpp
+### Open WebUI não conecta ao llama-swap
 
 ```bash
-# Verificar se ambos estão rodando
-docker compose ps
+# Verificar se o proxy está rodando (processo de host, não do compose)
+./manage.sh status
 
 # Verificar se a API está respondendo
 curl http://localhost:8081/v1/models
 
-# Verificar conexão do open-webui para o llama-cpp
+# Verificar conexão do open-webui para o proxy
 docker exec open-webui curl -s http://localhost:8081/v1/models
 
 # Reiniciar o open-webui
 docker restart open-webui
 ```
-
-
