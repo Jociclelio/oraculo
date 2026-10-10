@@ -1,6 +1,6 @@
 # Task 002: config.yaml do llama-swap — macro stock + tradução do models.ini
 
-Estado: aguardando revisão
+Estado: fechada
 Depende de: 001
 Origem: nenhuma
 
@@ -102,8 +102,11 @@ Restrições: não criar entries de Bonsai (task 004) nem Strata (task 005);
    shell; `;`, pipes e redirecionamentos viram argumentos (causou exit 125 no
    primeiro teste). `cmdStop: docker rm -f ls-${MODEL_ID}` é um comando único
    determinístico; cleanup manual de órfãos: `docker rm -f ls-<Modelo>`.
-3. **Caminho do Qwen 28B corrigido**: INI aponta `Qwen3.6-28B-REAP20-A3B/`, mas
-   o diretório em disco é `Qwen3.6-28B-REAP20-A3B-Q4_K_M/` (comentado no YAML).
+3. **Caminho do Qwen 28B** (retificado na revisão): o INI na base já aponta
+   `Qwen3.6-28B-REAP20-A3B-Q4_K_M/` (models.ini:52), igual ao disco — não houve
+   "correção vs INI"; a comparação original foi com a tabela do AGENTS.md. O
+   caminho usado no YAML está correto; o comentário no config.yaml (linha ~98)
+   deve ser ajustado como ride-along na task 008.
 4. **PE Heretic**: GGUFs não estão em disco (`models/pe_*_heretic-Q4_K_M/`
    vazios) — entries mantidas com nota; aparecem no `/v1/models` mas não
    carregam até os arquivos serem baixados (não é escopo desta task).
@@ -131,13 +134,47 @@ registrada: o stop padrão por SIGTERM ao client docker anexado funciona
 determinístico.
 
 ### Revisão
-- Orquestrador: —
-- Alvo:
+- Orquestrador: GLM-5.3-Flash (sd2/GLM-5.3-Flash), agente task-master
+- Alvo: base 1a77409; entrega fe352bd (llama-swap/config.yaml, novo, 302 linhas);
+  registro 113c43b; árvore limpa; isolamento confirmado (só config.yaml + task md).
+- Modo da rodada: sequencial — a verificação C1–C5 pode disputar recursos
+  compartilhados (GPU, porta 8081, Docker); revisores rodaram um por vez.
+- Pool: `.opencode/task-reviewer-pool.md`; sem falhas, sem substituições.
 - Avaliações:
-- Nota final: _/10
-- Parecer:
-- Decisão:
-- Reversão:
-- Próximo passo:
+  1. task-reviewer-glm (sd2/GLM-5.3-Flash) — 8,5/10 — estático; tradução
+     seção a seção fiel (15/15), sintaxe validada contra upstream (macros,
+     ttl, healthCheckTimeout, strip de `#` em cmd); achados: A1 desvio #3
+     impreciso (menor), A2 `#` dentro de cmd dependente do upstream (info).
+  2. task-reviewer-qwen-flash (sorgan-qwen/qwen3.8-flash-next) — 9/10 —
+     conferência parâmetro a parâmetro das 15 entries + flags validadas no
+     --help do llama-server do build da imagem; C1 reproduzido dinamicamente
+     (15 entries + aliases em meta); achados: F1 desvio #3 falso (`git log -S`
+     não acha o caminho "errado"), F3 `--verbosity` não traduzido (cosmético),
+     F4 comentário mmproj do 28B não preservado (baixo), F5 mount relativo
+     depende do CWD do manage.sh (info).
+  3. task-reviewer-muse (opencode/muse-spark-1.3-contributor-free) — 9/10 —
+     C1 reproduzido de forma independente (binário v263 + cópia do config em
+     porta isolada, sem tocar GPU); C2/C5 comprovados por log em disco
+     (`evicting`/exit 137; `TTL of 300s reached`); C3/C4 flags confirmadas no
+     cmd real do log; achados: A1 desvio #3 inexistente (baixo), A2 falhas
+     intermediárias de debug coerentes (baixo), A3 PE Heretic esperado (baixo).
+- Síntese: consenso de aprovação nos três pareceres. Tradução INI→YAML fiel em
+  todas as 15 entries, mecanismos do llama-swap (macro, cmdStop, ttl,
+  healthCheckTimeout, strip de comentários) verificados contra o upstream v263
+  por dois revisores independentes; evidências dinâmicas C1–C5 coerentes entre
+  executor e logs em disco, com C1 reproduzido por dois revisores. Única
+  inconsistência real é documental: o desvio #3 (retificado acima) — o caminho
+  do Qwen 28B nunca diferiu do INI. Ajuste do comentário no config.yaml
+  (linha ~98) e tradução de `--verbosity`/comentário mmproj ficam como
+  ride-along na task 008 (docs); não justificam ciclo de correção.
+- Nota final: 9/10 — entrega completa e validada (C1–C5 comprovados, em parte
+  por verificação independente), isolamento perfeito; desconto pela imprecisão
+  documental do desvio #3 e pequenos detalhes cosméticos de tradução.
+- Parecer: aprovada — todos os critérios obrigatórios comprovados.
+- Decisão: fechar
+- Reversão: não se aplica — sem artefatos a reverter
+- Próximo passo: liberar task 003 (Engine Docker PrismML, fork pinado)
+
+<!-- task-cycle: {"decision":"fechar","next_task":".opencode/tasks/llama-swap-multi-engine/003-engine-prismml.md","family":".opencode/tasks/llama-swap-multi-engine/003-engine-prismml.md","plan":".opencode/plans/llama-swap-multi-engine/plan.md"} -->
 
 Plano: [plan.md](../../plans/llama-swap-multi-engine/plan.md)
