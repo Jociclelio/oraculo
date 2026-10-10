@@ -1,6 +1,6 @@
 # Task 007-2: Correção — Observação 007: alegações universais "sempre" do flake
 
-Estado: pendente
+Estado: bloqueada
 Depende de: 007-1
 Origem: 007-1 (correção)
 
@@ -90,13 +90,32 @@ verificação prévia de linhas de log já mapeadas; sem execução de stack.
 _/10 —
 
 ### Revisão
-- Orquestrador: —
-- Alvo:
-- Avaliações:
-- Nota final: _/10
-- Parecer:
-- Decisão:
-- Reversão:
-- Próximo passo:
+- Orquestrador: task-master (sorgan-qwen/qwen3.8-flash-next)
+- Alvo: base `8e7f990` (HEAD; árvore limpa, sem stash, sem artefatos de tentativas
+  anteriores). Sem entrega — a execução não foi iniciada.
+- Avaliações: nenhuma rodada de revisão — não há entrega a avaliar.
+- Nota final: —/10 (provisória; nada executado)
+- Parecer: **bloqueio ambiental documentável.** A task é puramente documental e
+  executável, mas o executor do ciclo (`sd2/GLM-5.3-Flash`) está indisponível: o
+  endpoint do provider `http://localhost:8083/v1` (túnel SSH `-L 127.0.0.1:8083 →
+  uranus.lsc.ic.unicamp.br:8080`, pid 644989, ativo desde 14:37) aceita a conexão
+  e fecha sem resposta (`curl (56) Recv failure: Conexão fechada pela outra
+  ponta`, 3 tentativas consecutivas; `/v1/models` → HTTP 000). O checkpoint do
+  ciclo registra a tentativa anterior interrompida pelo mesmo `APIError`
+  retryável em `localhost:8083`. Sem `alternate_executor_model` configurado; a
+  troca de executor exige decisão do usuário (via `resume`/`config`), e a
+  substituição silenciosa pela `task` nativa é proibida no ciclo. Nenhuma
+  execução, nenhuma revisão, nenhum artefato produzido; nada a reverter.
+- Decisão: bloqueada
+- Reversão: não se aplica — sem entrega.
+- Próximo passo: resolver o impedimento — (a) restabelecer o serviço remoto do
+  sd2 (`uranus.lsc.ic.unicamp.br:8080`) mantendo o executor, ou (b) autorizar
+  outro `executor_model` — e então `resume` do ciclo nesta mesma task. Atenção:
+  a família 006 está em 4/5 tentativas; se a troca/continuação exigir nova
+  tentativa além do limite, aumentar `max_family_attempts` no `resume`. A 008
+  permanece travada até o fechamento da 007-2 (mãe 007 vira "resolvida por
+  subtasks" ao fechar).
+
+<!-- task-cycle: {"decision":"bloqueada","next_task":null,"family":".opencode/tasks/llama-swap-multi-engine/006-compose-remove-llama-cpp.md","plan":".opencode/plans/llama-swap-multi-engine/plan.md"} -->
 
 Plano: [plan.md](../../plans/llama-swap-multi-engine/plan.md)
