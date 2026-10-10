@@ -94,11 +94,22 @@ timings do llama-server**:
   "predicted_n": 128, "predicted_ms": 5230.88, "predicted_per_second": 24.28
 }
 ```
-- Prefill ≈ **540 tok/s**; decode ≈ **24,3 tok/s** (41,2 ms/token).
+- Prefill ≈ **540 tok/s** (539,66 confere exato); decode ≈ **24,5 tok/s**
+  (5230,88 ms / 128 tokens = 40,87 ms/token ⇒ 24,47 tok/s). Os valores
+  "24,28 tok/s / 41,2 ms/token" transcritos correspondem a `predicted_n 127`
+  — inconsistência de transcrição no JSON colado (fonte bruta não preservada).
 - VRAM (`nvidia-smi` com o modelo carregado): processo Bonsai **9146 MiB**;
   total da GPU **10657/12288 MiB** — sem OOM, dentro da meta do plano
   (razoável em ctx ≥ 64k; nota do config.yaml registrou ~9967 MiB em
   execução anterior; a variação é do display/Wayland).
+- **Limitação de revalidação (registrada pela 007-1)**: o item 4 acima
+  (fingerprint, visão "BONSAI 42") e as medições deste bloco C2 (timings,
+  VRAM) são evidência colada **não revalidada de forma independente** na
+  rodada de revisão (restrição do usuário contra carga de modelos pesados).
+  Nota adicional: `PE_T2I_Heretic`/`PE_I2I_Heretic` aparecem no `/v1/models`
+  mas são não-carregáveis (GGUF ausente em disco; ver
+  `llama-swap/config.yaml:277-278` e `:293-294`) — **2/17 entries não
+  funcionais**, limitação conhecida a tratar na task 008.
 
 **Item 5 — Idempotência manage.sh**:
 ```
@@ -121,14 +132,30 @@ cabeçalho do arquivo.
 (healthy), openwa (healthy), openwa-docker-proxy, searxng — todos Up;
 `curl http://localhost:8080/` → HTTP 200.
 
-**Observação registrada (sem correção necessária)**: na primeira carga após
-o reinício limpo, `Ornith1.5_9B_MTP` falhou 2x com `upstream command exited
-prematurely` (`process exited: code=125` no log DEBUG de execução anterior)
-— erro transiente do daemon docker no start do container; request idêntico
-imediatamente após funcionou e o erro não reproduziu em nenhuma das trocas
-seguintes. Histórico antigo no log (`PE_T2I_Heretic failed`) corresponde a
-GGUF ausente em disco, já documentado no config.yaml. Não há causa
-estrutural nem de config a corrigir.
+**Observação registrada (reescrevida pela subtask 007-1)**: na primeira carga
+após o reinício limpo, `Ornith1.5_9B_MTP` falhou 2x com `upstream command
+exited prematurely` (`process exited: code=125` no log DEBUG de execução
+anterior). Versão anterior desta observação alegava "não reproduziu em
+nenhuma das trocas seguintes" e atribuía a causa a "erro transiente do daemon
+docker" — alegações válidas apenas dentro da sessão 007 e hoje **retiradas**.
+Correção: a mesma assinatura é **recorrente entre sessões e modelos** no
+`logs/llama-swap.log` (log sem timestamps; linhas verificadas na correção:
+15, 17, 23, 25, 36, 49, 105, 121, 140-143) — `Ornith1.5_9B_MTP` em ≥2
+sessões (15/17, 23/25, 36/37, 49/50, 140-143), `bonsai-27b` (105) e
+`Gemma4_12B` (121) — sempre na primeira carga pós-start do llama-swap e
+sempre auto-recuperada pelo retry/health-check seguinte (ex.: 121 → 122;
+140-143 → 144). **Causa indeterminada**: a hipótese de transiente do daemon
+docker não foi provada; hipótese alternativa **não descartada** é conflito
+de nome com container órfão de execução anterior — o alerta já existe em
+`llama-swap/config.yaml:70-73` ("se um crash do llama-swap deixar container
+órfão, o próximo `docker run` falha por conflito de nome"). O `docker run`
+usado usa `--name ls-<Modelo>` fixo, compatível com essa falha. Follow-up
+explícito: na próxima ocorrência, capturar stderr do `docker run` /
+`docker events`; documentar o comportamento nas docs do repo (escopo da
+task 008). Registro histórico distinto: a falha de `PE_T2I_Heretic` no log
+(linha 98) corresponde a GGUF ausente em disco, não ao flake — já
+documentado no config.yaml (linhas 277-278, 293-294). Não há causa
+estrutural nem de config a corrigir nesta task.
 
 ## Notas
 
@@ -138,10 +165,13 @@ carga dos modelos.
 
 ### Dificuldade sentida
 3/10 — a bateria em si é trivial, mas o diagnóstico do `exit code 125`
-transiente do `docker run` sob o llama-swap (primeira carga pós-restart)
-consumiu tempo de investigação (reprodução manual do comando, `docker
-events`, reler o log DEBUG). Causa não determinística, não reproduzida
-após a primeira ocorrência; nenhuma correção aplicada.
+do `docker run` sob o llama-swap (primeira carga pós-restart) consumiu
+tempo de investigação (reprodução manual do comando, `docker events`,
+reler o log DEBUG). Corrigido pela 007-1: o padrão é **recorrente entre
+sessões/modelos** (ver Observação acima); **causa não determinada** —
+hipóteses de transiente do daemon docker e de conflito de nome com
+container órfão (`config.yaml:70-73`) permanecem abertas; nenhuma correção
+aplicada.
 
 ### Revisão
 - Orquestrador: task-master (sorgan-qwen/qwen3.8-flash-next)
