@@ -172,6 +172,6 @@ menos ajuste empírico do que o previsto na dificuldade esperada (4/10).
 - Reversão: não se aplica — entrega preservada.
 - Próximo passo: task 005 (Infra Strata — depende de 002, já fechada).
 
-<!-- task-cycle: {"decision":"fechar","next_task":".opencode/tasks/llama-swap-multi-engine/005-strata-infra.md","family":".opencode/tasks/llama-swap-multi-engine/003-engine-prismml.md","plan":".opencode/plans/llama-swap-multi-engine/plan.md"} -->
+<!-- task-cycle: {"decision":"fechar","next_task":".opencode/tasks/llama-swap-multi-engine/005-strata-infra.md","family":".opencode/tasks/llama-swap-multi-engine/005-strata-infra.md","plan":".opencode/plans/llama-swap-multi-engine/plan.md"} -->
 
 Plano: [plan.md](../../plans/llama-swap-multi-engine/plan.md)
