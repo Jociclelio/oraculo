@@ -14,3 +14,7 @@ models/*
 # Arquivos de ambiente e config com segredos
 .env
 searxng/settings.yml
+
+# llama-swap (binário local e logs de runtime)
+bin/
+logs/
