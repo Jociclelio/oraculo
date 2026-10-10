@@ -1,6 +1,6 @@
 # Task 007: Validação end-to-end do stack multi-engine
 
-Estado: aguardando revisão
+Estado: aguardando subtasks
 Depende de: 004, 005, 006
 Origem: nenhuma
 
@@ -144,13 +144,16 @@ events`, reler o log DEBUG). Causa não determinística, não reproduzida
 após a primeira ocorrência; nenhuma correção aplicada.
 
 ### Revisão
-- Orquestrador: —
-- Alvo:
-- Avaliações:
-- Nota final: _/10
-- Parecer:
-- Decisão:
-- Reversão:
-- Próximo passo:
+- Orquestrador: task-master (sorgan-qwen/qwen3.8-flash-next)
+- Alvo: base `4fc852e`; entrega **sem alteração de artefatos** (task de validação; nenhum arquivo funcional modificado); registro `22085d0` (único commit em `4fc852e..HEAD`, só o `.md` da task, +91/−9); árvore limpa.
+- Avaliações (rodada **sequencial** — a revalidação toca recursos compartilhados do sistema: GPU 12 GB, porta 8081 e swap de modelos do llama-swap; revisores simultâneos interfeririam nas cargas/medições. Pool do arquivo global, três modelos distintos, sem falhas nem substituições):
+  - `sd2/GLM-5.3-Flash` — 9/10, aprovar/fechar; C1–C3 comprovados com re-verificação live (17 entries, compose 5 serviços, np, idempotência); A1 (baixo/médio): o padrão `exit 125` na primeira carga pós-restart é **recorrente entre sessões/modelos** (log:105,121,140-143) — a observação da task subestima; documentar na 008. A2 (baixo): inconsistência de transcrição no JSON de timings (`predicted_n 128` ⇒ 24,47 tok/s; os 24,28 batem com 127). A3 (baixo): ordenação narrativa do swap reverso.
+  - `sorgan-qwen/qwen3.8-flash-next` — 8,5/10, aprovar/fechar **com condição documental**; C1/C3 comprovados, C2 parcial-provisório (sem re-medição ao vivo por restrição); F2 (médio): "não reproduziu" contraditado pelo próprio log (≥5 segmentos, 3 modelos); F3 (baixo): `PE_T2I/I2I_Heretic` listadas sem GGUF em disco (2/17 não-carregáveis); F4 (baixo): saídas de `docker ps` não preservadas (auditabilidade).
+  - `opencode/muse-spark-1.3-contributor-free` — 7/10, **corrigir (documental leve)**; itens 2/5/6/7/C3 reverificados live; A1 (médio): observação factualmente contraditada pelo log; A2 (baixo): causa "daemon docker" fechada sem prova — hipótese de conflito de nome com container órfão não descartada (alerta já em `config.yaml:70-73`); A3 (baixo): C2/item 4 é evidência colada não revalidada; A4 (baixo): entries PE sem GGUF.
+- Nota final: 8/10 — a bateria funcional passou: itens 2, 5, 6, 7 e C3 re-verificados independentemente pelos três revisores contra o estado vivo; swap corroborado por log+estado; C2 plausível e internamente coerente (prefill confere exato), não re-medido por restrição do usuário. O desconto incide sobre o único artefato da task: a Observação afirma não-recorrência contraditada pelo log e fecha a causa do flake sem prova (achado convergente 3/3), e há imprecisão de transcrição nos timings.
+- Parecer: 2 revisores aprovam com condição documental e 1 pede correção leve antes de fechar; não há disputa sobre a funcionalidade do stack (nenhum defeito estrutural; flake sempre auto-recuperado). Como o registro é a única entrega da task, a condição exigida por dois revisores converte-se em correção delimitada do próprio registro — fechar com o texto atual perpetuaria caracterização errada de confiabilidade. Sem reversão (entrega preservada; correção é documental).
+- Decisão: corrigir
+- Reversão: não se aplica — sem artefatos a desfazer.
+- Próximo passo: subtask 007-1 (correção documental do registro: recorrência do flake `exit 125`, causa indeterminada + follow-up, transcrição dos timings, limitação de revalidação do C2). Ao fechar a 007-1, a mãe 007 vira "resolvida por subtasks" e libera a 008 (que ganha o escopo de documentar o flake nas docs do repo).
 
 Plano: [plan.md](../../plans/llama-swap-multi-engine/plan.md)
