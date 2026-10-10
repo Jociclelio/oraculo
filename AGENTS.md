@@ -49,6 +49,8 @@ oraculo/
 
 Define **cinco serviços**: llama-cpp (inferência GPU), open-webui (interface web), open-terminal (execução agêntica), searxng (busca web) e openwa + openwa-docker-proxy (WhatsApp/MCP):
 
+> **Decisão de design — hardware compartilhado**: a GPU é a mesma da máquina de uso pessoal. O stack é **request-driven** (modelo carrega sob demanda, descarrega após 5 min ocioso) e **deliberadamente não-autônomo** — sem agentes/workflows em background que possam requerer VRAM sem supervisão. Ver seção "Decisões de Projeto" no `README.md`.
+
 ### Serviço `llama-cpp` — Servidor de Inferência
 
 | Item          | Valor                                              |

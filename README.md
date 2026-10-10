@@ -93,6 +93,20 @@ curl http://localhost:8081/v1/models
 
 ---
 
+## Decisões de Projeto
+
+### Hardware compartilhado — autonomia sob demanda
+
+O Oráculo roda na **mesma GPU que a máquina de uso pessoal** (RTX 3060 12GB, que já divide VRAM com o display/Wayland). Por isso, o design é deliberadamente **request-driven, não autônomo**:
+
+- **Nenhum agente roda sozinho em background** — não há Hermes, n8n nem workflows agendados que possam carregar um modelo e requerer VRAM quando a placa está ocupada com outra atividade (jogo, render, etc.)
+- **O humano está sempre no loop**: modelos só carregam quando há requisição e são **descarregados após 5 min de ociosidade** (`sleep-idle-seconds`), devolvendo a VRAM
+- Sistemas de automação (n8n) foram testados e removidos do stack por esse motivo
+
+> **Tradeoff consciente**: autonomia total (agents 24/7, pipelines agendados) exige um substrato dedicado. Com uma máquina dedicada a inferência no futuro, workflows autônomos passam a fazer sentido — até lá, o controle fica com o usuário.
+
+---
+
 ## Uso
 
 ### Chat com curl
