@@ -1,6 +1,6 @@
 # Task 007-1: Correção — registro da 007 (flake exit 125, timings, limitações)
 
-Estado: aguardando subtasks
+Estado: resolvida por subtasks (8/10 corrigir; 007-2 fechada 9,5/10 — F1/F2/F3 sanados)
 Depende de: 007
 Origem: 007 (correção)
 

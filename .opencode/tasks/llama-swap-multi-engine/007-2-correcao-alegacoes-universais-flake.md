@@ -1,6 +1,6 @@
 # Task 007-2: Correção — Observação 007: alegações universais "sempre" do flake
 
-Estado: aguardando revisão
+Estado: fechada
 Depende de: 007-1
 Origem: 007-1 (correção)
 
@@ -152,32 +152,69 @@ manter Revisão da mãe e Corretude C1–C3 intactas e validar o grep "sempre"
 com a única exceção permitida.
 
 ### Revisão
-- Orquestrador: task-master (sorgan-qwen/qwen3.8-flash-next)
-- Alvo: base `8e7f990` (HEAD; árvore limpa, sem stash, sem artefatos de tentativas
-  anteriores). Sem entrega — a execução não foi iniciada.
-- Avaliações: nenhuma rodada de revisão — não há entrega a avaliar.
-- Nota final: —/10 (provisória; nada executado)
-- Parecer: **bloqueio ambiental documentável.** A task é puramente documental e
-  executável, mas o executor do ciclo (`sd2/GLM-5.3-Flash`) está indisponível: o
-  endpoint do provider `http://localhost:8083/v1` (túnel SSH `-L 127.0.0.1:8083 →
-  uranus.lsc.ic.unicamp.br:8080`, pid 644989, ativo desde 14:37) aceita a conexão
-  e fecha sem resposta (`curl (56) Recv failure: Conexão fechada pela outra
-  ponta`, 3 tentativas consecutivas; `/v1/models` → HTTP 000). O checkpoint do
-  ciclo registra a tentativa anterior interrompida pelo mesmo `APIError`
-  retryável em `localhost:8083`. Sem `alternate_executor_model` configurado; a
-  troca de executor exige decisão do usuário (via `resume`/`config`), e a
-  substituição silenciosa pela `task` nativa é proibida no ciclo. Nenhuma
-  execução, nenhuma revisão, nenhum artefato produzido; nada a reverter.
-- Decisão: bloqueada
-- Reversão: não se aplica — sem entrega.
-- Próximo passo: resolver o impedimento — (a) restabelecer o serviço remoto do
-  sd2 (`uranus.lsc.ic.unicamp.br:8080`) mantendo o executor, ou (b) autorizar
-  outro `executor_model` — e então `resume` do ciclo nesta mesma task. Atenção:
-  a família 006 está em 4/5 tentativas; se a troca/continuação exigir nova
-  tentativa além do limite, aumentar `max_family_attempts` no `resume`. A 008
-  permanece travada até o fechamento da 007-2 (mãe 007 vira "resolvida por
-  subtasks" ao fechar).
 
-<!-- task-cycle: {"decision":"bloqueada","next_task":null,"family":".opencode/tasks/llama-swap-multi-engine/006-compose-remove-llama-cpp.md","plan":".opencode/plans/llama-swap-multi-engine/plan.md"} -->
+#### Rodada 1 — bloqueio ambiental (histórico preservado, registro `c86323a`)
+- Orquestrador: task-master (sorgan-qwen/qwen3.8-flash-next)
+- Alvo: base `8e7f990`; sem entrega — a execução não foi iniciada.
+- Parecer: **bloqueio ambiental documentável.** Executor do ciclo
+  (`sd2/GLM-5.3-Flash`) indisponível: endpoint `http://localhost:8083/v1`
+  (túnel SSH → `uranus.lsc.ic.unicamp.br:8080`) fechava conexões sem resposta
+  (HTTP 000). Sem `alternate_executor_model`; troca exigia decisão do usuário.
+- Decisão: bloqueada → **resolvida pelo usuário** via `resume`/`config` com
+  `executor_model = sorgan-qwen/qwen3.8-flash-next` (opção (b) do encaminhamento).
+
+#### Rodada 2 — rodada final (quórum completo)
+- Orquestrador: task-master (sorgan-qwen/qwen3.8-flash-next)
+- Alvo: base `c86323af2cc654f14b448f82f053d07eeed81128`; entrega `9deb99f3010561855e494c478868c76f99772c25`
+  (único arquivo: `.md` da 007, +34/−20, hunk único só na Observação); registro
+  `e4420638f282672c7d56573765a5b1a5c191ec0b`; executor `sorgan-qwen/qwen3.8-flash-next`
+  (identidade real confirmada; 5ª/5 tentativa da família 006); árvore limpa em HEAD.
+- Avaliações (rodada **paralela** — correção exclusivamente documental; revisores
+  só leem arquivos/git, sem recursos compartilhados. Pool do arquivo global:
+  `task-reviewer-glm` (sd2/GLM-5.3-Flash) **pulado** — endpoint `localhost:8083`
+  ainda sem serviço remoto (HTTP 000 verificado antes da rodada; omissão
+  registrada); quórum com três modelos distintos. Nota de transparência:
+  `qwen3.8-flash-next` também é o modelo executor; a regra de quórum exige três
+  revisores de modelos distintos entre si, e os outros dois são independentes do
+  executor):
+  - `sorgan-qwen/qwen3.8-flash-next` — 10/10, **fechar**; C1–C4 verificados
+    independentemente contra o log da working tree (recuperações 121→122 e
+    140-143→144; shutdowns exatos 19/27/40/53/107; PIDs 29/42/55; par 120/121;
+    assepsia só na linha 35); positividade de "tipicamente" conferida (demais
+    ocorrências são de fato primeira carga em suas sessões). A1 (baixo/
+    informativo): a lista de linhas herdada da 007-1 (`007-validacao-e2e.md:144`)
+    mistura WARNs da assinatura com DEBUGs 36/49 em vez dos WARNs pareados
+    37/50 — preservada por instrução do prompt, não é defeito desta entrega.
+    A2 (baixo/informativo): assepsia em apenas 1 de 3 starts (linhas 48/61 sem
+    `docker rm -f`) — texto versionado escopa corretamente à sessão PID 149457,
+    sem alegação de generalidade.
+  - `opencode/muse-spark-1.3-contributor-free` — 9/10, **fechar**; C1–C4
+    verificados (greps independentes das assinaturas, shutdowns e PIDs; diff
+    byte-idêntico fora da Observação). O1 (baixo/informativo): "Dificuldade
+    sentida" da 007 diz hipóteses "permanecem abertas" vs. Observação "aberta,
+    porém enfraquecida" — coerente (enfraquecida ⊂ aberta), sem contradição.
+  - `openai/gpt-6-luna` — 10/10, **fechar**; nenhum achado material; única
+    ocorrência de "sempre" no arquivo é a linha 198, na Revisão da mãe
+    (exceção permitida); causa segue corretamente indeterminada.
+- Nota final: **9,5/10** — os dois universais rejeitados na 007-1 (F1 médio,
+  F2 baixo) e o follow-up F3 foram sanados com texto fiel ao log e referências
+  de linha exatas, reconfirmadas pelos três revisores por conta própria; escopo
+  mínimo impecável (hunk único; Corretude C1–C3 e Revisão da mãe byte-idênticas;
+  nenhum arquivo funcional; nenhuma execução de stack). O desconto não é defeito
+  desta entrega: (a) o log de evidência é untracked — referências de linha não
+  reproduzíveis a partir da árvore versionada (limitação inerente, já registrada
+  e com escopo de documentação na 008); (b) a lista de linhas herdada da 007-1
+  mistura WARN/DEBUG (A1), preservada por instrução explícita do prompt.
+- Parecer: unânime 3/3 por fechar. Nenhuma divergência entre revisores; nada
+  pendente de correção. Sem reversão (entrega preservada).
+- Decisão: **fechar**
+- Reversão: não se aplica — sem artefatos a desfazer.
+- Próximo passo: mãe 007 e 007-1 viram "resolvida por subtasks" (mesmo commit
+  documental); a 008 (Documentação) é liberada como próxima task principal e
+  carrega o escopo do flake já anotado no plano, mais os achados A1 (lista de
+  linhas mista, herdada) e A2 (assepsia em apenas 1 de 3 starts) desta rodada
+  caso reescreva o flake nas docs do repo.
+
+<!-- task-cycle: {"decision":"fechar","next_task":".opencode/tasks/llama-swap-multi-engine/008-documentacao.md","family":".opencode/tasks/llama-swap-multi-engine/006-compose-remove-llama-cpp.md","plan":".opencode/plans/llama-swap-multi-engine/plan.md"} -->
 
 Plano: [plan.md](../../plans/llama-swap-multi-engine/plan.md)

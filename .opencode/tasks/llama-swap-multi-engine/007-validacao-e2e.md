@@ -1,6 +1,6 @@
 # Task 007: Validação end-to-end do stack multi-engine
 
-Estado: aguardando subtasks
+Estado: resolvida por subtasks (mãe 8/10 corrigir; 007-1 8/10 corrigir; 007-2 fechada 9,5/10 — família resolvida em 10/10/2026)
 Depende de: 004, 005, 006
 Origem: nenhuma
 

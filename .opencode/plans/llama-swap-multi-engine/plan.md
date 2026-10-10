@@ -96,10 +96,10 @@ prefill/decode razoável com contexto ≥ 64k (128k quando VRAM e prefill permit
 | 005 | [Infra Strata (Dockerfile + entry comentada)](../../tasks/llama-swap-multi-engine/005-strata-infra.md) | 002 | resolvida por subtasks (mãe 6/10 corrigir; 005-1 fechada 9/10) |
 | 005-1 | [Correção — Strata `MODEL=IQ1_M` + textos README/Dockerfile](../../tasks/llama-swap-multi-engine/005-1-correcao-strata-env-model.md) | 005 | fechada (9/10) |
 | 006 | [Compose: remover serviço llama-cpp](../../tasks/llama-swap-multi-engine/006-compose-remove-llama-cpp.md) | 004 | fechada (9,5/10) |
-| 007 | [Validação end-to-end](../../tasks/llama-swap-multi-engine/007-validacao-e2e.md) | 004, 005, 006 | aguardando subtasks (mãe 8/10 corrigir; 007-1 corrigida 8/10 corrigir; 007-2 bloqueada) |
-| 007-1 | [Correção — registro 007: flake exit 125, timings, limitações](../../tasks/llama-swap-multi-engine/007-1-correcao-registro-flake-exit-125.md) | 007 | aguardando subtasks (8/10 corrigir; 007-2 bloqueada) |
-| 007-2 | [Correção — Observação 007: alegações universais "sempre" do flake](../../tasks/llama-swap-multi-engine/007-2-correcao-alegacoes-universais-flake.md) | 007-1 | bloqueada (executor sd2/GLM-5.3-Flash indisponível — endpoint 8083 sem serviço remoto; sem execução nem entrega; retomar via resume após resolver o ambiente) |
-| 008 | [Documentação (README, DOCKER, AGENTS, MODELS_INSTALL)](../../tasks/llama-swap-multi-engine/008-documentacao.md) | 007 | pendente |
+| 007 | [Validação end-to-end](../../tasks/llama-swap-multi-engine/007-validacao-e2e.md) | 004, 005, 006 | resolvida por subtasks (mãe 8/10 corrigir; 007-1 8/10 corrigir; 007-2 fechada 9,5/10) |
+| 007-1 | [Correção — registro 007: flake exit 125, timings, limitações](../../tasks/llama-swap-multi-engine/007-1-correcao-registro-flake-exit-125.md) | 007 | resolvida por subtasks (8/10 corrigir; 007-2 fechada 9,5/10) |
+| 007-2 | [Correção — Observação 007: alegações universais "sempre" do flake](../../tasks/llama-swap-multi-engine/007-2-correcao-alegacoes-universais-flake.md) | 007-1 | fechada (9,5/10; executor trocado para sorgan-qwen/qwen3.8-flash-next após bloqueio do sd2; entrega 9deb99f) |
+| 008 | [Documentação (README, DOCKER, AGENTS, MODELS_INSTALL)](../../tasks/llama-swap-multi-engine/008-documentacao.md) | 007 | pendente (liberada — família 007 resolvida) |
 
 Nota: a 008 ganha escopo da revisão da 007 — documentar nas docs do repo o
 flake `exit 125` recorrente entre sessões/modelos na carga pós-restart
