@@ -10,6 +10,21 @@ Stack Docker com **llama.cpp** (inferência GPU), **Open WebUI** (interface web)
 - **NVIDIA Container Toolkit** configurado (GPU NVIDIA)
 - Mínimo **10 GB** de disco livre (por modelo)
 
+## Variáveis de ambiente (`.env`)
+
+O `docker-compose.yml` lê os segredos do `.env` na raiz do projeto (não versionado). Criar antes de subir:
+
+```bash
+cp .env.example .env   # ou criar manualmente
+```
+
+| Variável | Descrição |
+|----------|-----------|
+| `WEBUI_SECRET_KEY` | Chave secreta do Open WebUI (persistência OAuth/MCP) |
+| `OPEN_TERMINAL_API_KEY` | Autenticação do open-terminal (gerar com `openssl rand -hex 32`) |
+
+> O SearXNG usa `searxng/settings.yml` (local, gitignored) — copiar de `searxng/settings.example.yml` e definir um `secret_key` aleatório.
+
 ---
 
 ## Serviços
