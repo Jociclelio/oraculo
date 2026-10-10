@@ -156,4 +156,6 @@ após a primeira ocorrência; nenhuma correção aplicada.
 - Reversão: não se aplica — sem artefatos a desfazer.
 - Próximo passo: subtask 007-1 (correção documental do registro: recorrência do flake `exit 125`, causa indeterminada + follow-up, transcrição dos timings, limitação de revalidação do C2). Ao fechar a 007-1, a mãe 007 vira "resolvida por subtasks" e libera a 008 (que ganha o escopo de documentar o flake nas docs do repo).
 
+<!-- task-cycle: {"decision":"corrigir","next_task":".opencode/tasks/llama-swap-multi-engine/007-1-correcao-registro-flake-exit-125.md","family":".opencode/tasks/llama-swap-multi-engine/007-validacao-e2e.md","plan":".opencode/plans/llama-swap-multi-engine/plan.md"} -->
+
 Plano: [plan.md](../../plans/llama-swap-multi-engine/plan.md)
