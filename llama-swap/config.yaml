@@ -1,0 +1,302 @@
+# llama-swap/config.yaml — proxy único em 127.0.0.1:8081
+# =====================================================================
+# Fonte dos parâmetros: models/models.ini (tradução INI -> flags do
+# llama-server). O models.ini permanece no repo como referência, desativado
+# (a remoção do serviço docker `llama-cpp` do compose é a task 006).
+#
+# Engine stock: imagem oficial ghcr.io/ggml-org/llama.cpp:full-cuda, um
+# container Docker efêmero por modelo (`docker run --rm`), GPU inteira via
+# `--gpus all`. Swap gerenciado pelo llama-swap: só 1 modelo carregado por
+# vez (equivale ao `--models-max 1` do antigo serviço).
+#
+# Posicionamento do plano: stack para 1 usuário por vez. `np=1` default;
+# `np>1` só como exceção pontual para modelos pequenos (exemplo comentado
+# no fim deste arquivo).
+#
+# Convenções de tradução do INI:
+#   ngl = all      -> -ngl 99  (todas as camadas na GPU)
+#   sleep-idle-seconds = 300 -> ttl: 300 (campo YAML do llama-swap)
+#   alias = <nome> -> campo `aliases` da entry do llama-swap
+
+# Espera máxima pelo healthcheck do modelo ao carregar. 300 s cobre o
+# carregamento a frio dos GGUFs de 21 GB (MoE 35B) a partir do NVMe.
+healthCheckTimeout: 300
+
+macros:
+  # Macro stock — comando Docker reutilizável por modelo.
+  # - manage.sh inicia o llama-swap a partir da raiz do repo, então o mount
+  #   relativo `./models` resolve para o mesmo diretório do antigo serviço.
+  # - IMPORTANTE: o llama-swap NÃO executa o cmd via shell (tokeniza com
+  #   shlex); nada de `;`, pipes ou redirecionamentos — um único comando.
+  # - A imagem tem ENTRYPOINT /app/tools.sh (dispatcher que espera `-s`);
+  #   sobrescrevemos com --entrypoint /app/llama-server para executar o
+  #   binário do servidor diretamente com as flags de cada entry.
+  # - Porta interna fixa 8080; ${PORT} (macro do llama-swap) publica só no
+  #   loopback do host — o proxy padrão http://localhost:${PORT} roteia para cá.
+  # - Flags globais herdadas da seção [*] do models.ini:
+  #   cache-type-k/v = q8_0 -> -ctk/-ctv; cache-reuse = 256 -> --cache-reuse;
+  #   parallel = 1 -> -np 1; flash-attn = on -> -fa on; jinja = 1 -> --jinja;
+  #   threads = 5 -> -t 5; cache-ram = 2048 -> --cache-ram.
+  "docker-stock": >
+    docker run --rm --name ls-${MODEL_ID} --gpus all
+    --entrypoint /app/llama-server
+    -p 127.0.0.1:${PORT}:8080
+    -v ./models:/models
+    ghcr.io/ggml-org/llama.cpp:full-cuda
+    --host 0.0.0.0 --port 8080
+    -fa on --jinja -np 1 -t 5
+    -ctk q8_0 -ctv q8_0
+    --cache-reuse 256 --cache-ram 2048
+
+  # Stop do container: rm -f é determinístico e imediato (SIGKILL ao
+  # processo do container -> VRAM liberada na hora; --rm remove o container).
+  # Nota: se um crash do llama-swap deixar container órfão, o próximo
+  # `docker run` falha por conflito de nome; limpar com `docker rm -f ls-<Modelo>`.
+  "docker-stop": >
+    docker rm -f ls-${MODEL_ID}
+
+models:
+  # ---------------------------------------------------------------------
+  # Gemma 4 12B IT (QAT UD Q4_K_XL) — multimodal (texto)
+  # ---------------------------------------------------------------------
+  Gemma4_12B:
+    cmd: |
+      ${docker-stock}
+      -m /models/gemma-4-12B-it-qat-UD-Q4_K_XL/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf
+      --mmproj /models/gemma-4-12B-it-qat-UD-Q4_K_XL/mmproj-F32.gguf
+      -c 49152 -ngl 99
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Gemma 4 12B IT com MTP speculative decoding -> ~100 tok/s em RTX 3060
+  # 12GB, 100% na GPU, zero CPU offload.
+  # Truque de VRAM: split do KV cache — q8_0 no target (herdado do macro),
+  # f16 no draft (-ctkd/-ctvd). Quantizar o cache do draft quebra a taxa de
+  # aceitação; f16 mantém ~70-85% de aceitação.
+  # (ATENÇÃO) ctx=262144 (256K, ideal do post X) falha OOM na RTX 3060 12GB
+  # porque Hyprland/Wayland ocupa ~880 MiB de VRAM; máximo validado nesta
+  # GPU+sw: 196608. Entry usa 64000.
+  # ---------------------------------------------------------------------
+  Gemma4_12B_MTP:
+    cmd: |
+      ${docker-stock}
+      -m /models/gemma-4-12B-it-qat-UD-Q4_K_XL/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf
+      --mmproj /models/gemma-4-12B-it-qat-UD-Q4_K_XL/mmproj-F32.gguf
+      --model-draft /models/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/mtp-gemma-4-12B-it.gguf
+      --spec-type draft-mtp --spec-draft-n-max 4
+      -ngl 99 --spec-draft-ngl 99
+      -ctkd f16 -ctvd f16
+      -c 64000 -b 4096 -ub 1280
+      --temp 1.0 --top-p 0.95 --top-k 64 --repeat-penalty 1.0
+      --cache-ram 0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Qwen 3.6 28B-A3B MoE (REAP20, Q4_K_M)
+  # Caminho corrigido: o INI aponta Qwen3.6-28B-REAP20-A3B/, mas o diretório
+  # em disco é Qwen3.6-28B-REAP20-A3B-Q4_K_M/.
+  # ---------------------------------------------------------------------
+  Qwen3.6_28B_A3B:
+    cmd: |
+      ${docker-stock}
+      -m /models/Qwen3.6-28B-REAP20-A3B-Q4_K_M/Qwen3.6-28B-REAP20-A3B-Q4_K_M.gguf
+      -c 49152 -ngl 99 -ncmoe 28
+      -b 4096 -ub 512
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Qwen 3.6 35B-A3B Thinking General (Q4_K_M) — MoE (32 experts CPU)
+  # ---------------------------------------------------------------------
+  Qwen3.6_35B_General:
+    cmd: |
+      ${docker-stock}
+      -m /models/unsloth_Qwen3.6_35B_A3B/Qwen3.6-35B-A3B-Q4_K_M.gguf
+      -c 98304 -ngl 99 -ncmoe 32
+      -b 4096 -ub 512
+      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
+      --presence-penalty 1.5 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Qwen 3.6 35B-A3B Thinking General VL (Q4_K_M) — mmproj pendente
+  # (necessário baixar mmproj separadamente; flag --mmproj comentada)
+  # ---------------------------------------------------------------------
+  Qwen3.6_35B_General_VL:
+    cmd: |
+      ${docker-stock}
+      -m /models/unsloth_Qwen3.6_35B_A3B/Qwen3.6-35B-A3B-Q4_K_M.gguf
+      # --mmproj /models/unsloth_Qwen3.6_35B_A3B/mmproj-F16.gguf
+      -c 49152 -ngl 99 -ncmoe 28
+      -b 4096 -ub 512
+      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
+      --presence-penalty 1.5 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Qwen 3.6 35B-A3B Thinking Code (Q4_K_M) — temp 0.6, sem penalty
+  # ---------------------------------------------------------------------
+  Qwen3.6_35B_Code:
+    cmd: |
+      ${docker-stock}
+      -m /models/unsloth_Qwen3.6_35B_A3B/Qwen3.6-35B-A3B-Q4_K_M.gguf
+      -c 49152 -ngl 99 -ncmoe 28
+      -b 4096 -ub 512
+      --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
+      --presence-penalty 0.0 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Qwen 3.6 35B-A3B Instruct General (Q4_K_M)
+  # ---------------------------------------------------------------------
+  Qwen3.6_35B_It_General:
+    cmd: |
+      ${docker-stock}
+      -m /models/unsloth_Qwen3.6_35B_A3B/Qwen3.6-35B-A3B-Q4_K_M.gguf
+      -c 98304 -ngl 99 -ncmoe 32
+      -b 4096 -ub 512
+      --temp 0.7 --top-p 0.8 --top-k 20 --min-p 0.0
+      --presence-penalty 1.5 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Qwen 3.6 35B-A3B Instruct Reasoning (Q4_K_M)
+  # ---------------------------------------------------------------------
+  Qwen3.6_35B_It_Reasoning:
+    cmd: |
+      ${docker-stock}
+      -m /models/unsloth_Qwen3.6_35B_A3B/Qwen3.6-35B-A3B-Q4_K_M.gguf
+      -c 98304 -ngl 99 -ncmoe 32
+      -b 4096 -ub 512
+      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
+      --presence-penalty 1.5 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Ornith 1.5 9B MTP (Q4_K_M, protoLabsAI) — acceptance ~0.40
+  # ---------------------------------------------------------------------
+  Ornith1.5_9B_MTP:
+    cmd: |
+      ${docker-stock}
+      -m /models/Ornith-1.5-9B-MTP-Q4_K_M/Ornith-1.5-9B-MTP-Q4_K_M.gguf
+      --spec-type draft-mtp --spec-draft-n-max 3
+      -c 65536 -ngl 99
+      -b 4096 -ub 256
+      --temp 0.7 --top-p 0.8 --top-k 20 --min-p 0.0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Ornith 1.5 9B + DFlash draft (audreyt) — acceptance ~0.42
+  # (spec-type draft-dflash depende do suporte no llama.cpp stock)
+  # ---------------------------------------------------------------------
+  Ornith1.5_9B_DFlash:
+    cmd: |
+      ${docker-stock}
+      -m /models/Ornith-1.5-9B-Q4_K_M/Ornith-1.5-9B-Q4_K_M.gguf
+      --model-draft /models/Ornith-1.5-9B-DFlash/ornith1.5-9b-dflash-bf16-projection-Q4_K_M.gguf
+      --spec-type draft-dflash --spec-draft-n-max 10
+      -c 65536 -ngl 99
+      -b 4096 -ub 256
+      --temp 0.7 --top-p 0.8 --top-k 20 --min-p 0.0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Ornith 1.5 35B-A3B MTP (APEX Compact, mudler) — acceptance ~0.80,
+  # MoE (28 experts CPU)
+  # ---------------------------------------------------------------------
+  Ornith1.5_35B_MTP:
+    cmd: |
+      ${docker-stock}
+      -m /models/Ornith-1.5-35B-MTP-APEX-Compact/Ornith-1.5-35B-A3B-APEX-MTP-Compact.gguf
+      --spec-type draft-mtp --spec-draft-n-max 1
+      -c 49152 -ngl 99 -ncmoe 28
+      -b 4096 -ub 512
+      --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Gemma 4 12B Uncensored Balanced (HauhauCS) — multimodal
+  # (texto, imagem, áudio)
+  # ---------------------------------------------------------------------
+  Gemma4_12B_Hauhau:
+    cmd: |
+      ${docker-stock}
+      -m /models/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
+      --mmproj /models/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/mmproj-Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf
+      -c 49152 -ngl 99
+      --temp 1.0 --top-p 0.95 --top-k 64
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Qwen 3.6 35B Uncensored Aggressive (HauhauCS) — multimodal,
+  # MoE (32 experts CPU)
+  # ---------------------------------------------------------------------
+  Qwen3.6_35B_A3B_Hauhau_Aggressive:
+    cmd: |
+      ${docker-stock}
+      -m /models/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
+      --mmproj /models/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf
+      -c 98304 -ngl 99 -ncmoe 32
+      -b 4096 -ub 512
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # PE Heretic t2i — equivale a:
+  #   llama-server -m pe_t2i_heretic-Q4_K_M.gguf -ngl 99 -c 16384 --jinja -a pe-t2i
+  # (ATENÇÃO) GGUF não está em disco (diretório models/pe_t2i_heretic-Q4_K_M/
+  # vazio); a entry aparece no /v1/models mas só carrega após baixar o modelo.
+  # ---------------------------------------------------------------------
+  PE_T2I_Heretic:
+    cmd: |
+      ${docker-stock}
+      -m /models/pe_t2i_heretic-Q4_K_M/pe_t2i_heretic-Q4_K_M.gguf
+      -c 16384 -ngl 99
+    cmdStop: ${docker-stop}
+    ttl: 300
+    aliases:
+      - pe-t2i
+
+  # ---------------------------------------------------------------------
+  # PE Heretic i2i (visão) — equivale a:
+  #   llama-server -m pe_i2i_heretic-Q4_K_M.gguf --mmproj pe_i2i_heretic.mmproj-bf16.gguf -c 16384 --jinja
+  # (ATENÇÃO) GGUF/mmproj não estão em disco (diretório
+  # models/pe_i2i_heretic-Q4_K_M/ vazio); ver nota da entry PE_T2I acima.
+  # ---------------------------------------------------------------------
+  PE_I2I_Heretic:
+    cmd: |
+      ${docker-stock}
+      -m /models/pe_i2i_heretic-Q4_K_M/pe_i2i_heretic-Q4_K_M.gguf
+      --mmproj /models/pe_i2i_heretic-Q4_K_M/pe_i2i_heretic.mmproj-bf16.gguf
+      -c 16384 -ngl 99
+    cmdStop: ${docker-stop}
+    ttl: 300
+    aliases:
+      - pe-i2i
+
+  # =====================================================================
+  # Exemplo comentado — paralelismo np=2 (APENAS referência).
+  # Posicionamento do plano é single-user; np>1 deve ser exceção pontual
+  # para modelos pequenos. A flag repetida após o macro vence (-np 2 sobrescreve
+  # o -np 1 do macro). Também é preciso dobrar o KV cache disponível (-c maior
+  # por slot exige mais VRAM).
+  #
+  # ExemploModelo:
+  #   cmd: |
+  #     ${docker-stock}
+  #     -np 2
+  #     -m /models/exemplo/exemplo.gguf -c 32768 -ngl 99
+  #   cmdStop: ${docker-stop}
+  #   ttl: 300
+  # =====================================================================
