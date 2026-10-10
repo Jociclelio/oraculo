@@ -1,11 +1,12 @@
 # Oráculo
 
-Servidor local de LLMs com **llama.cpp** (inferência GPU), interface **Open WebUI**, gateway **OpenWA** (WhatsApp API com MCP) e automação **n8n** (workflows com MCP). Expondo:
+Servidor local de LLMs com **llama.cpp** (inferência GPU) e interface **Open WebUI**. Expondo:
 
 - **API OpenAI-compatible** (llama.cpp) → porta `8081`
 - **Open WebUI** → porta `8080`
-- **OpenWA API + MCP** → porta `2785` (localhost apenas)
-- **n8n** → porta `5678`
+- **Open Terminal** (execução agêntica) → porta `8000`
+- **SearXNG** (busca web privada) → porta `8888`
+- **OpenWa** (gateway WhatsApp + MCP) → porta `2785`
 
 ---
 
@@ -87,11 +88,7 @@ curl http://localhost:8081/v1/models
 # Acessar Open WebUI
 # Abrir http://localhost:8080 no navegador
 
-# Verificar OpenWA
-curl http://localhost:2785/api/health/ready
 
-# Acessar n8n
-# Abrir http://localhost:5678 no navegador
 ```
 
 ---
@@ -141,7 +138,38 @@ Interface web para interagir com os modelos via navegador.
 | **Container** | `open-webui` |
 | **Porta** | `8080` (modo host) |
 
-> O Open WebUI está pré-configurado para conectar ao llama-cpp na porta 8081.
+> O Open WebUI está pré-configurado para conectar ao llama-cpp na porta 8081 e usar o SearXNG como busca web.
+
+## Open Terminal
+
+Substrato de execução para o agente do Open WebUI: shell, filesystem e execução de código em container isolado.
+
+| Item | Valor |
+|------|-------|
+| **API** | `http://localhost:8000` |
+| **Container** | `open-terminal` |
+| **Conexão** | Pré-configurada como "Oraculo Terminal" (via `TERMINAL_SERVER_CONNECTIONS`) |
+
+Uso no chat: clicar no ícone de nuvem (☁) no input e selecionar **Oraculo Terminal**. Requer modelo com *Function Calling = Native*. Detalhes em [`DOCKER.md`](DOCKER.md).
+
+## SearXNG
+
+Metabuscador privado usado como motor de busca web do Open WebUI (web search sem API paga).
+
+```bash
+# Testar busca via JSON
+curl "http://localhost:8888/search?q=teste&format=json"
+```
+
+## OpenWa (WhatsApp)
+
+Gateway WhatsApp com MCP Streamable HTTP em `http://localhost:2785/mcp`. A API key é gerada na primeira inicialização:
+
+```bash
+docker exec openwa cat /app/data/.api-key
+```
+
+Já conectado ao Open WebUI como **tool server MCP**. Para usar no opencode/pi, adicionar como MCP streamable-http com header `X-API-Key`.
 
 ---
 
@@ -156,62 +184,7 @@ Interface web para interagir com os modelos via navegador.
 | `docker compose ps` | Ver status |
 | `docker logs llama-cpp` | Ver logs do llama-cpp |
 | `docker logs open-webui` | Ver logs do open-webui |
-| `docker logs openwa` | Ver logs do openwa |
-| `docker logs n8n` | Ver logs do n8n |
 
-## OpenWA — WhatsApp com MCP
-
-O OpenWA expõe ~39 ferramentas de WhatsApp via **MCP Streamable HTTP** para uso no Open WebUI:
-
-| Item | Valor |
-|------|-------|
-| **URL API** | `http://localhost:2785` |
-| **Endpoint MCP** | `POST http://localhost:2785/mcp` |
-| **Container** | `openwa` |
-| **Porta** | `2785` (127.0.0.1 — localhost apenas) |
-
-### Configurar MCP no Open WebUI
-
-1. Acesse **http://localhost:8080** como admin
-2. **⚙️ Admin Settings → External Tools → + (Add Server)**
-3. **Type**: `MCP (Streamable HTTP)`
-4. **Server URL**: `http://localhost:2785/mcp`
-5. **Auth**: `Bearer <API_KEY>` (obter com `docker exec openwa cat /app/data/.api-key`)
-6. **Save** → reiniciar se solicitado
-
-> Use **MCP (Streamable HTTP)**, não OpenAPI. OpenAPI causa crash na UI.
-
-Ferramentas disponíveis: list/get sessions, send messages (text/image/video/audio), chats, contacts, groups, webhooks.
-
----
-
-## n8n — Automação de Workflows
-
-Interface de automação com +300 integrações (Slack, Gmail, GitHub, Notion, etc.) e **MCP nativo**.
-
-| Item | Valor |
-|------|-------|
-| **URL** | `http://localhost:5678` |
-| **Endpoint MCP** | `http://localhost:5678/mcp-server/http` |
-| **Container** | `n8n` |
-| **Porta** | `5678` (modo host) |
-
-### Configurar MCP do n8n no Open WebUI
-
-1. Acesse **http://localhost:5678** e crie uma conta admin
-2. Vá em **Settings → Instance-level MCP** e ative **Enable MCP access**
-3. Clique em **Connection details** e copie o **Access Token** (ou configure OAuth2)
-4. Habilite workflows individuais para MCP: abra o workflow → `...` → **Settings** → **Available in MCP**
-5. Acesse **http://localhost:8080** como admin no Open WebUI
-6. **⚙️ Admin Settings → External Tools → + (Add Server)**
-7. **Type**: `MCP (Streamable HTTP)`
-8. **Server URL**: `http://localhost:5678/mcp-server/http`
-9. **Auth**: `Bearer <YOUR_N8N_MCP_TOKEN>` (token obtido no passo 4)
-10. **Save** → reiniciar se solicitado
-
-> Use **MCP (Streamable HTTP)**, não OpenAPI. OpenAPI causa crash na UI.
-
-Ferramentas MCP disponíveis: search/get/execute workflows, gerenciar credenciais, nodes, projetos, execuções, data tables.
 
 ---
 
@@ -234,16 +207,22 @@ curl -X POST http://localhost:8081/v1/unload_model
 | Modelo | Contexto | Notas |
 |--------|----------|-------|
 | Gemma4_12B | 49152 | Multimodal (texto) |
-| Gemma4_12B_MTP | 196608 | MTP speculative decoding / ~100 tok/s / cache split q8_0+f16 (máx. validado na RTX 3060 12GB c/ Wayland) |
+| Gemma4_12B_MTP | 64000 | MTP speculative decoding / cache split q8_0 (target) + f16 (draft); máx. validado 192K |
 | Gemma4_12B_Hauhau | 49152 | Multimodal (texto, imagem, áudio) |
 | Qwen3.6_28B_A3B | 49152 | MoE (28 experts CPU) |
-| Qwen3.6_35B_General | 49152 | MoE / temp=1.0 |
-| Qwen3.6_35B_Code | 49152 | MoE / temp=0.6 |
-| Qwen3.6_35B_It_General | 49152 | MoE / temp=0.7 |
-| Ornith1.5_9B | 65536 | Q4_K_M |
-| Ornith1.5_35B | 49152 | Q4_K_M / MoE |
+| Qwen3.6_35B_General | 98304 | MoE (32 experts CPU) / temp=1.0 |
+| Qwen3.6_35B_General_VL | 49152 | MoE (28 experts CPU) / mmproj pendente |
+| Qwen3.6_35B_Code | 49152 | MoE (28 experts CPU) / temp=0.6 |
+| Qwen3.6_35B_It_General | 98304 | MoE (32 experts CPU) / temp=0.7 |
+| Qwen3.6_35B_It_Reasoning | 98304 | MoE (32 experts CPU) / temp=1.0 |
+| Ornith1.5_9B_MTP | 65536 | MTP speculative decoding / acceptance ~0.40 |
+| Ornith1.5_9B_DFlash | 65536 | DFlash speculative decoding / acceptance ~0.42 |
+| Ornith1.5_35B_MTP | 49152 | MoE (28 experts CPU) / MTP / acceptance ~0.80 |
+| Qwen3.6_35B_A3B_Hauhau_Aggressive | 98304 | MoE (32 experts CPU) / multimodal |
+| PE_T2I_Heretic | 16384 | Text-to-image / alias `pe-t2i` |
+| PE_I2I_Heretic | 16384 | Image-to-image (visão) / alias `pe-i2i` |
 
-Configurações completas em [`models.ini`](models.ini).
+Configurações completas em [`models/models.ini`](models/models.ini).
 
 ---
 

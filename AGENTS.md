@@ -1,11 +1,12 @@
 # oraculo
 
-Servidor local de LLMs com **llama.cpp** (inferência GPU), interface **Open WebUI**, gateway **OpenWA** (WhatsApp API com MCP) e automação **n8n** (workflows com MCP). Expondo:
+Servidor local de LLMs com **llama.cpp** (inferência GPU) e interface **Open WebUI**. Expondo:
 
 - **API OpenAI-compatible** (llama.cpp) → porta `8081`
 - **Open WebUI** → porta `8080`
-- **OpenWA API + MCP** → porta `2785` (localhost apenas)
-- **n8n** → porta `5678`
+- **Open Terminal** (execução agêntica) → porta `8000`
+- **SearXNG** (busca web privada) → porta `8888`
+- **OpenWa** (gateway WhatsApp + MCP) → porta `2785`
 
 ---
 
@@ -26,20 +27,17 @@ Mantenha a documentação sincronizada com o código. Documentação desatualiza
 
 ```
 oraculo/
-├── docker-compose.yml          # Definição dos serviços Docker (llama-cpp, open-webui, openwa, n8n)
+├── docker-compose.yml          # Definição dos serviços Docker
 ├── manage.sh                   # Script de gerenciamento (llama-cpp)
 ├── .env                        # Variáveis de ambiente
+│
+├── searxng/
+│   └── settings.yml            # Config do SearXNG (formats json p/ Open WebUI)
 │
 ├── models/
 │   ├── models.ini              # Configurações dos modelos para o servidor llama.cpp
 │   ├── MODELS_INSTALL.md       # Guia de instalação de modelos
-│   ├── Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/
-│   ├── Ornith-1.5-9B-Q4_K_M/
-│   ├── Ornith-1.5-35B-A3B-Q4_K_M/
-│   ├── Qwen3.6-28B-REAP20-A3B-Q4_K_M/
-│   ├── Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/
-│   ├── unsloth_Qwen3.6_35B_A3B/
-│   └── unsloth_Qwen3.6_35B_A3B_MTP/
+│   └── .../
 │
 ├── DOCKER.md                   # Documentação Docker detalhada
 └── README.md                   # Guia rápido de uso
@@ -49,7 +47,7 @@ oraculo/
 
 ## docker-compose.yml
 
-Define **quatro serviços**: llama-cpp (inferência GPU), open-webui (interface web), openwa (WhatsApp API com MCP) e n8n (automação de workflows com MCP):
+Define **cinco serviços**: llama-cpp (inferência GPU), open-webui (interface web), open-terminal (execução agêntica), searxng (busca web) e openwa + openwa-docker-proxy (WhatsApp/MCP):
 
 ### Serviço `llama-cpp` — Servidor de Inferência
 
@@ -73,73 +71,59 @@ Define **quatro serviços**: llama-cpp (inferência GPU), open-webui (interface 
 | **Porta**     | `8080` (network_mode: host)                        |
 | **Rede**      | `host`                                             |
 | **Volumes**   | `open-webui-data → /app/backend/data`              |
-| **Env**       | `OAI_API_BASE=http://localhost:8081/v1`           |
+| **Env**       | `OAI_API_BASE`, `WEBSEARCH_ENGINE`, `SEARXNG_QUERY_URL`, `TERMINAL_SERVER_CONNECTIONS` |
 
 Interface web para interagir com os LLMs via navegador. Configurada para conectar ao llama-cpp automaticamente.
 
+| Variável                  | Valor                                        | Descrição                                  |
+|---------------------------|----------------------------------------------|--------------------------------------------|
+| `OAI_API_BASE`            | `http://localhost:8081/v1`                   | API do llama.cpp                           |
+| `WEBUI_SECRET_KEY`        | (gerado)                                     | Persistência de tokens OAuth/MCP           |
+| `WEBSEARCH_ENGINE`        | `searxng`                                    | Motor de busca web nativo                  |
+| `SEARXNG_QUERY_URL`       | `http://localhost:8888/search?q=<query>`     | Endpoint do SearXNG                        |
+| `TERMINAL_SERVER_CONNECTIONS` | (JSON) `oraculo-terminal` @ `:8000`      | Conexão pré-configurada com o Open Terminal |
+
 > **Importante**: `WEBUI_SECRET_KEY` é obrigatório em setups Docker. Sem ele, ferramentas MCP conectadas via OAuth não persistem tokens entre reinicializações.
 
-### Serviço `openwa` — WhatsApp API Gateway com MCP
+> ⚠️ **ConfigVar**: `WEBSEARCH_ENGINE`, `SEARXNG_QUERY_URL` e `TERMINAL_SERVER_CONNECTIONS` são persistidos no `webui.db` na primeira inicialização — após isso, o **banco tem precedência sobre o env**. Para alterar: UI admin ou edição direta do `webui.db`.
+
+### Serviço `open-terminal` — Execução Agêntica
 
 | Item          | Valor                                              |
 |---------------|-----------------------------------------------------|
-| **Imagem**    | `ghcr.io/rmyndharis/openwa:main`                  |
-| **Container** | `openwa`                                           |
-| **Porta**     | `2785` (127.0.0.1:2785)                           |
-| **Rede**      | `openwa-network` + `openwa-internal-docker`        |
-| **Volumes**   | `openwa-data → /app/data`, `openwa-sessions → /app/data/sessions` |
-| **Env**       | `MCP_ENABLED=true`, `MCP_READONLY=false`           |
+| **Imagem**    | `ghcr.io/open-webui/open-terminal`                |
+| **Container** | `open-terminal`                                    |
+| **Porta**     | `127.0.0.1:8000` (somente localhost)               |
+| **Volumes**   | `open-terminal-data → /home/user`                  |
+| **Env**       | `OPEN_TERMINAL_API_KEY`                            |
 
-Gateway WhatsApp que expõe ~39 ferramentas via **MCP Streamable HTTP** em `POST /mcp`.
+Substrato de execução (shell, filesystem, código) para o agente do Open WebUI. Conexão pré-configurada como **"Oraculo Terminal"**. Requer modelo com **Function Calling = Native**.
 
-**Ferramentas disponíveis**:
-- **Sessão**: list, get, chats, stats, mark read/unread, typing
-- **Mensagem**: list, history, reactions, send (text/image/video/audio/document/location/contact/sticker/template), reply, forward, react
-- **Contato**: list, get, check-number, resolve-phone, profile-picture, block/unblock
-- **Grupo**: list, get, invite-code, create, add participants, set subject/description
-
-**Autenticação**: API key via header `X-API-Key` ou `Authorization: Bearer <key>`. A chave é gerada na primeira inicialização e salva em `openwa-data/.api-key`.
-
-**Modo de operação**: Por padrão, MCP é **read-only**. Defina `MCP_READONLY=false` para expor ferramentas de escrita (enviar mensagens, etc.).
-
-### Serviço `openwa-docker-proxy` — Proxy Seguro do Docker Socket
+### Serviço `searxng` — Busca Web
 
 | Item          | Valor                                              |
 |---------------|-----------------------------------------------------|
-| **Imagem**    | `tecnativa/docker-socket-proxy:v0.4.2`            |
-| **Container** | `openwa-docker-proxy`                              |
-| **Rede**      | `openwa-network` + `openwa-internal-docker` (internal) |
-| **Volumes**   | `/var/run/docker.sock → /var/run/docker.sock:ro`  |
+| **Imagem**    | `searxng/searxng`                                  |
+| **Container** | `searxng`                                          |
+| **Porta**     | `127.0.0.1:8888` (somente localhost)               |
+| **Volumes**   | `./searxng/settings.yml → /etc/searxng/settings.yml` |
 
-Proxy restrito que expõe apenas operações necessárias (CONTAINERS, IMAGES, VOLUMES, INFO, PING, POST, DELETE). É o **único** container com acesso ao Docker socket.
+Metabuscador privado usado como motor de busca web do Open WebUI. O `settings.yml` habilita `formats: [html, json]` — **o JSON é obrigatório** para a integração.
 
-### Serviço `n8n` — Automação de Workflows com MCP
+### Serviços `openwa` + `openwa-docker-proxy` — WhatsApp/MCP
 
-| Item          | Valor                                              |
-|---------------|-----------------------------------------------------|
-| **Imagem**    | `docker.n8n.io/n8nio/n8n`                          |
-| **Container** | `n8n`                                              |
-| **Porta**     | `5678` (network_mode: host)                        |
-| **Rede**      | `host`                                             |
-| **Volumes**   | `n8n_data → /home/node/.n8n`                       |
-| **Env**       | `GENERIC_TIMEZONE=America/Sao_Paulo`, `TZ=America/Sao_Paulo` |
+| Item          | openwa                                             | openwa-docker-proxy                        |
+|---------------|-----------------------------------------------------|--------------------------------------------|
+| **Imagem**    | `ghcr.io/rmyndharis/openwa:main`                  | `tecnativa/docker-socket-proxy:v0.4.2`     |
+| **Porta**     | `127.0.0.1:2785`                                   | — (rede interna)                           |
+| **Volumes**   | `openwa-data`, `openwa-sessions`                   | Docker socket (read-only, ops mínimas)     |
+| **Redes**     | `openwa-network`, `openwa-internal`                | `openwa-network`, `openwa-internal`        |
 
-Interface de automação com +300 integrações (Slack, Gmail, GitHub, Notion, etc.). **MCP nativo** exposto em `http://localhost:5678/mcp-server/http`.
+Gateway WhatsApp com MCP Streamable HTTP em `http://localhost:2785/mcp`. Autenticação via `X-API-Key`/`Bearer` — key gerada na primeira inicialização, salva em `openwa-data/.api-key`. O proxy é o único container com acesso ao Docker socket.
 
-**Configuração inicial obrigatória**:
-1. Acesse http://localhost:5678 e crie conta admin
-2. **Settings → Instance-level MCP** → ative **Enable MCP access**
-3. Clique em **Connection details** → copie o **Access Token**
-4. Habilite workflows para MCP: workflow → `...` → **Settings** → **Available in MCP**
+> O openwa também está conectado ao Open WebUI como **tool server MCP** (persistido em `tool_server.connections` no `webui.db`).
 
-**Ferramentas MCP disponíveis**:
-- **Workflow**: search, get, execute, test, publish, unpublish, create_from_code, update
-- **Execução**: get_execution, search_executions
-- **Dados**: list_credentials, search_projects, search_folders, list_tags
-- **Nodes**: search_nodes, get_node_types, resolve_node_data
-- **SDK**: get_sdk_reference, validate_workflow, validate_nodes, get_guidance
 
-**Acesso**: http://localhost:5678
 
 ---
 
@@ -178,10 +162,10 @@ Aplicadas a **todos** os modelos:
 | `cache-reuse`    | `256`   | Tamanho da janela de reuso de contexto       |
 | `parallel`       | `1`     | Número de batches paralelos                  |
 | `flash-attn`     | `on`    | Ativa flash attention                        |
-| `mlock`          | `1`     | Bloqueia memória na RAM (evita swap)         |
 | `jinja`          | `1`     | Usa template Jinja para chats                |
 | `threads`        | `5`     | Número de threads CPU                        |
-| `cache-ram`      | `0`     | Cache RAM (0 = desativado)                   |
+| `cache-ram`      | `2048`  | Cache RAM em MiB para modelos não carregados |
+| `sleep-idle-seconds` | `300` | Descarrega modelo ocioso após 5 min        |
 
 ### Seções de Modelos
 
@@ -212,17 +196,20 @@ Cada seção `[Nome]` configura um modelo específico com os parâmetros overrid
 | Seção                                   | Modelo                                                      | Contexto | Notas                                          |
 |-----------------------------------------|-------------------------------------------------------------|----------|------------------------------------------------|
 | `Gemma4_12B`                           | Gemma 4 12B IT (Q4_K_XL)                                   | 49152    | Multimodal (texto)                             |
-| `Gemma4_12B_MTP`                       | Gemma 4 12B IT (Q4_K_XL) + drafter MTP                     | 196608   | MTP speculative decoding / ~100 tok/s / cache split q8_0 (target) + f16 (draft) |
+| `Gemma4_12B_MTP`                       | Gemma 4 12B IT (Q4_K_XL) + drafter MTP                     | 64000    | MTP speculative decoding / cache split q8_0 (target) + f16 (draft); máx. validado 196608 |
 | `Gemma4_12B_Hauhau`                    | Gemma 4 12B Uncensored Balanced (HauhauCS)                 | 49152    | Multimodal (texto, imagem, áudio)              |
 | `Qwen3.6_28B_A3B`                      | Qwen 3.6 28B-A3B MoE (Q4_K_M)                              | 49152    | MoE (28 experts CPU)                           |
-| `Qwen3.6_35B_General`                  | Qwen 3.6 35B-A3B Thinking General (Q4_K_M)                 | 49152    | MoE (24 experts CPU) / temp=1.0 / penalidades  |
-| `Qwen3.6_35B_General_VL`               | Qwen 3.6 35B-A3B Thinking General VL (Q4_K_M)              | 49152    | MoE (24 experts CPU) / mmproj pendente         |
-| `Qwen3.6_35B_Code`                     | Qwen 3.6 35B-A3B Thinking Code (Q4_K_M)                    | 49152    | MoE (24 experts CPU) / temp=0.6 / sem penalty  |
-| `Qwen3.6_35B_It_General`               | Qwen 3.6 35B-A3B Instruct General (Q4_K_M)                 | 49152    | MoE (24 experts CPU) / temp=0.7 / top-p=0.8    |
-| `Qwen3.6_35B_It_Reasoning`             | Qwen 3.6 35B-A3B Instruct Reasoning (Q4_K_M)               | 49152    | MoE (24 experts CPU) / temp=1.0                |
-| `Ornith1.5_9B`                          | Ornith 1.5 9B (Q4_K_M)                                     | 65536    | Contexto expandido                             |
-| `Ornith1.5_35B`                         | Ornith 1.5 35B-A3B (Q4_K_M)                                | 49152    | MoE (28 experts CPU) / temp=0.6                |
-| `Qwen3.6_35B_A3B_Hauhau_Aggressive`    | Qwen 3.6 35B Uncensored Aggressive (HauhauCS)              | 49152    | MoE (24 experts CPU) / multimodal              |
+| `Qwen3.6_35B_General`                  | Qwen 3.6 35B-A3B Thinking General (Q4_K_M)                 | 98304    | MoE (32 experts CPU) / temp=1.0 / penalidades  |
+| `Qwen3.6_35B_General_VL`               | Qwen 3.6 35B-A3B Thinking General VL (Q4_K_M)              | 49152    | MoE (28 experts CPU) / mmproj pendente         |
+| `Qwen3.6_35B_Code`                     | Qwen 3.6 35B-A3B Thinking Code (Q4_K_M)                    | 49152    | MoE (28 experts CPU) / temp=0.6 / sem penalty  |
+| `Qwen3.6_35B_It_General`               | Qwen 3.6 35B-A3B Instruct General (Q4_K_M)                 | 98304    | MoE (32 experts CPU) / temp=0.7 / top-p=0.8    |
+| `Qwen3.6_35B_It_Reasoning`             | Qwen 3.6 35B-A3B Instruct Reasoning (Q4_K_M)               | 98304    | MoE (32 experts CPU) / temp=1.0                |
+| `Ornith1.5_9B_MTP`                      | Ornith 1.5 9B MTP (Q4_K_M, protoLabsAI)                    | 65536    | MTP speculative decoding / acceptance ~0.40   |
+| `Ornith1.5_9B_DFlash`                   | Ornith 1.5 9B (Q4_K_M) + DFlash draft (audreyt)           | 65536    | DFlash speculative decoding / acceptance ~0.42 |
+| `Ornith1.5_35B_MTP`                     | Ornith 1.5 35B-A3B MTP (APEX Compact, mudler)              | 49152    | MoE (28 experts CPU) / MTP / acceptance ~0.80 |
+| `Qwen3.6_35B_A3B_Hauhau_Aggressive`    | Qwen 3.6 35B Uncensored Aggressive (HauhauCS)              | 98304    | MoE (32 experts CPU) / multimodal              |
+| `PE_T2I_Heretic`                       | PE Heretic t2i (Q4_K_M)                                    | 16384    | Text-to-image / alias `pe-t2i`                 |
+| `PE_I2I_Heretic`                       | PE Heretic i2i (Q4_K_M) + mmproj                           | 16384    | Image-to-image (visão) / alias `pe-i2i`        |
 
 ### Presets Ornith 1.5
 
@@ -249,7 +236,7 @@ Parametros relevantes do preset:
 | `model-draft`          | `mtp-gemma-4-12B-it.gguf` | Drafter MTP                      |
 | `spec-type`            | `draft-mtp` | Tipo de speculative decoding                    |
 | `spec-draft-n-max`     | `4`    | Máximo de tokens draftados por passo                     |
-| `ctx-size`             | `196608` | Contexto (192K) — máx. validado na RTX 3060 12GB c/ Wayland ativo |
+| `ctx-size`             | `64000` | Contexto atual no `models.ini` (máx. validado nesta GPU: 196608/192K; ver nota acima) |
 | `ngl`                  | `all`  | Todas as camadas do target na GPU                       |
 | `spec-draft-ngl`      | `99`   | Todas as camadas do draft na GPU                        |
 | `cache-type-k-draft`  | `f16`  | Cache K do draft em f16 (preserva aceitação)            |
@@ -354,61 +341,6 @@ curl -X POST http://localhost:8081/v1/unload_model
 ```
 
 ---
-
-## OpenWA MCP — Integração com Open WebUI
-
-### Configurar MCP no Open WebUI
-
-Após iniciar o stack, configure o MCP no Open WebUI:
-
-1. Acesse **http://localhost:8080**
-2. Faça login como **administrador**
-3. Vá em **⚙️ Admin Settings → External Tools**
-4. Clique em **+ (Add Server)**
-5. Configure:
-
-| Campo | Valor |
-|-------|-------|
-| **Type** | `MCP (Streamable HTTP)` |
-| **Server URL** | `http://localhost:2785/mcp` |
-| **Auth** | `Bearer <API_KEY>` |
-
-6. A **API Key** está em `openwa-data/.api-key` dentro do container:
-
-```bash
-docker exec openwa cat /app/data/.api-key
-```
-
-7. Clique em **Save** e reinicie o Open WebUI se solicitado.
-
-> **⚠️ Importante**: Use o tipo **MCP (Streamable HTTP)**. Usar OpenAPI type causa crash na UI ou loading infinito.
-
-### Testar MCP via curl
-
-```bash
-# Obter API key
-API_KEY=$(docker exec openwa cat /app/data/.api-key)
-
-# Testar endpoint MCP
-curl -X POST http://localhost:2785/mcp \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $API_KEY" \
-  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
-```
-
-### Variáveis de Ambiente OpenWA
-
-| Variável | Padrão | Descrição |
-|----------|--------|-----------|
-| `MCP_ENABLED` | `false` | Habilita o servidor MCP |
-| `MCP_READONLY` | `true` | Modo read-only (false = expor ferramentas de escrita) |
-| `MCP_RATE_LIMIT_MAX` | `60` | Máx de tool calls por key por janela |
-| `MCP_RATE_LIMIT_WINDOW_MS` | `60000` | Tamanho da janela de rate limit (ms) |
-| `MCP_IP_RATE_LIMIT_MAX` | `120` | Máx de requests por IP (pré-autenticação) |
-| `MCP_IP_RATE_LIMIT_WINDOW_MS` | `60000` | Janela de rate limit por IP (ms) |
-| `AUTO_START_SESSIONS` | `false` | Auto-reconectar sessões autenticadas no boot |
-| `DATABASE_TYPE` | `sqlite` | sqlite ou postgres |
-| `API_PORT` | `2785` | Porta host mapeada |
 
 ---
 

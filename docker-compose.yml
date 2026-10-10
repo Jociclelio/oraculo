@@ -27,34 +27,55 @@ services:
     environment:
       - OAI_API_BASE=http://localhost:8081/v1
       - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+      # Busca web via SearXNG (metabuscador local)
+      - WEBSEARCH_ENGINE=searxng
+      - SEARXNG_QUERY_URL=http://localhost:8888/search?q=<query>
+      # Conexão pré-configurada com o open-terminal (Admin > Integrations)
+      - TERMINAL_SERVER_CONNECTIONS=[{"id":"oraculo-terminal","url":"http://localhost:8000","key":"${OPEN_TERMINAL_API_KEY}","name":"Oraculo Terminal","auth_type":"bearer","config":{"access_grants":[]}}]
     volumes:
       - open-webui-data:/app/backend/data
     depends_on:
       - llama-cpp
+      - searxng
 
   # =========================================================
-  # n8n — Automação de workflows com MCP nativo
+  # open-terminal — Substrato de execução para o Open WebUI
   # =========================================================
-  # Interface web: http://localhost:5678
-  # MCP Streamable HTTP: http://localhost:5678/mcp-server/http
-  # Suporta +300 integrações (Slack, Gmail, GitHub, Notion, etc.)
+  # Shell, filesystem e execução de código que o agente do
+  # Open WebUI usa para trabalhar (agentic harness).
+  # Conectar em: Settings > Admin > Integrations > Open Terminal
+  #   URL: http://localhost:8000 | API Key: OPEN_TERMINAL_API_KEY
   # =========================================================
-  n8n:
-    image: docker.n8n.io/n8nio/n8n
-    container_name: n8n
-    network_mode: host
-    restart: always
+  open-terminal:
+    image: ghcr.io/open-webui/open-terminal
+    container_name: open-terminal
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
     environment:
-      - GENERIC_TIMEZONE=America/Sao_Paulo
-      - TZ=America/Sao_Paulo
-      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      - OPEN_TERMINAL_API_KEY=${OPEN_TERMINAL_API_KEY}
     volumes:
-      - n8n_data:/home/node/.n8n
+      - open-terminal-data:/home/user
+
+  # =========================================================
+  # searxng — Metabuscador (busca web para o Open WebUI)
+  # =========================================================
+  # Porta: http://localhost:8888 (somente localhost)
+  # Formato JSON habilitado em ./searxng/settings.yml
+  # =========================================================
+  searxng:
+    image: searxng/searxng
+    container_name: searxng
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8888:8080"
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
 
   # =========================================================
   # openwa-docker-proxy — Proxy seguro para Docker socket
   # =========================================================
-  # Expose apenas as operações necessárias (containers, images, volumes,
+  # Expõe apenas as operações necessárias (containers, images, volumes,
   # info, ping, post, delete). Tudo mais é negado por padrão.
   # Este container é o ÚNICO com acesso ao Docker socket.
   # =========================================================
@@ -123,6 +144,6 @@ networks:
 
 volumes:
   open-webui-data:
+  open-terminal-data:
   openwa-data:
   openwa-sessions:
-  n8n_data:

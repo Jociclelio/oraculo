@@ -1,0 +1,16 @@
+# Configuração mínima do SearXNG para integração com Open WebUI
+# Baseado nas configurações padrão; habilita o formato JSON,
+# exigido pela API de busca do Open WebUI.
+use_default_settings: true
+
+server:
+  # Chave secreta da instância (gerada uma vez, não alterar sem limpar caches)
+  secret_key: "CHANGE_ME_use_secret_key_aleatoria"
+  limiter: false   # instância local de usuário único
+  image_proxy: true
+
+search:
+  safe_search: 0
+  formats:
+    - html
+    - json
