@@ -132,30 +132,44 @@ cabeçalho do arquivo.
 (healthy), openwa (healthy), openwa-docker-proxy, searxng — todos Up;
 `curl http://localhost:8080/` → HTTP 200.
 
-**Observação registrada (reescrevida pela subtask 007-1)**: na primeira carga
-após o reinício limpo, `Ornith1.5_9B_MTP` falhou 2x com `upstream command
-exited prematurely` (`process exited: code=125` no log DEBUG de execução
-anterior). Versão anterior desta observação alegava "não reproduziu em
-nenhuma das trocas seguintes" e atribuía a causa a "erro transiente do daemon
-docker" — alegações válidas apenas dentro da sessão 007 e hoje **retiradas**.
+**Observação registrada (reescrevida pela subtask 007-1; universais corrigidos
+pela subtask 007-2)**: na primeira carga após o reinício limpo,
+`Ornith1.5_9B_MTP` falhou 2x com `upstream command exited prematurely`
+(`process exited: code=125` no log DEBUG de execução anterior). Versão
+anterior desta observação alegava "não reproduziu em nenhuma das trocas
+seguintes" e atribuía a causa a "erro transiente do daemon docker" —
+alegações válidas apenas dentro da sessão 007 e hoje **retiradas**.
 Correção: a mesma assinatura é **recorrente entre sessões e modelos** no
 `logs/llama-swap.log` (log sem timestamps; linhas verificadas na correção:
 15, 17, 23, 25, 36, 49, 105, 121, 140-143) — `Ornith1.5_9B_MTP` em ≥2
 sessões (15/17, 23/25, 36/37, 49/50, 140-143), `bonsai-27b` (105) e
-`Gemma4_12B` (121) — sempre na primeira carga pós-start do llama-swap e
-sempre auto-recuperada pelo retry/health-check seguinte (ex.: 121 → 122;
-140-143 → 144). **Causa indeterminada**: a hipótese de transiente do daemon
-docker não foi provada; hipótese alternativa **não descartada** é conflito
-de nome com container órfão de execução anterior — o alerta já existe em
-`llama-swap/config.yaml:70-73` ("se um crash do llama-swap deixar container
-órfão, o próximo `docker run` falha por conflito de nome"). O `docker run`
-usado usa `--name ls-<Modelo>` fixo, compatível com essa falha. Follow-up
-explícito: na próxima ocorrência, capturar stderr do `docker run` /
-`docker events`; documentar o comportamento nas docs do repo (escopo da
-task 008). Registro histórico distinto: a falha de `PE_T2I_Heretic` no log
-(linha 98) corresponde a GGUF ausente em disco, não ao flake — já
-documentado no config.yaml (linhas 277-278, 293-294). Não há causa
-estrutural nem de config a corrigir nesta task.
+`Gemma4_12B` (121) — **tipicamente na primeira carga de um modelo após o
+start** (exceção verificada pela 007-2: a linha 121, `Gemma4_12B`, foi a
+**segunda** carga da sessão iniciada em ~118-119, cuja primeira carga —
+`Gemma4_12B_Hauhau`, linha 120 — passou sem falha). A recuperação pelo
+retry/health-check seguinte está **confirmada apenas em parte das
+ocorrências** (121 → 122; 140-143 → 144); nas demais, o log mostra
+**shutdown da sessão após a falha, sem recuperação registrada** (15/17 →
+shutdown na linha 19; 23/25 → 27; 36/37 → 40; 49/50 → 53; 105 → 107), com
+sucesso apenas em sessão posterior — `Ornith1.5_9B_MTP` falhou em 4 sessões
+consecutivas (blocos 13-20 e 21-28, sem PID registrado, e as sessões PID
+149457 e 150093) e só passou na sessão PID 164646 (health check na linha
+63). **Causa indeterminada**: a hipótese de transiente do daemon docker não
+foi provada; a hipótese alternativa de conflito de nome com container órfão
+de execução anterior permanece **aberta, porém enfraquecida** — a
+verificação da 007-2 achou assepsia prévia no start da sessão PID 149457
+(`logs/llama-swap.log:35`: `docker rm -f ls-Ornith1.5_9B_MTP 2>/dev/null;`
+antes do `docker run`), e ainda assim houve `exit 125` (linha 36). O alerta
+sobre o conflito já existe em `llama-swap/config.yaml:70-73` ("se um crash
+do llama-swap deixar container órfão, o próximo `docker run` falha por
+conflito de nome"). O `docker run` usado usa `--name ls-<Modelo>` fixo,
+compatível com essa falha. Follow-up explícito: na próxima ocorrência,
+capturar stderr do `docker run` / `docker events`; documentar o
+comportamento nas docs do repo (escopo da task 008). Registro histórico
+distinto: a falha de `PE_T2I_Heretic` no log (linha 98) corresponde a GGUF
+ausente em disco, não ao flake — já documentado no config.yaml (linhas
+277-278, 293-294). Não há causa estrutural nem de config a corrigir nesta
+task.
 
 ## Notas
 
