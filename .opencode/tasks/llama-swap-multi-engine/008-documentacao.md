@@ -1,6 +1,6 @@
 # Task 008: Sincronização de documentação (README, DOCKER.md, AGENTS.md, MODELS_INSTALL.md)
 
-Estado: pendente
+Estado: aguardando revisão
 Depende de: 007
 Origem: nenhuma
 
@@ -59,11 +59,38 @@ efetivo do Bonsai, VRAM medida), não em estimativas.
   007.
 
 ## Execução
-- Modelo:
-- Base:
-- Entrega:
-- Arquivos da entrega:
-- Evidências:
+- Modelo: sorgan-qwen/qwen3.8-flash-next (execução retomada; a entrega 9248db5
+  foi commitada pela execução anterior, interrompida por limite de contexto
+  antes do registro — esta retomada apenas verificou a entrega e escreve o
+  registro, sem reimplementar nem editar os docs)
+- Base: a8cb25f
+- Entrega: 9248db5 (9248db58056ace11bac3393fa484f6489114df0c; `git show --stat`
+  confirma exatamente os 4 arquivos: README.md, DOCKER.md, AGENTS.md,
+  models/MODELS_INSTALL.md — 623 inserções / 325 remoções)
+- Arquivos da entrega: README.md, DOCKER.md, AGENTS.md, models/MODELS_INSTALL.md
+- Evidências (verificação por grep pontual na entrega, sem leituras volumosas):
+  - C1 ✅ — llama-swap/8081/manage.sh presentes nos 4 docs (contagens rg:
+    README 33, DOCKER 48, AGENTS 54, MODELS_INSTALL 17). Remanescentes de
+    `llama-cpp` só em contexto histórico/negativo ("antigo serviço removido",
+    "sem o antigo llama-cpp"; `api_key="llama-cpp-local"` é só string de
+    exemplo do cliente OpenAI). DOCKER.md:5,35,38 — serviço e mount
+    `models.ini` declarados removidos; serving como processo de host.
+  - C2 ✅ — README.md:36-37 "Posicionamento: stack para 1 usuário por vez" +
+    seção dedicada "Single-user — paralelismo só como exceção" (README:153-156,
+    `np>1` só exceção); ecoado no AGENTS.md (posicionamento plano).
+  - C3 ✅ — AGENTS.md:97 seção "Engine Bonsai dedicada — regra **nunca
+    stock**"; pin `84445367f` (AGENTS.md:104-105, SHA completo + build falha
+    se HEAD ≠ pin); entries `bonsai-27b` (primária PTQ1_0+mmproj) e
+    `bonsai-27b-pq2_0` (secundária) na tabela AGENTS.md:242-243.
+  - C4 ✅ — MODELS_INSTALL.md:104,108-112 — GGUFs Bonsai em
+    `models/Ternary-Bonsai-2-27B-gguf/` via `hf download
+    prism-ml/Ternary-Bonsai-2-27B-gguf`; :129 nota "MTP do Bonsai não foi
+    baixado"; :139-144 seção "Strata — não baixado" (~58 GB, entry comentada).
+  - C5 ✅ — números batem com 007: ctx efetivo 65536, prefill ≈ 540 tok/s,
+    decode ≈ 24,5 tok/s, VRAM 9146 MiB processo / 10657/12288 total
+    (AGENTS.md:248-254; README.md:42-43; MODELS_INSTALL.md:249 ~9,1 GiB).
+    O valor 10250 MiB da entry PQ2_0 (AGENTS.md:243) é a evidência da task
+    004 (004-migracao-bonsai.md:93), corretamente atribuído à secundária.
 
 ## Notas
 
@@ -72,7 +99,12 @@ efetivo do Bonsai, VRAM medida), não em estimativas.
 não deixar seções antigas contraditórias.
 
 ### Dificuldade sentida
-_/10 —
+2/10 — escrita documental a partir de stack já validado, como esperado. A
+entrega (9248db5) foi produzida pela execução anterior, que estourou o limite
+de contexto (131072) por leituras volumosas antes do registro; a retomada foi
+leve (verificação por grep pontual + registro), sem reimplementação. Único
+cuidado real: não deixar seções antigas contraditórias — resolvido marcando
+`models.ini`/`llama-cpp` como histórico em vez de apagar.
 
 ### Revisão
 - Orquestrador: —
