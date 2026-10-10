@@ -1,6 +1,6 @@
 # Task 005-1: Correção — Strata `MODEL=IQ1_M` + textos README/Dockerfile
 
-Estado: aguardando revisão
+Estado: fechada
 Depende de: 005
 Origem: 005 (correção)
 
@@ -122,13 +122,15 @@ verificação inicial de engine/BUILD.json em caminho errado (`/opt/strata/`
 em vez de `engine/`), resolvido com `find`; rebuild dominado pela mãe.
 
 ### Revisão
-- Orquestrador: —
-- Alvo: <SHAs da entrega e versão do registro revisado>
-- Avaliações: <modelo A: _/10; modelo B: _/10; modelo C: _/10>
-- Nota final: _/10
-- Parecer: <síntese dos achados, evidências, divergências e Corretude pendente>
-- Decisão: <fechar | corrigir | reiniciar | repartir; pendente se bloqueada>
-- Reversão: <SHA ou não se aplica>
-- Próximo passo: <subtasks em ordem ou próxima task liberada>
+- Orquestrador: task-master (sorgan-qwen/qwen3.8-flash-next)
+- Alvo: base `5a3b272`; entrega `97936eb` (fix, 3 arquivos, +42/−33); registro revisado `3d9f868` (HEAD, árvore limpa)
+- Avaliações: GLM-5.3-Flash (sd2): 9,5/10 fechar; qwen3.8-flash-next (sorgan-qwen): 9/10 fechar; Muse Spark 1.3 (opencode): 9/10 fechar. Modo sequencial (recursos compartilhados: docker, porta 8081), cada revisor em sessão nova, pool por arquivo; quórum de três modelos distintos; nenhum revisor falhou nem foi substituído.
+- Nota final: 9/10
+- Parecer: C1–C5 comprovados com evidência própria dos três revisores, sem divergência (unanimidade em fechar). C1: `grep MODEL=coder` vazio; `MODEL=IQ1_M` nos três artefatos com `FAMILY=coder`/`CONTEXT=65536` mantidos. C2: contraprova reproduzida independentemente na imagem reconstruída — `--model coder` → exit 2 (`invalid choice`), dict `MODELS['IQ1_M']` = única size com `families=("coder",)`, `download_gb: 58.4`; nenhum `--setup` com model válido executado. C3: imagem `6d78b80de0f3` inspecionada pelos três (sem rebuild): engine 57,9+73,4 MB, `BUILD.json` v0.1.42 archs[86], `/data` vazio, resíduo `build-engine.py` ausente (item 5 opcional aplicado), env da imagem já com `MODEL=IQ1_M` — consistente com o Dockerfile editado. C4: diff do config restrito ao bloco comentado (entries ativas byte-idênticas); 17 entries sem Strata após restart. C5: claims de RAM das variants e tamanho do Coder (~58 GB / ~65 c/ MTP) conferidos contra a fonte pinada na imagem; semântica FAMILY/MODEL correta. Achados secundários não bloqueantes, todos de documentação: A1 (GLM, baixo) — README usa a moldura "37,6/39,2 GB RAM+VRAM" da tabela upstream em vez do "~44–46 GB RAM" sugerido pela task; conclusão prática idêntica e caveada. F1 (qwen, baixo) — README:61 "~30 GB vão para a RAM" confunde tamanho do shard 1 (29,6 GB) com carga real de RAM (experts ~23 GB). B1 (Muse, baixo) — comentário do Dockerfile omite `unsloth` na enumeração de FAMILY (item 2 listava as quatro); sem efeito funcional. B2 (Muse, baixo, pré-existente) — README "RAM 31 GB" vs `ram_gb: 32` do upstream; fora do escopo da task. A2 (GLM, informativo) — `BUILD.json.src` é hash de fontes, não o commit pinado; pin `61b3fb5` confirmado separadamente. Recomendados para absorção na task de docs (008), sem subtask dedicada. Nota 9/10: todos os critérios obrigatórios comprovados com evidência independente e escopo limpo; os nits documentais impedem nota maior.
+- Decisão: fechar
+- Reversão: não se aplica — entrega preservada
+- Próximo passo: mãe 005 marcada "resolvida por subtasks"; task 006 (compose: remover llama-cpp) liberada.
+
+<!-- task-cycle: {"decision":"fechar","next_task":".opencode/tasks/llama-swap-multi-engine/006-compose-remove-llama-cpp.md","family":".opencode/tasks/llama-swap-multi-engine/006-compose-remove-llama-cpp.md","plan":".opencode/plans/llama-swap-multi-engine/plan.md"} -->
 
 Plano: [plan.md](../../plans/llama-swap-multi-engine/plan.md)
