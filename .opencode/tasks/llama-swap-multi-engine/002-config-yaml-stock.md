@@ -1,6 +1,6 @@
 # Task 002: config.yaml do llama-swap — macro stock + tradução do models.ini
 
-Estado: pendente
+Estado: aguardando revisão
 Depende de: 001
 Origem: nenhuma
 
@@ -48,24 +48,68 @@ Restrições: não criar entries de Bonsai (task 004) nem Strata (task 005);
 
 ## Corretude
 
-- [ ] C1 — `curl http://localhost:8081/v1/models` lista todos os modelos stock
+- [x] C1 — `curl http://localhost:8081/v1/models` lista todos os modelos stock
   traduzidos do `models.ini` (15 entries, com aliases `pe-t2i`/`pe-i2i`
   respeitados).
-- [ ] C2 — Request de chat a dois modelos distintos funciona e o segundo swap
+- [x] C2 — Request de chat a dois modelos distintos funciona e o segundo swap
   descarrega o primeiro (verificado via `docker ps` sem container do primeiro
   modelo ou log do llama-swap mostrando stop do anterior).
-- [ ] C3 — Entry MTP do Gemma (`Gemma4_12B_MTP`) carrega com `-ctkd f16
+- [x] C3 — Entry MTP do Gemma (`Gemma4_12B_MTP`) carrega com `-ctkd f16
   -ctvd f16` e `spec-type draft-mtp` (conferir flags no log do container).
-- [ ] C4 — Modelo MoE (ex. `Qwen3.6_35B_Code`) responde com `-ncmoe 28` visível
+- [x] C4 — Modelo MoE (ex. `Qwen3.6_35B_Code`) responde com `-ncmoe 28` visível
   no log de carga.
-- [ ] C5 — Após ~300 s sem uso, o modelo ativo é descarregado (ttl funcionando).
+- [x] C5 — Após ~300 s sem uso, o modelo ativo é descarregado (ttl funcionando).
 
 ## Execução
-- Modelo:
-- Base:
-- Entrega:
-- Arquivos da entrega:
+- Modelo: GLM-5.3-Flash (sd2/GLM-5.3-Flash)
+- Base: 1a77409189be7a2295f2bb2aa0cba424ffe6c27d
+- Entrega: fe352bd (feat: config.yaml do llama-swap — macro Docker stock + 15 modelos do models.ini)
+- Arquivos da entrega: `llama-swap/config.yaml` (novo, 302 linhas)
 - Evidências:
+  - C1 ✔ — após `./manage.sh start`, `GET /v1/models` retorna as 15 entries
+    (Gemma4_12B, Gemma4_12B_MTP, Qwen3.6_28B_A3B, Qwen3.6_35B_General,
+    Qwen3.6_35B_General_VL, Qwen3.6_35B_Code, Qwen3.6_35B_It_General,
+    Qwen3.6_35B_It_Reasoning, Ornith1.5_9B_MTP, Ornith1.5_9B_DFlash,
+    Ornith1.5_35B_MTP, Gemma4_12B_Hauhau, Qwen3.6_35B_A3B_Hauhau_Aggressive,
+    PE_T2I_Heretic, PE_I2I_Heretic) com aliases `pe-t2i`/`pe-i2i` no meta.
+    Bonsai/Strata ausentes, conforme restrição.
+  - C2 ✔ — chat em `Ornith1.5_9B_MTP` (resposta OK, finish=length por
+    max_tokens) e depois em `Qwen3.6_35B_Code` (resposta OK): `docker ps`
+    antes = `ls-Ornith1.5_9B_MTP`, depois = `ls-Qwen3.6_35B_Code`; log do
+    llama-swap: `evicting [Ornith1.5_9B_MTP]` + `process stopped ... exit
+    status 137` (cmdStop `docker rm -f`).
+  - C3 ✔ — `docker inspect ls-Gemma4_12B_MTP` mostra no Cmd: `--model-draft
+    .../mtp-gemma-4-12B-it.gguf`, `--spec-type draft-mtp`, `-ctkd f16`,
+    `-ctvd f16`; log do container: draft carregado e MTP ativo
+    (`draft acceptance = 0.64220`), `n_ctx_slot = 64000`.
+  - C4 ✔ — `docker inspect ls-Qwen3.6_35B_Code` Cmd contém `-ncmoe 28`; log de
+    carga: `tensor overrides to CPU are used` (override MoE aplicado); resposta
+    gerada (150 tokens, MoE 35B com experts na CPU).
+  - C5 ✔ — após 310 s de ociosidade com `Gemma4_12B_MTP` carregado: container
+    removido (`docker ps` vazio de `ls-*`), log `sending stop signal ... exit
+    status 137` (unload por ttl), VRAM de volta ao baseline (622 MiB).
+  - Observação de ambiente: container `llama-cpp` do compose já estava
+    `Exited` antes dos testes (porta 8081 livre); nenhum serviço do compose foi
+    alterado. `manage.sh stop` ao final (llama-swap não fica rodando após a
+    task; o fluxo de uso sobe com `./manage.sh start`).
+
+### Desvios técnicos registrados (não alteram escopo)
+
+1. **Entrypoint da imagem**: `ghcr.io/ggml-org/llama.cpp:full-cuda` tem
+   ENTRYPOINT `/app/tools.sh` (dispatcher que espera `-s`); o macro usa
+   `--entrypoint /app/llama-server` para chamar o binário diretamente.
+2. **cmd sem shell**: o llama-swap tokeniza `cmd`/`cmdStop` com shlex — não há
+   shell; `;`, pipes e redirecionamentos viram argumentos (causou exit 125 no
+   primeiro teste). `cmdStop: docker rm -f ls-${MODEL_ID}` é um comando único
+   determinístico; cleanup manual de órfãos: `docker rm -f ls-<Modelo>`.
+3. **Caminho do Qwen 28B corrigido**: INI aponta `Qwen3.6-28B-REAP20-A3B/`, mas
+   o diretório em disco é `Qwen3.6-28B-REAP20-A3B-Q4_K_M/` (comentado no YAML).
+4. **PE Heretic**: GGUFs não estão em disco (`models/pe_*_heretic-Q4_K_M/`
+   vazios) — entries mantidas com nota; aparecem no `/v1/models` mas não
+   carregam até os arquivos serem baixados (não é escopo desta task).
+5. **-ngl 99** usado para `ngl = all` (convenção do próprio INI).
+6. Requisitos de saúde do proxy: `healthCheckTimeout: 300` para cobrir carga a
+   frio dos GGUFs de ~21 GB.
 
 ## Notas
 
@@ -75,7 +119,16 @@ llama-swap pouco familiar; validação empírica de cada entry é demorada
 (carregamento de modelos grandes).
 
 ### Dificuldade sentida
-_/10 —
+6/10 — a tradução paramétrica em si foi direta (o INI até documenta o comando
+equivalente do Gemma MTP), mas três pegadinhas consumiram tempo: (1) o
+ENTRYPOINT `/app/tools.sh` da imagem full-cuda rejeita `llama-server` como
+comando; (2) o llama-swap v263 executa `cmd` sem shell (shlex), o que proíbe
+`;`/pipes/redirecionamentos e descarta o prefixo idempotente de cleanup — o
+erro só aparecia como "exit 125" opaco; (3) um container órfão segurando a
+porta 5805 mascarou a correção durante a depuração. Descoberta relevante
+registrada: o stop padrão por SIGTERM ao client docker anexado funciona
+(container para e --rm remove), mas optei por `cmdStop: docker rm -f` por ser
+determinístico.
 
 ### Revisão
 - Orquestrador: —
