@@ -1,6 +1,6 @@
 # Task 006: docker-compose.yml — remover serviço llama-cpp
 
-Estado: pendente
+Estado: aguardando revisão
 Depende de: 004
 Origem: nenhuma
 
@@ -43,11 +43,25 @@ histórica dos parâmetros; desativação física/documental é tratada na task
   assumiu a porta).
 
 ## Execução
-- Modelo:
-- Base:
-- Entrega:
-- Arquivos da entrega:
+- Modelo: sd2/GLM-5.3-Flash
+- Base: 7805f7d (árvore limpa)
+- Entrega: 05ab52d394f9251ffa173d6f4514922605303268
+- Arquivos da entrega: `docker-compose.yml`
 - Evidências:
+  - C1 ✅ — `docker compose config` exit 0 (sem o serviço `llama-cpp`).
+  - C2 ✅ — `grep -in "llama-cpp\|models.ini" docker-compose.yml` sem
+    resultados (exit 1); mount `./models/models.ini:/app/models.ini` removido
+    junto com o serviço.
+  - C3 ✅ — `docker compose ps` lista apenas open-webui, open-terminal,
+    searxng, openwa e openwa-docker-proxy (sem `llama-cpp`).
+  - C4 ✅ — `curl http://localhost:8081/v1/models` exit 0, resposta JSON do
+    llama-swap (`owned_by: "llama-swap"`) com os modelos stock + Bonsai
+    (todos `unloaded`).
+- Observações:
+  - Removido também o `depends_on: - llama-cpp` do `open-webui`
+    (referência residual; `searxng` mantido).
+  - Demais serviços intocados; `models/models.ini` preservado no repo
+    (tratado na task 008); DOCKER.md não editado (task 008).
 
 ## Notas
 
@@ -55,7 +69,8 @@ histórica dos parâmetros; desativação física/documental é tratada na task
 1/10 — remoção de bloco YAML e validação de compose; trivial.
 
 ### Dificuldade sentida
-_/10 —
+1/10 — remoção de bloco YAML + `depends_on` e validação com os comandos
+previstos; nenhum impedimento encontrado.
 
 ### Revisão
 - Orquestrador: —
