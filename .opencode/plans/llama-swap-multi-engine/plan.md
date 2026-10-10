@@ -94,7 +94,7 @@ prefill/decode razoável com contexto ≥ 64k (128k quando VRAM e prefill permit
 | 003 | [Engine Docker PrismML (fork pinado)](../../tasks/llama-swap-multi-engine/003-engine-prismml.md) | — | fechada (9/10) |
 | 004 | [Migração GGUFs Bonsai + entries bonsai](../../tasks/llama-swap-multi-engine/004-migracao-bonsai.md) | 002, 003 | fechada (9/10) |
 | 005 | [Infra Strata (Dockerfile + entry comentada)](../../tasks/llama-swap-multi-engine/005-strata-infra.md) | 002 | aguardando subtasks (6/10, corrigir) |
-| 005-1 | Correção — Strata `MODEL=IQ1_M` + textos README/Dockerfile (arquivo pendente de criação) | 005 | pendente |
+| 005-1 | [Correção — Strata `MODEL=IQ1_M` + textos README/Dockerfile](../../tasks/llama-swap-multi-engine/005-1-correcao-strata-env-model.md) | 005 | pendente |
 | 006 | [Compose: remover serviço llama-cpp](../../tasks/llama-swap-multi-engine/006-compose-remove-llama-cpp.md) | 004 | pendente |
 | 007 | [Validação end-to-end](../../tasks/llama-swap-multi-engine/007-validacao-e2e.md) | 004, 005, 006 | pendente |
 | 008 | [Documentação (README, DOCKER, AGENTS, MODELS_INSTALL)](../../tasks/llama-swap-multi-engine/008-documentacao.md) | 007 | pendente |
