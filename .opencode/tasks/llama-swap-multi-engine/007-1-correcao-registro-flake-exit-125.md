@@ -1,6 +1,6 @@
 # Task 007-1: Correção — registro da 007 (flake exit 125, timings, limitações)
 
-Estado: aguardando revisão
+Estado: aguardando subtasks
 Depende de: 007
 Origem: 007 (correção)
 
@@ -141,13 +141,18 @@ de PID DEBUG/shutdown) e preservar intactas as seções que pertencem ao
 master (Revisão da 007, checkboxes C1–C3).
 
 ### Revisão
-- Orquestrador: —
-- Alvo:
-- Avaliações:
-- Nota final: _/10
-- Parecer:
-- Decisão:
-- Reversão:
-- Próximo passo:
+- Orquestrador: task-master (sorgan-qwen/qwen3.8-flash-next)
+- Alvo: base `9c6d901`; entrega `e974e04` (único arquivo: o `.md` da 007, +43/−13); registro `ee7182c`; árvore limpa em HEAD. Reexecução legítima após tentativa interrompida por falha de transporte (APIError sd2, sem artefatos).
+- Avaliações (rodada **paralela** — correção exclusivamente documental; revisores só leem arquivos/git, sem recursos compartilhados. Pool do arquivo global; `task-reviewer-glm` (sd2/GLM-5.3-Flash) **falhou** com APIError retryável de socket em `localhost:8083` e foi substituído pelo próximo do pool de modelo não representado, `task-reviewer-luna` (openai/gpt-6-luna); quórum com três modelos distintos):
+  - `sorgan-qwen/qwen3.8-flash-next` — 8/10, **corrigir**; C1–C5 atendidos no essencial, mas F1 (médio): a Observação reescrita mantém "**sempre** auto-recuperada pelo retry/health-check seguinte", contraditada pelo log em 5 das 9 ocorrências (15/17→shutdown 19; 23/25→27; 36/37→40; 49/50→53; 105→107; Ornith flacou em 4 sessões consecutivas, sucesso só na PID 164646; as recuperações reais são 121→122 e 140-143→144); F2 (baixo): "**sempre** na primeira carga pós-start" contraditado pela própria linha 121 citada (Gemma4_12B foi a **segunda** carga da sessão iniciada em 118-119, cuja primeira, Gemma4_12B_Hauhau linha 120, passou); F3 (baixo/informativo): log:35-36 mostra assepsia prévia (`docker rm -f` antes do `docker run`) com exit 125 mesmo assim — enfraquece a hipótese de conflito de nome nesse caso; F4 (baixo): auto-relato do registro, sem ação.
+  - `opencode/muse-spark-1.3-contributor-free` — 9/10, **fechar**; C1–C5 verificados independentemente (11 WARNs + DEBUGs 36/49 em sessões PID 149457/150093; config.yaml:70-73 e 277-278/293-294 confirmados; matemática C3 recomputada exata; C5 por diff: só o `.md` da 007, Corretude/Revisão da mãe byte-idênticas); O1 (baixo/informativo): o intervalo 140-143 intercala WARNs e métricas non-200, composição já explicitada no registro — citação defensável. Não examinou os quantificadores universais "sempre".
+  - `openai/gpt-6-luna` — 9/10, **fechar com ressalva**; C2–C5 verificados (aritmética C3 conferida; config.yaml:70-73 e 277-278/293-294 confirmados; C5 por inspeção do diff); A1 (médio): `logs/llama-swap.log` **não está na árvore versionada** (arquivo untracked — confirmado pelo master), então as referências de linha e a universalidade de "sempre na primeira carga"/"sempre auto-recuperada" ficaram **não verificadas** nesta revisão; recomenda preservar a ressalva.
+- Nota final: 8/10 — a entrega cumpre os itens 1–4 do prompt com referências de linha exatas (conferidas por dois revisores contra o log na working tree), matemática correta e disciplina de escopo impecável (C5: diff toca só o `.md` da 007; Corretude e Revisão da mãe intactas). O desconto incide sobre os quantificadores universais da Observação reescrita: "sempre auto-recuperada" e "sempre na primeira carga pós-start" são alegações de fato que o log contradita (F1/F2 do revisor que as verificou contra o log) e que o terceiro revisor não pôde verificar (log untracked). É a mesma classe de erro — superestimativa da benignidade do flake — que motivou a decisão `corrigir` da mãe; a redação foi herdada do prompt desta subtask, mas o executor tinha instrução explícita de conferir o log antes de reescrever.
+- Parecer: dois revisores aprovam (um deles com a ressalva explícita de que as alegações universais ficaram não verificadas por ausência do log na árvore versionada); um revisor verificou-as contra o log e encontrou contradição factual (F1 médio, F2 baixo). Como o registro é o único artefato da task e a correção é textual mínima e delimitada, fechar perpetuaria em versão atenuada o achado que motivou esta subtask. Sem reversão (entrega preservada; a correção é aditiva sobre o mesmo texto).
+- Decisão: corrigir
+- Reversão: não se aplica — sem artefatos a desfazer.
+- Próximo passo: subtask 007-2 (correção textual mínima na Observação da 007: substituir os dois "sempre" pelo comportamento real do log — recuperação em parte das ocorrências (121→122, 140-143→144), shutdown sem recuperação nas demais; "tipicamente primeira carga, exceção linha 121" — e registrar a evidência de assepsia (log:35-36) como enfraquecimento da hipótese de conflito de nome). Ao fechar a 007-2, a mãe 007 vira "resolvida por subtasks" e libera a 008.
+
+<!-- task-cycle: {"decision":"corrigir","next_task":".opencode/tasks/llama-swap-multi-engine/007-2-correcao-alegacoes-universais-flake.md","family":".opencode/tasks/llama-swap-multi-engine/006-compose-remove-llama-cpp.md","plan":".opencode/plans/llama-swap-multi-engine/plan.md"} -->
 
 Plano: [plan.md](../../plans/llama-swap-multi-engine/plan.md)
