@@ -10,3 +10,7 @@ models/*
 
 # Arquivos de ambiente (opcional - descomente se quiser ignorar)
 # .env
+
+# Arquivos de ambiente e config com segredos
+.env
+searxng/settings.yml
