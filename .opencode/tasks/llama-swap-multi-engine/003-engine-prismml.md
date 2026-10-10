@@ -1,6 +1,6 @@
 # Task 003: Engine Docker dedicada — fork PrismML (llama.cpp-prismml)
 
-Estado: aguardando revisão
+Estado: fechada
 Depende de: nenhuma
 Origem: nenhuma
 
@@ -97,13 +97,19 @@ alinhando ao nvcc 13.4 do host) e o RUNPATH dos libs do ggml (resolvido com
 `BUILD_SHARED_LIBS=OFF`). Build CUDA levou os minutos esperados, sem surpresas.
 
 ### Revisão
-- Orquestrador: —
-- Alvo:
-- Avaliações:
-- Nota final: _/10
-- Parecer:
-- Decisão:
-- Reversão:
-- Próximo passo:
+- Orquestrador: sd2/GLM-5.3-Flash (master do ciclo; sessão ses_ed973d833ffeU3NAJ9XmrmInXO)
+- Alvo: base `a54b707`; entrega `1b3b346` (feat engine Docker PrismML); registro `8918b15` (docs/task, versão lida). Modo da rodada: **sequencial** — a verificação de C1/C2 usa docker/GPU (recursos compartilhados do host), evitando disputa entre revisores.
+- Avaliações (3 modelos distintos, quórum completo, sem falhas):
+  1. task-reviewer-glm — `sd2/GLM-5.3-Flash` — 9/10
+  2. task-reviewer-qwen-flash — `sorgan-qwen/qwen3.8-flash-next` — 9/10
+  3. task-reviewer-muse — `opencode/muse-spark-1.3-contributor-free` — 9/10
+- Síntese: os três revisores verificaram C1–C3 de forma independente e convergiram. C1: `docker images` mostra `llama.cpp-prismml:latest` e `:84445367f` (ID `d88136167019`, 14,4 GB). C2: `--version` → `0.2.0-dev (build 1, commit 8444536)` com build CUDA confirmado por três vias (146 ELF `sm_86` via cuobjdump, `GGML_CUDA_REGISTER_HOST`, e `--list-devices` detectando RTX 3060 — achado do revisor 2). C3: pin do SHA completo com verificação dura no build; o revisor 2 provou que não é HEAD (`git ls-remote` do tip `prism` = `668256445f` ≠ pin). Isolamento perfeito (só os 2 commits esperados; só Dockerfile + build.sh no diff; `config.yaml` e modelos intocados). Achados menores convergentes, não bloqueantes: (a) SHA pinado duplicado entre `build.sh` e ARG do Dockerfile (risco de drift, mitigado por comentário); (b) base pinada por tag sem digest; (c) imagem 14,4 GB sem multi-stage (deliberado, proveniência auditável); (d) `build 1` informativo-vazio por clone shallow; (e) entrypoint NVIDIA herdado só adiciona ruído de log. Divergência relevante: nenhuma.
+- Nota final: 9/10 — entrega íntegra e verificada por três modelos; desconto pelos pontos menores de robustez (duplicação do pin, base sem digest, sem multi-stage), sem impacto nos critérios.
+- Parecer: aprovada. Os itens menores (a) e (b) devem ser considerados como melhoria opcional na task 004 ou backlog; não justificam ciclo de correção.
+- Decisão: fechar — libera a task 004 (dependências 002 ✓, 003 ✓).
+- Reversão: não se aplica — sem artefatos a desfazer.
+- Próximo passo: encaminhar `.opencode/tasks/llama-swap-multi-engine/004-migracao-bonsai.md`.
+
+<!-- task-cycle: {"decision":"fechar","next_task":".opencode/tasks/llama-swap-multi-engine/004-migracao-bonsai.md","family":".opencode/tasks/llama-swap-multi-engine/003-engine-prismml.md","plan":".opencode/plans/llama-swap-multi-engine/plan.md"} -->
 
 Plano: [plan.md](../../plans/llama-swap-multi-engine/plan.md)
