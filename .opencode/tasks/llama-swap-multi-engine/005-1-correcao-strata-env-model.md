@@ -1,6 +1,6 @@
 # Task 005-1: Correção — Strata `MODEL=IQ1_M` + textos README/Dockerfile
 
-Estado: pendente
+Estado: aguardando revisão
 Depende de: 005
 Origem: 005 (correção)
 
@@ -55,31 +55,60 @@ tocar em outros arquivos; não fazer push.
 
 ## Corretude
 
-- [ ] C1 — `MODEL=IQ1_M` presente nos três artefatos com `FAMILY=coder` e
+- [x] C1 — `MODEL=IQ1_M` presente nos três artefatos com `FAMILY=coder` e
   `CONTEXT=65536` mantidos; `grep -rn "MODEL=coder" strata/ llama-swap/` →
   vazio.
-- [ ] C2 — Contraprova segura na imagem reconstruída: `docker run --rm
+- [x] C2 — Contraprova segura na imagem reconstruída: `docker run --rm
   --entrypoint sh strata -c '.venv/bin/python setup.py --setup --family coder
   --model coder --context 65536 --data-dir /tmp/probe --no-start'` continua
   falhando com exit 2 (regressão de semântica do upstream) e a leitura do dict
   `MODELS` dentro da imagem confirma `IQ1_M` como choice válido com
   `families=("coder",)`. NÃO executar `--model IQ1_M` com `--setup`.
-- [ ] C3 — `docker build -t strata ./strata` conclui após as edições sem
+- [x] C3 — `docker build -t strata ./strata` conclui após as edições sem
   baixar pesos (engine + `BUILD.json` presentes; `/data` vazio; resíduo
   `build-engine.py` ausente se item 5 aplicado).
-- [ ] C4 — Config continua parseável e válido: `yaml.safe_load` OK;
+- [x] C4 — Config continua parseável e válido: `yaml.safe_load` OK;
   `./manage.sh stop && ./manage.sh start` + `curl http://localhost:8081/v1/models`
   → 17 entries, Strata ausente; entries existentes byte-idênticas.
-- [ ] C5 — README e comentários do Dockerfile corrigidos: nenhuma afirmação
+- [x] C5 — README e comentários do Dockerfile corrigidos: nenhuma afirmação
   de que Q2_0/IQ2_XS cabem em 32 GB; tamanho do Coder ≈ 58–65 GB; semântica
   FAMILY/MODEL correta.
 
 ## Execução
-- Modelo: <identificador real do executor>
-- Base: <SHA completo antes da implementação>
-- Entrega: <SHA(s) completos, sem commits de registro, ou sem alteração de artefatos>
-- Arquivos da entrega: <paths ou referência ao diff dos commits>
-- Evidências: <comandos/procedimentos, resultados e limitações>
+- Modelo: GLM-5.3-Flash (sd2/GLM-5.3-Flash)
+- Base: 5a3b272 (branch main, árvore limpa)
+- Entrega: 97936eb ("fix: Strata MODEL=IQ1_M (par correto FAMILY=coder) — corrigir defeito latente da 005")
+- Arquivos da entrega: `strata/Dockerfile`, `strata/README.md`,
+  `llama-swap/config.yaml`
+- Evidências:
+  - **C1** — `grep -rn "MODEL=coder" strata/ llama-swap/` → vazio (exit 1);
+    `MODEL=IQ1_M` presente nos três artefatos com `FAMILY=coder` e
+    `CONTEXT=65536` mantidos.
+  - **C2** — na imagem reconstruída: `setup.py --setup --family coder --model
+    coder ... --no-start` → exit 2 com `invalid choice: 'coder' (choose from
+    'Q2_0', 'IQ2_XS', 'IQ3_XXS', 'IQ3_S', 'IQ1_M', 'UD-Q4_K_XL', 'UD-IQ4_XS')`;
+    leitura do dict dentro da imagem confirma
+    `MODELS['IQ1_M'] = {download_gb: 58.4, ram_gb: 32, arena_gb: 23.4,
+    families: ('coder',)}` (sem executar `--model IQ1_M` com `--setup`).
+  - **C3** — `docker build -t strata ./strata` concluiu (imagem
+    `6d78b80de0f3`, ~25 min, sem download de pesos): `engine/strata`
+    (57,9 MB), `engine/strata-vision` (73,4 MB), `engine/BUILD.json`
+    (v0.1.42, archs [86]); `/data` vazio; resíduo `build-engine.py` ausente
+    (item 5 aplicado: `rm -f` no mesmo RUN do build).
+  - **C4** — `yaml.safe_load` OK; `./manage.sh stop && ./manage.sh start` +
+    `curl http://localhost:8081/v1/models` → 17 entries, Strata ausente;
+    `git diff` do config.yaml mostra alteração apenas no bloco comentado do
+    Strata (entries ativas byte-idênticas).
+  - **C5** — README sem claim de Q2_0/IQ2_XS em 32 GB (agora: 37,6/39,2 GB de
+    RAM+VRAM, ou modo low-RAM com GPU de 24 GB); Coder ≈ 58 GB (~65 GB com
+    MTP), conferido com `download_gb: 58.4` do upstream; semântica
+    FAMILY/MODEL corrigida no comentário do Dockerfile; "~70 GB" substituído
+    por "~58 GB" em todos os artefatos.
+  - Limitações: contraprova do primeiro start real (download ~58 GB) não
+    executada, por restrição da task (rebuild + validação de argparse/dict
+    cobrem o defeito); editais cosméticos pós-build (comentário do Dockerfile
+    e README) não afetam a imagem já reconstruída (nenhuma instrução de build
+    alterada após o build).
 
 ## Notas
 
@@ -88,7 +117,9 @@ tocar em outros arquivos; não fazer push.
 dominado pela mãe; validação por regressão de argparse e parse YAML.
 
 ### Dificuldade sentida
-_/10 —
+2/10 — edições pontuais em três arquivos com spec clara; único atrito foi a
+verificação inicial de engine/BUILD.json em caminho errado (`/opt/strata/`
+em vez de `engine/`), resolvido com `find`; rebuild dominado pela mãe.
 
 ### Revisão
 - Orquestrador: —
