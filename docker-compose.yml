@@ -1,22 +1,5 @@
 services:
   # =========================================================
-  # llama-cpp — Servidor de inferência (llama.cpp)
-  # =========================================================
-  llama-cpp:
-    image: ghcr.io/ggml-org/llama.cpp:full-cuda
-    container_name: llama-cpp
-    privileged: true
-    network_mode: host
-    environment:
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-      - NVIDIA_VISIBLE_DEVICES=all
-    restart: always
-    volumes:
-      - ./models:/models
-      - ./models/models.ini:/app/models.ini
-    command: ["-s", "--verbosity", "3", "--models-preset", "/app/models.ini", "--models-max", "1", "--host", "0.0.0.0", "--port", "8081"]
-
-  # =========================================================
   # open-webui — Interface web para LLMs
   # =========================================================
   open-webui:
@@ -35,7 +18,6 @@ services:
     volumes:
       - open-webui-data:/app/backend/data
     depends_on:
-      - llama-cpp
       - searxng
 
   # =========================================================
