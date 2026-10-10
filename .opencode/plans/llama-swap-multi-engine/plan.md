@@ -1,6 +1,6 @@
 # Plano: llama-swap multi-engine (stock + Bonsai/PrismML + Strata)
 
-Estado: rascunho
+Estado: concluído (todas as tasks fechadas ou resolvidas por subtasks; critérios de conclusão com evidência nas tasks: models list 002/004, swap 002/004, Bonsai responde 004, manage.sh 001, compose válido 006, docs sincronizadas 008, bateria final 007 resolvida por 007-1/007-2)
 
 ## Objetivo
 
@@ -99,7 +99,7 @@ prefill/decode razoável com contexto ≥ 64k (128k quando VRAM e prefill permit
 | 007 | [Validação end-to-end](../../tasks/llama-swap-multi-engine/007-validacao-e2e.md) | 004, 005, 006 | resolvida por subtasks (mãe 8/10 corrigir; 007-1 8/10 corrigir; 007-2 fechada 9,5/10) |
 | 007-1 | [Correção — registro 007: flake exit 125, timings, limitações](../../tasks/llama-swap-multi-engine/007-1-correcao-registro-flake-exit-125.md) | 007 | resolvida por subtasks (8/10 corrigir; 007-2 fechada 9,5/10) |
 | 007-2 | [Correção — Observação 007: alegações universais "sempre" do flake](../../tasks/llama-swap-multi-engine/007-2-correcao-alegacoes-universais-flake.md) | 007-1 | fechada (9,5/10; executor trocado para sorgan-qwen/qwen3.8-flash-next após bloqueio do sd2; entrega 9deb99f) |
-| 008 | [Documentação (README, DOCKER, AGENTS, MODELS_INSTALL)](../../tasks/llama-swap-multi-engine/008-documentacao.md) | 007 | pendente (liberada — família 007 resolvida) |
+| 008 | [Documentação (README, DOCKER, AGENTS, MODELS_INSTALL)](../../tasks/llama-swap-multi-engine/008-documentacao.md) | 007 | fechada (9,5/10; quórum 3/3 fechar — sd2/GLM-5.3-Flash indisponível (8083), substituído por openai/gpt-6-luna; A1 retirado pela revisora; entrega 9248db5) |
 
 Nota: a 008 ganha escopo da revisão da 007 — documentar nas docs do repo o
 flake `exit 125` recorrente entre sessões/modelos na carga pós-restart

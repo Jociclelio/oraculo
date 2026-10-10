@@ -1,6 +1,6 @@
 # Task 008: Sincronização de documentação (README, DOCKER.md, AGENTS.md, MODELS_INSTALL.md)
 
-Estado: aguardando revisão
+Estado: fechada
 Depende de: 007
 Origem: nenhuma
 
@@ -107,13 +107,19 @@ cuidado real: não deixar seções antigas contraditórias — resolvido marcand
 `models.ini`/`llama-cpp` como histórico em vez de apagar.
 
 ### Revisão
-- Orquestrador: —
-- Alvo:
-- Avaliações:
-- Nota final: _/10
-- Parecer:
-- Decisão:
-- Reversão:
-- Próximo passo:
+- Orquestrador: task-master (identidade real: sorgan-qwen/qwen3.8-flash-next via SDK)
+- Alvo: base a8cb25f; entrega 9248db5 (só os 4 docs: README.md, DOCKER.md, AGENTS.md, models/MODELS_INSTALL.md; 623+/325−); registro 8222cb1. Execução retomada após a sessão anterior ter sido interrompida por limite de contexto (131072) depois de commitar a entrega; a retomada apenas verificou e registrou.
+- Avaliações (rodada PARALELA — revisão documental somente-leitura, sem disputa por recursos compartilhados; pool do arquivo global):
+  - sorgan-qwen/qwen3.8-flash-next — 9,5/10, fechar. C1–C5 + escopo extra (flake exit 125, entries PE sem GGUF) comprovados contra evidência primária (config.yaml, docker-compose.yml, Dockerfile da engine, logs/llama-swap.log real, bytes em disco, `bin/llama-swap --version` v263). Achados baixos: R1 README:96-105 árvore de `models/` incompleta (8 de 14 dirs, sem elipse); R2 tamanhos Bonsai ~5,6/~6,8 GB com unidade ambígua (GiB; consistentes com a evidência 004).
+  - opencode/muse-spark-1.3-contributor-free — 9,5/10, fechar. Sem achados bloqueantes/altos/médios; OBS-01: `api_key="llama-cpp-local"` é só placeholder de cliente, sem efeito.
+  - openai/gpt-6-luna — 8/10, corrigir na primeira rodada (A1: generalização de que o start "já executa" `docker rm -f` antes do `docker run`; linhas 48/61 do log sem rm). Após pedido de esclarecimento, **A1 RETIRADO pela própria revisora**: `logs/llama-swap.log:35` traz `docker rm -f ...; docker run ...` concatenados na mesma linha, sustentando a alegação documental; 48/61 não contradizem. Sem achado remanescente; recomendação passou a fechar.
+  - Falha de revisor: sd2/GLM-5.3-Flash (#1 do pool) indisponível — conexão recusada em `localhost:8083` (mesmo bloqueio da 007-2); substituído por openai/gpt-6-luna (#4 do pool) com o mesmo pedido. Registrado; nenhum parecer simulado.
+- Nota final: 9,5/10 — C1–C5 e o escopo extra da revisão 007 comprovados por três modelos distintos com evidência primária; a única divergência (A1) foi retirada pela própria revisora após verificação; restam apenas nitpicks baixos (R1, R2), sem efeito sobre os critérios.
+- Parecer: entrega completa e exata: llama-swap/8081/manage.sh nos 4 docs sem instruções ativas do antigo container; single-user explícito; regra nunca-stock + pin `84445367f` + entries Bonsai; path novo dos GGUFs e estado Strata/MTP; números idênticos às evidências 007/004; flake exit 125 e PE sem GGUF documentados com a redação corrigida da 007-2, sem reintroduzir "sempre".
+- Decisão: fechar
+- Reversão: não se aplica — entrega preservada.
+- Próximo passo: nenhum — 008 é a última task do plano; todas as famílias fechadas/resolvidas; plano marcado como concluído.
+
+<!-- task-cycle: {"decision":"concluido","next_task":null,"family":".opencode/tasks/llama-swap-multi-engine/006-compose-remove-llama-cpp.md","plan":".opencode/plans/llama-swap-multi-engine/plan.md"} -->
 
 Plano: [plan.md](../../plans/llama-swap-multi-engine/plan.md)
