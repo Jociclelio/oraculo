@@ -48,6 +48,25 @@ macros:
     -ctk q8_0 -ctv q8_0
     --cache-reuse 256 --cache-ram 2048
 
+  # Macro Bonsai/PrismML — mesma receita do docker-stock, mas com a imagem
+  # local do fork (engines/llama.cpp-prismml/, commit pinado 84445367f).
+  # REGRA DURA (ver /home/jocic/bonsai-llm/AGENTS.md): NUNCA usar a imagem
+  # stock para GGUFs Bonsai 2 — stock recusa PTQ1_0/PQ2_0 ou carrega como
+  # Q2_0 legacy gerando lixo. A imagem do fork herda o ENTRYPOINT
+  # nvidia_entrypoint.sh da base nvidia/cuda (o Dockerfile não o sobrescreve),
+  # então usamos --entrypoint /usr/local/bin/llama-server para executar o
+  # servidor diretamente com as flags de cada entry.
+  "docker-prismml": >
+    docker run --rm --name ls-${MODEL_ID} --gpus all
+    --entrypoint /usr/local/bin/llama-server
+    -p 127.0.0.1:${PORT}:8080
+    -v ./models:/models
+    llama.cpp-prismml:latest
+    --host 0.0.0.0 --port 8080
+    -fa on --jinja -np 1 -t 5
+    -ctk q8_0 -ctv q8_0
+    --cache-reuse 256 --cache-ram 2048
+
   # Stop do container: rm -f é determinístico e imediato (SIGKILL ao
   # processo do container -> VRAM liberada na hora; --rm remove o container).
   # Nota: se um crash do llama-swap deixar container órfão, o próximo
@@ -284,6 +303,40 @@ models:
     ttl: 300
     aliases:
       - pe-i2i
+
+  # ---------------------------------------------------------------------
+  # Bonsai 2 27B (PrismML fork) — GGUFs ternários PTQ1_0/PQ2_0, movidos de
+  # /home/jocic/bonsai-llm (task 004). Engine: imagem local
+  # llama.cpp-prismml:latest (commit pinado 84445367f) — NUNCA stock.
+  # Sem temp/top-p/top-k: os defaults de sampling (thinking: temp 1.0,
+  # top_p 0.95, top_k 20) vivem nos metadados do GGUF.
+  # Sem MTP (não baixado — fora de escopo).
+  # ---------------------------------------------------------------------
+
+  # Entry primária — PTQ1_0 (~5,6 GB) + mmproj (visão).
+  # ctx 65536 validado na RTX 3060 12GB: carga OK, VRAM total observada
+  # 9967 MiB / 12288 (inclui ~805 MiB do display Hyprland/Wayland; mmproj
+  # carregado). Sem OOM — fallback de ctx (reduzir para 49152) não necessário;
+  # nota mantida para referência se a VRAM do display crescer.
+  bonsai-27b:
+    cmd: |
+      ${docker-prismml}
+      -m /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-PTQ1_0.gguf
+      --mmproj /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf
+      -c 65536 -ngl 99
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # Entry secundária — PQ2_0 (~6,8 GB, default mais rápido em Ampere).
+  # Mesmas diretrizes da primária; validada: ctx 65536 sem OOM, VRAM total
+  # observada 10250 MiB / 12288.
+  bonsai-27b-pq2_0:
+    cmd: |
+      ${docker-prismml}
+      -m /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-PQ2_0.gguf
+      -c 65536 -ngl 99
+    cmdStop: ${docker-stop}
+    ttl: 300
 
   # =====================================================================
   # Exemplo comentado — paralelismo np=2 (APENAS referência).
