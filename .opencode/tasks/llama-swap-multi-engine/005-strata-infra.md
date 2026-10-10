@@ -1,6 +1,6 @@
 # Task 005: Infra Strata — strata/ com Dockerfile adaptado + entry desabilitada
 
-Estado: aguardando revisão
+Estado: aguardando subtasks
 Depende de: 002
 Origem: nenhuma
 
@@ -114,13 +114,13 @@ marcado como aprovado. Corrigir exigiu diagnóstico (docker sem buildx/--progres
 extração do script para arquivo e rebuild completo (~25 min).
 
 ### Revisão
-- Orquestrador: —
-- Alvo:
-- Avaliações:
-- Nota final: _/10
-- Parecer:
-- Decisão:
-- Reversão:
-- Próximo passo:
+- Orquestrador: task-master (sorgan-qwen/qwen3.8-flash-next)
+- Alvo: base `706c07b`; entrega `f450e4c` (feat, 4 arquivos, +243/−0); registro revisado `02fc037` (HEAD, árvore limpa)
+- Avaliações: GLM-5.3-Flash (sd2): 7/10 requer correções; qwen3.8-flash-next (sorgan-qwen): 9/10 fechar (posição não sustentada — não testou o caminho de ativação e respondeu vazio na rodada de esclarecimento); Muse Spark 1.3 (opencode): 9/10 fechar → revisada para 5/10 requer correções após contraprova independente
+- Nota final: 6/10
+- Parecer: C1–C4 passam na letra com evidência própria dos revisores (imagem inspecionada: engine 57+73 MB, BUILD.json v0.1.42 archs[86], pin `61b3fb5` confirmado tip de main; zero pesos; diff do config puramente aditivo; proxy responde 17 entries sem Strata; extração do heredoc byte-idêntica ao upstream, corrigindo falha real do builder sem buildx). Defeito latente bloqueante confirmado por DUAS contraprovas independentes dentro da imagem (GLM e Muse): `MODEL=coder` é inválido no upstream — `setup.py` valida `--model` com `choices=list(MODELS)` (sizes: Q2_0…IQ1_M) e `coder` é chave de `FAMILIES`; o `docker-entrypoint.sh` repassa `--model "$MODEL"` cru → primeiro start falha com exit 2 antes de qualquer download. Par correto para a variante Coder: `FAMILY=coder` + `MODEL=IQ1_M` (única size da família coder, 58,4 GB). O valor inválido tem origem na redação da própria task/plano (`MODEL=coder`), que o executor seguiu literalmente — defeito de especificação, não de execução. Achados secundários: README afirma incorretamente que Q2_0/IQ2_XS cabem em 32 GB (GLM e qwen concordam; upstream exige ~44–46 GB RAM ou GPU 24 GB); "~70 GB" sobrestima o Coder (≈58,4 GB; ~65 GB c/ MTP); comentário do Dockerfile inverte semântica FAMILY/MODEL (Muse); resíduo `build-engine.py` na imagem, 4 kB (Muse, baixo). Divergência essencial (fechar vs corrigir) resolvida por esclarecimento: Muse reproduziu o teste de GLM e rebaçou seu parecer; qwen falhou na rodada de esclarecimento (resposta vazia), sem refutar. Quórum de três modelos distintos mantido na rodada inicial; modo sequencial (recursos compartilhados: porta 8081, docker).
+- Decisão: corrigir
+- Reversão: não se aplica — entrega preservada (build, pin e estrutura aprovados pelos três revisores)
+- Próximo passo: subtask `005-1-correcao-strata-env-model.md` (pendente de criação) corrige `MODEL=coder`→`MODEL=IQ1_M` nos 3 artefatos + textos do README/Dockerfile + rebuild da imagem. Ao fechar a 005-1, marcar esta mãe como "resolvida por subtasks" e liberar a 006.
 
 Plano: [plan.md](../../plans/llama-swap-multi-engine/plan.md)
