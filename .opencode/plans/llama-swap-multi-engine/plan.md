@@ -89,7 +89,7 @@ prefill/decode razoável com contexto ≥ 64k (128k quando VRAM e prefill permit
 
 | # | Task | Depende de | Estado |
 |---|------|------------|--------|
-| 001 | [llama-swap instalação + manage.sh](../../tasks/llama-swap-multi-engine/001-llama-swap-instalacao-manage-sh.md) | — | pendente |
+| 001 | [llama-swap instalação + manage.sh](../../tasks/llama-swap-multi-engine/001-llama-swap-instalacao-manage-sh.md) | — | fechada (9,5/10) |
 | 002 | [config.yaml stock + tradução models.ini](../../tasks/llama-swap-multi-engine/002-config-yaml-stock.md) | 001 | pendente |
 | 003 | [Engine Docker PrismML (fork pinado)](../../tasks/llama-swap-multi-engine/003-engine-prismml.md) | — | pendente |
 | 004 | [Migração GGUFs Bonsai + entries bonsai](../../tasks/llama-swap-multi-engine/004-migracao-bonsai.md) | 002, 003 | pendente |

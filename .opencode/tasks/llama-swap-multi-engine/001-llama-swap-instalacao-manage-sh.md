@@ -1,6 +1,6 @@
 # Task 001: Instalar llama-swap (host) e reescrever manage.sh
 
-Estado: aguardando revisão
+Estado: fechada
 Depende de: nenhuma
 Origem: nenhuma
 
@@ -91,13 +91,53 @@ flag `-listen`), e o container antigo `llama-cpp` ocupava a 8081 durante o
 teste, mascarando o resultado até ser parado.
 
 ### Revisão
-- Orquestrador: —
-- Alvo:
+- Orquestrador: GLM-5.3-Flash (`sd2/GLM-5.3-Flash`)
+- Alvo: task 001; base `eb41d0d`; entrega `748f589`; registro `a5534e2`.
+  Modo da rodada: **sequencial** — a validação executa `manage.sh`/`llama-swap`
+  (porta 8081, pidfiles, processo em background), recursos compartilhados que
+  se interfeririam em paralelo. Pool lido de `.opencode/task-reviewer-pool.md`;
+  os três primeiros disponíveis formaram o quórum. Nenhum revisor falhou.
 - Avaliações:
-- Nota final: _/10
-- Parecer:
-- Decisão:
-- Reversão:
-- Próximo passo:
+  1. GLM-5.3-Flash (`sd2/GLM-5.3-Flash`) — **9,5/10, aprovado**. Confirmou
+     C1–C4 por execução própria (start/stop/status, start duplicado, erro
+     legível sem config, check-ignore). Achados menores: A1 `is_running()`
+     sem validar nome do processo (PID reciclado); A2 `grep -oP` não
+     portável; A3 SIGKILL sem relato final. Nenhum crítico/maior.
+  2. qwen3.8-flash-next (`sorgan-qwen/qwen3.8-flash-next`) — **9/10,
+     aprovado**. Confirmou C1–C4 por execução própria e validou o padrão do
+     asset contra a API de releases ao vivo (v263). Achados menores: A1
+     timeout de 30 s deixa processo+pidfile sem orientação de `stop`; A2
+     `--version` pós-install engole falha (`|| true`); A3 alegação do env
+     `LLAMA_SWAP_LISTEN` não honrado não re-verificada (irrelevante à
+     corretude).
+  3. muse-spark-1.3 (`opencode/muse-spark-1.3-contributor-free`) — **9/10,
+     aprovado**. Confirmou C1–C4 por execução própria. Achados menores: P1
+     `grep -oP` (portabilidade, com fallback correto); P2 mesmo A1 do
+     revisor 2 (timeout deixa processo/pidfile); P3 sem checksum do asset.
+- Nota final: **9,5/10** — os três revisores aprovaram com execução
+  independente dos quatro critérios; convergência total na corretude e no
+  escopo (compose intocado, config.yaml ausente conforme planejado). Os
+  desvios do literal da task (`-listen 127.0.0.1:8081`, guarda de PID próprio)
+  foram considerados pelos três melhorias necessárias e documentadas. Nota
+  final acima da média simples reflete a ausência de qualquer achado
+  crítico/maior e a robustez acima do mínimo exigido (pidfile órfão, guarda
+  `comm` antes do kill, idempotência do stop). Os achados menores (A1 do
+  timeout sem orientação de `stop`, portabilidade de `grep -oP`) ficam como
+  dívida técnica opcional — podem ser absorvidos gratuitamente na task 002,
+  sem subtask de correção.
+- Parecer: entrega fiel ao escopo, íntegra e validada por três modelos
+  distintos. Higiene do host confirmada pelos revisores (sem processo
+  residual, sem config temporário, `git status` limpo).
+- Decisão: **fechar** — todos os critérios obrigatórios comprovados; libera
+  a task 002.
+- Reversão: não se aplica — sem artefatos a reverter (aprovada).
+- Próximo passo: executar task 002
+  (`.opencode/tasks/llama-swap-multi-engine/002-config-yaml-stock.md`),
+  dependente desta. Observações úteis para a 002: a porta de escuta é fixada
+  via flag `-listen` (não via config/env); o llama-swap v263 tem autodiscovery
+  de `models.ini` (modelos apareceram com `"source":"preset"` durante os
+  testes) — conferir se isso interfere na configuração explícita desejada.
+
+<!-- task-cycle: {"decision":"fechar","next_task":".opencode/tasks/llama-swap-multi-engine/002-config-yaml-stock.md","family":".opencode/tasks/llama-swap-multi-engine/001-llama-swap-instalacao-manage-sh.md","plan":".opencode/plans/llama-swap-multi-engine/plan.md"} -->
 
 Plano: [plan.md](../../plans/llama-swap-multi-engine/plan.md)
