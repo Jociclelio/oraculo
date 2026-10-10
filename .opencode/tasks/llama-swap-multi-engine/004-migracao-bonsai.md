@@ -1,6 +1,6 @@
 # Task 004: Migração dos GGUFs Bonsai + entries bonsai-27b no config.yaml
 
-Estado: pendente
+Estado: aguardando revisão
 Depende de: 002, 003
 Origem: nenhuma
 
@@ -48,24 +48,67 @@ Restrições: não alterar entries stock; não remover `/home/jocic/bonsai-llm`.
 
 ## Corretude
 
-- [ ] C1 — `ls models/Ternary-Bonsai-2-27B-gguf/` mostra os 3 GGUFs e
+- [x] C1 — `ls models/Ternary-Bonsai-2-27B-gguf/` mostra os 3 GGUFs e
   `/home/jocic/bonsai-llm/models/Ternary-Bonsai-2-27B-gguf` não existe mais
   (movido, não copiado).
-- [ ] C2 — `curl http://localhost:8081/v1/models` inclui `bonsai-27b` e
+- [x] C2 — `curl http://localhost:8081/v1/models` inclui `bonsai-27b` e
   `bonsai-27b-pq2_0`.
-- [ ] C3 — Request de chat a `bonsai-27b` (PTQ1_0) responde texto coerente; o
+- [x] C3 — Request de chat a `bonsai-27b` (PTQ1_0) responde texto coerente; o
   log de carga confirma PTQ1_0 (não Q2_0 legacy) e o ctx efetivo usado.
-- [ ] C4 — Swap stock → Bonsai descarrega o modelo anterior (container
+- [x] C4 — Swap stock → Bonsai descarrega o modelo anterior (container
   anterior some / log do llama-swap).
-- [ ] C5 — VRAM do PTQ1_0 com ctx escolhido + mmproj documentada nas
+- [x] C5 — VRAM do PTQ1_0 com ctx escolhido + mmproj documentada nas
   evidências; se OOM, entry usa ctx fallback com nota no config.
 
 ## Execução
-- Modelo:
-- Base:
-- Entrega:
+- Modelo: GLM-5.3-Flash (`sd2/GLM-5.3-Flash`), via agente task-executor (OpenCode)
+- Base: `779fc16` (árvore limpa, branch `main`)
+- Entrega: `b3f8ac2` — feat: entries bonsai-27b (PTQ1_0 + mmproj) e
+  bonsai-27b-pq2_0 no config.yaml via imagem PrismML
 - Arquivos da entrega:
+  - `llama-swap/config.yaml` (macro `docker-prismml` + entries `bonsai-27b`,
+    `bonsai-27b-pq2_0`; entries stock intocadas — diff só com adições,
+    53 linhas)
 - Evidências:
+  - C1 — `mv` executado: `models/Ternary-Bonsai-2-27B-gguf/` contém os 3 GGUFs
+    (`PTQ1_0` 5,6 GB, `PQ2_0` 6,8 GB, `mmproj-Q8_0` 601 MB; origem em
+    `/home/jocic/bonsai-llm/models/` resta apenas `models.ini` — diretório de
+    GGUFs não existe mais). `/home/jocic/bonsai-llm` preservado (AGENTS.md,
+    fork, start.sh). `models/*` é gitignored → migração não gera commit git.
+  - C2 — `./manage.sh start` + `curl /v1/models` lista as 17 entries, incluindo
+    `bonsai-27b` e `bonsai-27b-pq2_0`.
+  - C3 — Chat a `bonsai-27b`: resposta coerente ("A capital do Brasil é
+    Brasília.", 46 tokens, ~26 tok/s gen; `system_fingerprint b1-8444536` =
+    commit pinado do fork). `docker logs ls-bonsai-27b` confirma carga de
+    `/models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-PTQ1_0.gguf`
+    (não Q2_0 legacy) + mmproj carregado + `n_ctx_slot = 65536` (ctx efetivo).
+  - mmproj testável e funcional: request com PNG vermelho 64×64 base64 →
+    "Vermelho" (visão OK na entry primária).
+  - C4 — Swap nas duas direções: `bonsai-27b` → `Ornith1.5_9B_MTP` (stock):
+    container `ls-bonsai-27b` some, sobe `ls-Ornith1.5_9B_MTP`; volta
+    stock → Bonsai: `ls-Ornith1.5_9B_MTP` removido (`exit 137` via
+    `docker rm -f`, VRAM liberada) e `ls-bonsai-27b` responde HTTP 200.
+  - C5 — VRAM observada (nvidia-smi, display incluso):
+    `bonsai-27b` (PTQ1_0 + mmproj, ctx 65536): **9967 MiB / 12288** — sem OOM;
+    `bonsai-27b-pq2_0` (PQ2_0, ctx 65536): **10250 MiB / 12288** — sem OOM.
+    Fallback de ctx (49152) não foi necessário; nota de referência mantida no
+    comentário da entry. PQ2_0 também validada com chat coerente
+    ("A capital do Brasil é Brasília.").
+- Notas de implementação:
+  - Descoberta: a imagem `llama.cpp-prismml:latest` **herda o ENTRYPOINT**
+    `nvidia_entrypoint.sh` da base `nvidia/cuda` (o Dockerfile da task 003 não
+    o sobrescreve — a nota "sem ENTRYPOINT" valia só para CMD explícito). Com
+    cmd começando em flags (`--host ...`), o entrypoint falha com
+    `exec: --: invalid option` e o llama-swap reporta "upstream command exited
+    prematurely". Corrigido no macro `docker-prismml` com
+    `--entrypoint /usr/local/bin/llama-server` — mesmo padrão do macro stock.
+    O Dockerfile da task 003 não foi alterado (fora do escopo desta task).
+  - Avisos inofensivos no log do servidor: `cache_reuse is not supported by
+    multimodal` (entry primária) e warning Qwen-VL sobre `--image-min-tokens`
+    — sem impacto nos testes realizados.
+  - Primeiro chat da PQ2_0 com `max_tokens=100` retornou content vazio
+    (raciocínio consumiu o orçamento); com 300 tokens responde coerente —
+    comportamento do modelo thinking, não da config.
 
 ## Notas
 
@@ -74,7 +117,11 @@ Restrições: não alterar entries stock; não remover `/home/jocic/bonsai-llm`.
 (empírica, pode exigir ajuste de ctx) e o tempo de carga dos modelos.
 
 ### Dificuldade sentida
-_/10 —
+3/10 — `mv` e entries YAML foram diretos; a única dificuldade real foi o
+ENTRYPOINT herdado da base nvidia/cuda (falha críptica "upstream command exited
+prematurely" antes de o log mostrar o erro real), resolvida com o mesmo padrão
+`--entrypoint` do macro stock. Validação de VRAM não exigiu fallback de ctx —
+menos ajuste empírico do que o previsto na dificuldade esperada (4/10).
 
 ### Revisão
 - Orquestrador: —
