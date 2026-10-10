@@ -338,6 +338,25 @@ models:
     cmdStop: ${docker-stop}
     ttl: 300
 
+  # ---------------------------------------------------------------------
+  # Strata (Qwen3.8-Flash-Next) — DESABILITADA (modelo ~70 GB não baixado).
+  # Infra em strata/ (Dockerfile adaptado do upstream + strata/README.md com
+  # os passos de instalação futura: RAM 31 GB p/ a variante Coder, modelo em
+  # /home — NVMe). Env MODEL/FAMILY/CONTEXT são lidas pelo docker-entrypoint.sh
+  # da imagem no primeiro start (defaults no Dockerfile); aqui explícitas.
+  # Para ativar: instalar conforme strata/README.md e descomentar a entry.
+  # ---------------------------------------------------------------------
+  # Strata:
+  #   cmd: |
+  #     docker run --rm --name ls-${MODEL_ID} --gpus all
+  #     -p 127.0.0.1:${PORT}:8080
+  #     --ulimit memlock=-1
+  #     -v /home/jocic/strata-data:/data
+  #     -e MODEL=coder -e FAMILY=coder -e CONTEXT=65536
+  #     strata:latest
+  #   cmdStop: docker rm -f ls-${MODEL_ID}
+  #   ttl: 300
+
   # =====================================================================
   # Exemplo comentado — paralelismo np=2 (APENAS referência).
   # Posicionamento do plano é single-user; np>1 deve ser exceção pontual
