@@ -1,6 +1,6 @@
 # Task 007-2: Correção — Observação 007: alegações universais "sempre" do flake
 
-Estado: bloqueada
+Estado: aguardando revisão
 Depende de: 007-1
 Origem: 007-1 (correção)
 
@@ -58,27 +58,83 @@ contradição com o novo texto.
 
 ## Corretude
 
-- [ ] C1 — Os dois "sempre" da Observação (auto-recuperação e primeira carga)
+- [x] C1 — Os dois "sempre" da Observação (auto-recuperação e primeira carga)
   foram substituídos por texto fiel ao log, com referências de linha
   verificadas pelo executor antes da reescrita (recuperações reais: 121→122,
   140-143→144; falhas sem recuperação na sessão: shutdown após 15/17, 23/25,
-  36/37, 49/50, 105; exceção da primeira carga: 121).
-- [ ] C2 — Follow-up registra a evidência de assepsia (`log:35-36`) como
+  36/37, 49/50, 105; exceção da primeira carga: 121). Todas as linhas do
+  parecer conferidas no log antes da reescrita — nenhuma divergência
+  (shutdowns exatos em 19/27/40/53/107; ver Evidências).
+- [x] C2 — Follow-up registra a evidência de assepsia (`log:35-36`) como
   enfraquecimento da hipótese de conflito de nome; causa segue marcada como
-  indeterminada.
-- [ ] C3 — Nenhuma outra alegação universal/não qualificada sobre o flake
-  permanece (grep por "sempre" no arquivo fora de citações históricas e da
-  seção Revisão da mãe); Dificuldade sentida e Limitações seguem coerentes.
-- [ ] C4 — Diff toca **apenas** o `.md` da 007; checkboxes C1–C3 da Corretude
-  e a seção Revisão da mãe inalterados; nenhum arquivo funcional; nenhum
-  comando de carga/restart/benchmark/docker executado.
+  indeterminada (hipótese do órfão "aberta, porém enfraquecida").
+- [x] C3 — Nenhuma outra alegação universal/não qualificada sobre o flake
+  permanece (grep por "sempre" no arquivo: 1 ocorrência, linha 198, dentro da
+  seção Revisão da mãe — exceção permitida); Dificuldade sentida e
+  Limitações seguem coerentes (ver Evidências).
+- [x] C4 — Diff toca **apenas** o `.md` da 007 (`git diff c86323a..9deb99f
+  --stat` = 1 arquivo, +34/−20, hunks só na Observação); checkboxes C1–C3 da
+  Corretude e a seção Revisão da mãe inalterados (verificados no diff);
+  nenhum arquivo funcional; nenhum comando de carga/restart/benchmark/docker
+  executado.
 
 ## Execução
-- Modelo: <identificador real do executor>
-- Base: <SHA completo antes da implementação>
-- Entrega: <SHA(s) completos, sem commits de registro, ou sem alteração de artefatos>
-- Arquivos da entrega: <paths ou referência ao diff dos commits>
-- Evidências: <comandos/procedimentos, resultados e limitações>
+- Modelo: sorgan-qwen/qwen3.8-flash-next (identidade real informada pelo
+  runtime nesta sessão; o bloqueio anterior por indisponibilidade do executor
+  `sd2/GLM-5.3-Flash` não se aplica — o master retomou esta task com executor
+  distinto, modelo diferente do que redigiu a Observação rejeitada na 007-1)
+- Base: c86323af2cc654f14b448f82f053d07eeed81128 (HEAD; `git status` árvore
+  limpa, sem alterações preexistentes nem artefatos de tentativas anteriores)
+- Entrega: 9deb99f3010561855e494c478868c76f99772c25 (único commit de entrega;
+  o commit de registro é o commit seguinte que inclui este arquivo)
+- Arquivos da entrega:
+  `.opencode/tasks/llama-swap-multi-engine/007-validacao-e2e.md` (+34/−20;
+  parágrafo da Observação do flake apenas; `git add -f` — `.opencode/` está
+  git-ignorado, arquivo já tracked)
+- Evidências:
+  - `git status` inicial limpo em `c86323a`; `git log --oneline -5` confere o
+    histórico (8e7f990 criou a 007-2; cb5aac0 é a revisão da 007-1 com
+    F1/F2/F3).
+  - Leitura integral de `logs/llama-swap.log` (151 linhas, untracked, sem
+    timestamps; sessões delimitadas por blocos start/shutdown e PIDs DEBUG)
+    **antes** da reescrita, mais greps de conferência — todas as linhas do
+    parecer do revisor **confirmadas, sem divergências**:
+    - `grep -n "upstream command exited prematurely"` → 11 WARNs (15, 17, 23,
+      25, 37, 50, 98, 105, 121, 140, 142); `grep -n "process exited:
+      code=125"` → DEBUG 36 e 49 (ambos Ornith1.5_9B_MTP).
+    - Recuperações reais: 121 (WARN `Gemma4_12B`) → 122 (health check OK);
+      140-143 (WARN/non-200 intercalados) → 144 (health check OK).
+    - Shutdowns sem recuperação na sessão (`grep -n "shutting down"`): 15/17 →
+      19; 23/25 → 27; 36/37 → 40; 49/50 → 53; 105 → 107 — exatamente as
+      linhas estimadas pelo revisor (dispensou ajuste).
+    - Ornith1.5_9B_MTP: 4 sessões consecutivas de falha (blocos 13-20 e
+      21-28, sem PID registrado; PID 149457 na linha 29; PID 150093 na 42);
+      sucesso apenas na sessão PID 164646 (PID na 55; health check na 63).
+      `grep -n "PID:"` → 29, 42, 55.
+    - Exceção da primeira carga: sessão iniciada em 118-119; primeira carga
+      `Gemma4_12B_Hauhau` (120) passou; 121 (`Gemma4_12B`) é a segunda carga.
+    - Assepsia: `grep -n "docker rm -f"` → só a linha 35
+      (`docker rm -f ls-Ornith1.5_9B_MTP 2>/dev/null; docker run ...`) com
+      `exit 125` na 36. Nuance observada no log e **não** acrescentada ao
+      texto (fora do escopo mínimo): o prefixo de assepsia aparece apenas em
+      35; os starts das linhas 48 e 61 rodam `docker run` sem `docker rm -f`.
+  - C3: `grep -n -i "sempre" .opencode/tasks/llama-swap-multi-engine/007-validacao-e2e.md`
+    → 1 ocorrência (linha 198), dentro da seção Revisão da mãe (parecer do
+    master — exceção explícita do critério). Na Observação restam apenas
+    formulações qualificadas ("tipicamente", "confirmada apenas em parte das
+    ocorrências", "aberta, porém enfraquecida").
+  - C4: `git diff c86323af2cc654f14b448f82f053d07eeed81128..9deb99f --stat` →
+    1 arquivo (só o `.md` da 007); `git diff -U2` mostra um único hunk na
+    Observação — Corretude C1–C3, Revisão da mãe, Dificuldade sentida, bloco
+    "Limitação de revalidação" e timings byte-idênticos.
+  - Coerência: Dificuldade sentida da 007 ("padrão recorrente; causa não
+    determinada; hipóteses de transiente e de órfão permanecem abertas") segue
+    compatível com o novo texto (órfão enfraquecida, não descartada); bloco de
+    limitação de revalidação intocado e sem contradição.
+  - Limitações: reescrita apoiada exclusivamente no log da working tree
+    (untracked — não versionado, mesma ressalva da revisão da 007-1) e nos
+    registros; nenhum comando docker/carga/restart/benchmark executado; a
+    causa do flake segue indeterminada (follow-up preservado).
 
 ## Notas
 
@@ -87,7 +143,13 @@ contradição com o novo texto.
 verificação prévia de linhas de log já mapeadas; sem execução de stack.
 
 ### Dificuldade sentida
-_/10 —
+2/10 — um ponto acima do esperado (1/10): a edição textual em si é trivial,
+mas a verificação exigiu mapear o log sem timestamps linha a linha (9
+ocorrências da assinatura, 5 shutdowns pós-falha, 3 sessões com PID, o par
+118-121 da exceção e o caso de assepsia 35-36) antes de reescrever; todas as
+referências do parecer conferiram exatas, sem ajustes. Cuidado adicional:
+manter Revisão da mãe e Corretude C1–C3 intactas e validar o grep "sempre"
+com a única exceção permitida.
 
 ### Revisão
 - Orquestrador: task-master (sorgan-qwen/qwen3.8-flash-next)
