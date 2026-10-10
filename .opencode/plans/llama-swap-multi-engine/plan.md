@@ -102,9 +102,11 @@ prefill/decode razoável com contexto ≥ 64k (128k quando VRAM e prefill permit
 | 008 | [Documentação (README, DOCKER, AGENTS, MODELS_INSTALL)](../../tasks/llama-swap-multi-engine/008-documentacao.md) | 007 | pendente |
 
 Nota: a 008 ganha escopo da revisão da 007 — documentar nas docs do repo o
-flake transiente `exit 125` na primeira carga pós-restart (auto-recuperado
-por retry; causa indeterminada) e a limitação das entries `PE_T2I/I2I_Heretic`
-listadas sem GGUF em disco.
+flake `exit 125` recorrente entre sessões/modelos na carga pós-restart
+(auto-recuperado pelo retry em parte das ocorrências; nas demais, sucesso só
+em sessão posterior; causa indeterminada — hipótese de container órfão
+enfraquecida pela assepsia em `logs/llama-swap.log:35-36`) e a limitação das
+entries `PE_T2I/I2I_Heretic` listadas sem GGUF em disco.
 
 Cobertura dos critérios de conclusão: models list (002/004), swap (002/004),
 Bonsai responde (004), manage.sh (001), compose válido (006), docs
