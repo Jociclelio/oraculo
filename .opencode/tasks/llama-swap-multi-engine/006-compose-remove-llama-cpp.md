@@ -1,6 +1,6 @@
 # Task 006: docker-compose.yml — remover serviço llama-cpp
 
-Estado: aguardando revisão
+Estado: fechada
 Depende de: 004
 Origem: nenhuma
 
@@ -34,12 +34,12 @@ histórica dos parâmetros; desativação física/documental é tratada na task
 
 ## Corretude
 
-- [ ] C1 — `docker compose config` válida (exit 0) sem o serviço `llama-cpp`.
-- [ ] C2 — `grep -i llama-cpp docker-compose.yml` sem resultados e sem
+- [x] C1 — `docker compose config` válida (exit 0) sem o serviço `llama-cpp`.
+- [x] C2 — `grep -i llama-cpp docker-compose.yml` sem resultados e sem
   referência ao mount `models.ini`.
-- [ ] C3 — `docker compose ps` lista apenas open-webui, open-terminal,
+- [x] C3 — `docker compose ps` lista apenas open-webui, open-terminal,
   searxng, openwa e openwa-docker-proxy.
-- [ ] C4 — `curl http://localhost:8081/v1/models` responde (llama-swap
+- [x] C4 — `curl http://localhost:8081/v1/models` responde (llama-swap
   assumiu a porta).
 
 ## Execução
@@ -73,13 +73,18 @@ histórica dos parâmetros; desativação física/documental é tratada na task
 previstos; nenhum impedimento encontrado.
 
 ### Revisão
-- Orquestrador: —
-- Alvo:
-- Avaliações:
-- Nota final: _/10
-- Parecer:
-- Decisão:
-- Reversão:
-- Próximo passo:
+- Orquestrador: task-master (sorgan-qwen/qwen3.8-flash-next)
+- Alvo: base `7805f7d`; entrega `05ab52d` (só `docker-compose.yml`, −18 linhas); registro `72af53a`; árvore limpa, arquivo em HEAD idêntico ao da entrega.
+- Avaliações (rodada paralela — revisores só leem/executam checagens read-only, sem recursos compartilhados em disputa; pool do arquivo, três modelos distintos, sem falhas/substituições):
+  - `sd2/GLM-5.3-Flash` — 9,5/10, aprovada; C1–C4 verificados independentemente; restrição: C4 cobre endpoint de models, não inferência/swap (escopo da 007).
+  - `sorgan-qwen/qwen3.8-flash-next` — 10/10, aprovada; C1–C4 verificados; achado A1 (baixo, não defeito): DOCKER.md/AGENTS.md ainda documentam `llama-cpp` e divergem temporariamente do compose — sincronização planejada na 008.
+  - `opencode/muse-spark-1.3-contributor-free` — 10/10, aprovada; C1–C4 reverificados; diff contém apenas as 18 deleções do bloco + `depends_on`; restrições todas atendidas.
+- Nota final: 9,5/10 — conformidade integral com o contrato: diff mínimo e exato (bloco `llama-cpp` + mount `models.ini` + `depends_on` residual), C1–C4 comprovados por três revisores independentes, restrições respeitadas (`models/models.ini` preservado, demais serviços intocados, DOCKER.md adiado para 008). A nota não é média: desconta apenas o escopo de validação ficar na porta/models-list (inferência e swap ficam na 007) e a defasagem documental temporária, ambos deliberados no plano — nenhum defeito na entrega.
+- Parecer: consenso unânime (3/3 aprovar, fechar). Sem achados técnicos contra a entrega; remoção do `depends_on: - llama-cpp` é consequência necessária do passo 3 e foi declarada na execução. Divergência de nota (9,5 vs 10) irrelevante para o desfecho.
+- Decisão: fechar
+- Reversão: não se aplica — sem artefatos a desfazer.
+- Próximo passo: libera a task 007 (Validação end-to-end; dependências 004, 005, 006 todas resolvidas).
+
+<!-- task-cycle: {"decision":"fechar","next_task":".opencode/tasks/llama-swap-multi-engine/007-validacao-e2e.md","family":".opencode/tasks/llama-swap-multi-engine/006-compose-remove-llama-cpp.md","plan":".opencode/plans/llama-swap-multi-engine/plan.md"} -->
 
 Plano: [plan.md](../../plans/llama-swap-multi-engine/plan.md)
