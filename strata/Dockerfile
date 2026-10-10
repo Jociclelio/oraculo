@@ -12,14 +12,15 @@
 #     um binário "gordo" com cubin para 75;80;86;89;120; aqui basta sm_86 e o
 #     build é bem mais rápido. Card de outra arquitetura exigiria rebuild com a
 #     própria arch (CMakeLists do upstream recusa arch < 75).
-#   - Defaults das env MODEL/FAMILY/CONTEXT fixados para a variante Coder com o
-#     contexto alvo do plano (é a única variante que cabe nos 31 GB de RAM desta
-#     máquina — ver strata/README.md). As três env são lidas pelo
-#     docker-entrypoint.sh do upstream no primeiro start e continuam
-#     sobrescrevíveis com `docker run -e ...`.
-#   - Os pesos do modelo (~70 GB) NÃO são baixados no build: o download acontece
-#     no PRIMEIRO start do container (setup.py --setup), gravando no volume
-#     /data — montar em /home (NVMe), ver strata/README.md.
+#   - Defaults das env MODEL/FAMILY/CONTEXT fixados para a variante Coder
+#     (família `coder`, size `IQ1_M`) com o contexto alvo do plano (é a única
+#     variante que cabe nos 31 GB de RAM desta máquina — ver strata/README.md).
+#     As três env são lidas pelo docker-entrypoint.sh do upstream no primeiro
+#     start e continuam sobrescrevíveis com `docker run -e ...`.
+#   - Os pesos do modelo (~58 GB na variante Coder IQ1_M) NÃO são baixados no
+#     build: o download acontece no PRIMEIRO start do container (setup.py
+#     --setup), gravando no volume /data — montar em /home (NVMe), ver
+#     strata/README.md.
 #
 # Build (compila a engine; não requer GPU, não baixa pesos):
 #   docker build -t strata ./strata
@@ -32,7 +33,7 @@
 #     strata
 #
 # API OpenAI/Anthropic-compatible em http://127.0.0.1:8080/v1 após o modelo
-# carregar (1-3 min em starts seguintes; o primeiro baixa ~70 GB).
+# carregar (1-3 min em starts seguintes; o primeiro baixa ~58 GB).
 
 FROM nvidia/cuda:13.0.0-devel-ubuntu24.04
 
@@ -41,9 +42,12 @@ FROM nvidia/cuda:13.0.0-devel-ubuntu24.04
 ARG STRATA_REF=61b3fb5dd3f1e8ec09cf7e4e05208bc6d3c46406
 
 # Semântica das env PRESERVADA do upstream — lidas pelo docker-entrypoint.sh:
-#   FAMILY  — família/modelo no HF ("qwen" = tag vazia; "coder" = variante Coder,
-#             metade dos experts, cabe em 32 GB de RAM)
-#   MODEL   — variante/quant a instalar no primeiro start
+#   FAMILY  — família/versão do modelo no HF ("qwen" = tag vazia; "swift" =
+#             fine-tune Swift 1.5; "coder" = variante Coder, metade dos experts,
+#             cabe em 32 GB de RAM)
+#   MODEL   — size/quant a instalar no primeiro start (`Q2_0`…`IQ1_M`; a família
+#             `coder` só tem a size `IQ1_M` — é o `setup.py` que valida
+#             `--model` contra as sizes do dict `MODELS`, não contra famílias)
 #   CONTEXT — contexto alvo em tokens
 # Outras env do entrypoint (VISION, KV, GPU/GPUS, LOW_RAM, API_KEY, GGUF_DIR,
 # RESIDENT_BUDGET_GIB, KV_STREAMING, CONFIG) seguem com os defaults upstream.
@@ -52,7 +56,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     STRATA_EXECV=1 \
     FAMILY=coder \
-    MODEL=coder \
+    MODEL=IQ1_M \
     CONTEXT=65536
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -92,7 +96,7 @@ RUN python3 -m venv .venv \
 # nada (python lê stdin vazio e sai 0) e a imagem saía SEM a engine.
 COPY build-engine.py .
 
-RUN .venv/bin/python build-engine.py
+RUN .venv/bin/python build-engine.py && rm -f build-engine.py
 
 # as árvores cmake são só de build; a engine compilada é o que o container usa
 RUN rm -rf build build-vision

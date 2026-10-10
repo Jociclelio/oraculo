@@ -339,12 +339,13 @@ models:
     ttl: 300
 
   # ---------------------------------------------------------------------
-  # Strata (Qwen3.8-Flash-Next) — DESABILITADA (modelo ~70 GB não baixado).
+  # Strata (Qwen3.8-Flash-Next) — DESABILITADA (modelo ~58 GB não baixado).
   # Infra em strata/ (Dockerfile adaptado do upstream + strata/README.md com
-  # os passos de instalação futura: RAM 31 GB p/ a variante Coder, modelo em
-  # /home — NVMe). Env MODEL/FAMILY/CONTEXT são lidas pelo docker-entrypoint.sh
-  # da imagem no primeiro start (defaults no Dockerfile); aqui explícitas.
-  # Para ativar: instalar conforme strata/README.md e descomentar a entry.
+  # os passos de instalação futura: RAM 31 GB p/ a variante Coder (IQ1_M),
+  # modelo em /home — NVMe). Env MODEL/FAMILY/CONTEXT são lidas pelo
+  # docker-entrypoint.sh da imagem no primeiro start (defaults no Dockerfile);
+  # aqui explícitas. Para ativar: instalar conforme strata/README.md e
+  # descomentar a entry.
   # ---------------------------------------------------------------------
   # Strata:
   #   cmd: |
@@ -352,7 +353,7 @@ models:
   #     -p 127.0.0.1:${PORT}:8080
   #     --ulimit memlock=-1
   #     -v /home/jocic/strata-data:/data
-  #     -e MODEL=coder -e FAMILY=coder -e CONTEXT=65536
+  #     -e MODEL=IQ1_M -e FAMILY=coder -e CONTEXT=65536
   #     strata:latest
   #   cmdStop: docker rm -f ls-${MODEL_ID}
   #   ttl: 300
