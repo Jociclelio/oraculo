@@ -36,7 +36,7 @@ load/unload manual — apontar o request para outro `model` faz o swap
 ## Arquitetura
 
 - **`llama-swap/config.yaml` é a FONTE DA VERDADE** dos parâmetros de cada
-  modelo (30 entries: 27 carregáveis = 23 stock + 2 Bonsai + 1 Xing + 1
+  modelo (32 entries: 29 carregáveis = 25 stock + 2 Bonsai + 1 Xing + 1
   Strata). `models/models.ini` é HISTÓRICO desativado — nada o lê.
   **Convenção de contexto** (VRAM validada por carga real, display idle):
   entry SEM sufixo = **64k** (floor); `_XXk` = contexto maior validado;
@@ -116,7 +116,9 @@ load/unload manual — apontar o request para outro `model` faz o swap
 | `Gemma4_12B_Agentic` | stock | 65536 | agentic fable5/tau2, denso 100% VRAM (7,4 GB); **~24 tok/s, prefill 8 ms/tok** — worker de workflows |
 | `Mellum2.1_12B_A2.5B` | stock | 65536 | JetBrains código thinking, MoE cabe inteiro (8,1 GB); **~90 tok/s** |
 | `LFM2.5_8B_A1B_Hermes` | stock | 65536 | Hermes agentic, MoE cabe inteiro (5,2 GB); **~129 tok/s** — smoke tests |
-| `Saluki27B_Qwen3.8_32k` | stock | 32768 | Qwen3.8-27B build 2-bit (Underdog/Kujira + head MTP), denso 100% VRAM (8,35 GB); best tool-calling (Underdog Bench 88/120, SWE-bench 30/50); **~31 tok/s, aceitação ~76%**; ctx máx 32K (64K estoura 12 GB) — UNICA entry abaixo do floor de 64k; ub1024: VRAM 11371 MiB, prefill ~429 tok/s (ub2048 não ajuda, VRAM 11823 apertado) |
+| `Saluki27B_Qwen3.8_32k` | stock | 32768 | Qwen3.8-27B build 2-bit (Underdog/Kujira + head MTP), denso 100% VRAM (8,35 GB); best tool-calling (Underdog Bench 88/120, SWE-bench 30/50); **~31 tok/s, aceitação ~76%**; ctx máx 32K (64K estoura 12 GB) — entry abaixo do floor de 64k; ub1024: VRAM 11371 MiB, prefill ~429 tok/s (ub2048 não ajuda, VRAM 11823 apertado) |
+| `Qwen3.8_35B_Distill` | stock | 65536 | Qwen3.8-35B-A3B-Distill Q4_K_M (empero-ai; GGUF no repo `-GGUF`, o sem sufixo só tem safetensors); arch qwen35moe idêntica ao Qwen3.6, MTP embutido (nextn=1); ncmoe 28 + `--load-mode none` + ub2048; **~35 tok/s, prefill ~900 tok/s, aceitação ~0,62**; VRAM 10839 MiB |
+| `Qwen3.8_27B_GSQ_IQ2_XS_32k` | stock | 32768 | Qwen3.8-27B GSQ-RCO IQ2_XS `-mtp` (ISTA; não-uniforme 2,50 bpw IQ1_M..Q6_K, híbrido qwen35 GDN); ctx máx 32K (KV híbrido ~32 KiB/tok; 64K estoura); **~31 tok/s, aceitação ~0,70**, prefill ~433 tok/s; VRAM 11539 MiB (apertado) |
 | `Qwen3.6_35B_General` | stock | 65536 | thinking + head MTP; ncmoe 32; ub2048; aceitação ~82-93% |
 | `Qwen3.6_35B_Code` | stock | 65536 | thinking + head MTP; ncmoe 28; **~27 tok/s, aceitação 93%** — MoE híbrido padrão; **ub2048: prefill ~890 tok/s (era ~400), VRAM ~11,5 GB** |
 | `Qwen3.6_35B_It_General` / `_It_Reasoning` | stock | 65536 | Instruct (sem/temp thinking); ncmoe 32; ub2048 |
@@ -134,8 +136,10 @@ load/unload manual — apontar o request para outro `model` faz o swap
 | `Qwen3.6_35B_General_96k` / `_Code_96k` / `_It_General_96k` / `_It_Reasoning_96k` / `_A3B_Hauhau_Aggressive_96k` | stock | 98304 | ub1024 (ub2048 não cabe c/ 96k); Code c/ ncmoe 28: 11577 MiB validado (apertado); demais ncmoe 32 — só com display idle |
 
 Relevância para servir (uso agêntico/opencode): **alta** = Gemma4_12B_Agentic,
-Qwen3.6_35B_Code/General, Saluki27B, bonsai-27b, Gemma4_12B; **média** =
-LFM/Mellum, Xing, Ornith 35B, Hauhau, bonsai-pq2_0, It_*, Strata (coder forte
+Qwen3.6_35B_Code/General, Qwen3.8_35B_Distill, Saluki27B, bonsai-27b,
+Gemma4_12B; **média** =
+LFM/Mellum, Xing, Ornith 35B, Hauhau, bonsai-pq2_0, It_*, Qwen3.8_27B_GSQ,
+Strata (coder forte
 mas prefill ~8 tok/s); **baixa** = Ornith 9B (×2).
 
 ---

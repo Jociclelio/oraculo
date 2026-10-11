@@ -423,6 +423,50 @@ models:
     cmdStop: ${docker-stop}
     ttl: 300
 
+  # ---------------------------------------------------------------------
+  # Qwen3.8-35B-A3B Distill (empero-ai) — destilado dos frontier Qwen3.8 na
+  # arquitetura Qwen3.6-35B-A3B (qwen35moe: 41 camadas, 256 experts, 8 ativos,
+  # Gated DeltaNet + full attention a cada 4; ctx nativo 262144). GGUF oficial
+  # em empero-ai/Qwen3.8-35B-A3B-Distill-GGUF (o repo sem sufixo -GGUF só tem
+  # safetensors). Q4_K_M 21,7 GB com head MTP embutido (nextn_predict_layers=1
+  # — validado no header) → draft-mtp self-draft, mesma receita do Qwen3.6.
+  # MoE híbrido: --load-mode none + -ncmoe (regra 2) + -ub 2048 (regra 7).
+  # Sampling do model card: temp 0.6 / top-p 0.95 / top-k 20 (reasoning).
+  # ---------------------------------------------------------------------
+  Qwen3.8_35B_Distill:
+    cmd: |
+      ${docker-stock}
+      -m /models/Qwen3.8-35B-A3B-Distill-Q4_K_M/Qwen3.8-35B-A3B-Q4_K_M.gguf
+      --load-mode none
+      --spec-type draft-mtp --spec-draft-n-max 2
+      -c 65536 -ngl 99 -ncmoe 28
+      -b 4096 -ub 2048
+      --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
+      --presence-penalty 0.0 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Qwen3.8-27B GSQ-RCO IQ2_XS (ISTA-DASLab) — quantização não-uniforme
+  # (GSQ+RCO, 2,50 bpw, mix IQ1_M..Q6_K) do Qwen3.8-27B híbrido (arch qwen35:
+  # 65 camadas, Gated DeltaNet + full attention a cada 4, 4 KV heads × 256;
+  # ctx nativo 262144). Variante -mtp (head nextn embutido → draft-mtp).
+  # 8,77 GB; denso o suficiente p/ 100% VRAM, mas KV híbrido ~32 KiB/tok em
+  # q8_0 → 64K estoura 12 GB (mesmo limite do Saluki) — entry _32k.
+  # IQ2_XS: AIME25 96,67 vs 100 do BF16 (GSQ-RCO supera UD-IQ2_S no mesmo
+  # tamanho). Sampling Qwen thinking: temp 0.6 / top-p 0.95.
+  # ---------------------------------------------------------------------
+  Qwen3.8_27B_GSQ_IQ2_XS_32k:
+    cmd: |
+      ${docker-stock}
+      -m /models/Qwen3.8-27B-GSQ-RCO-IQ2_XS/Qwen3.8-27B-GSQ-RCO-IQ2_XS-mtp.gguf
+      --spec-type draft-mtp --spec-draft-n-max 2
+      -c 32768 -ngl 99
+      -b 4096 -ub 1024
+      --temp 0.6 --top-p 0.95
+    cmdStop: ${docker-stop}
+    ttl: 300
+
   # =====================================================================
   # VARIANTES DE CONTEXTO LONGO (_XXk) — ver convenção no topo do arquivo.
   # ctx validado por carga real; variante _96k/_128k só existe onde couber
