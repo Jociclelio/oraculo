@@ -88,10 +88,21 @@ load/unload manual — apontar o request para outro `model` faz o swap
    aceitação do draft** (0,46-0,48 em temp 0.0/0.6/1.0 — hipótese refutada);
    o que afeta é `--spec-draft-n-max`: sweet spot 3-4, acima de 6 a
    aceitação por draft colapsa e o tok/s cai (~60% do pico em n=8).
-6. Open WebUI: `WEBSEARCH_ENGINE`, `SEARXNG_QUERY_URL` e
-   `TERMINAL_SERVER_CONNECTIONS` são persistidos no `webui.db` na primeira
-   inicialização — **o banco tem precedência sobre o env** depois disso.
-   SearXNG precisa de `formats: [html, json]` no `searxng/settings.yml`.
+ 6. Open WebUI: `WEBSEARCH_ENGINE`, `SEARXNG_QUERY_URL` e
+    `TERMINAL_SERVER_CONNECTIONS` são persistidos no `webui.db` na primeira
+    inicialização — **o banco tem precedência sobre o env** depois disso.
+    SearXNG precisa de `formats: [html, json]` no `searxng/settings.yml`.
+ 7. **Prefill de MoE com experts na CPU é dominado por streaming de pesos —
+    `-ub 2048` dobra o prefill.** Medido 2026-10-11 (Qwen3.6_35B_Code, prompt
+    5,6k tok, display idle): ub512→400 tok/s; ub1024→594; ub2048→865-909
+    (VRAM +~650 MiB → 11,4-11,5 GB); ub4096 NÃO cabe (compute buffer estoura;
+    `common_fit_params ... abort` com `-ngl 99`). Decode inalterado (~26-28
+    tok/s, aceitação MTP idêntica). `-b 8192` não ajuda (820 < 908). Aplicado:
+    `-ub 2048` nas entries Qwen3.6 64k + Ornith1.5_35B; `-ub 1024`
+    nas `_96k`, Xing e Saluki (folga de VRAM). Motivo: com `-ncmoe`, cada
+    ubatch relê os pesos dos experts na RAM; ubatch maior amortiza o custo.
+    Nota: KV do Qwen3.6 é pequeno (só 10/41 camadas têm KV; 2 heads × 256 →
+    ~10,6 KiB/tok em q8_0) — o gargalo é FFN de experts, não attention.
 
 ---
 
@@ -105,22 +116,22 @@ load/unload manual — apontar o request para outro `model` faz o swap
 | `Gemma4_12B_Agentic` | stock | 65536 | agentic fable5/tau2, denso 100% VRAM (7,4 GB); **~24 tok/s, prefill 8 ms/tok** — worker de workflows |
 | `Mellum2.1_12B_A2.5B` | stock | 65536 | JetBrains código thinking, MoE cabe inteiro (8,1 GB); **~90 tok/s** |
 | `LFM2.5_8B_A1B_Hermes` | stock | 65536 | Hermes agentic, MoE cabe inteiro (5,2 GB); **~129 tok/s** — smoke tests |
-| `Saluki27B_Qwen3.8_32k` | stock | 32768 | Qwen3.8-27B build 2-bit (Underdog/Kujira + head MTP), denso 100% VRAM (8,35 GB); best tool-calling (Underdog Bench 88/120, SWE-bench 30/50); **~31 tok/s, aceitação ~76%**; ctx máx 32K (64K estoura 12 GB) — UNICA entry abaixo do floor de 64k |
-| `Qwen3.6_35B_General` | stock | 65536 | thinking + head MTP; ncmoe 32; aceitação ~82-93% |
-| `Qwen3.6_35B_Code` | stock | 65536 | thinking + head MTP; ncmoe 28; **~27 tok/s, aceitação 93%** — MoE híbrido padrão |
-| `Qwen3.6_35B_It_General` / `_It_Reasoning` | stock | 65536 | Instruct (sem/temp thinking); ncmoe 32 |
-| `Qwen3.6_35B_A3B_Hauhau_Aggressive` | stock | 65536 | Uncensored Aggressive, multimodal; ncmoe 32 |
+| `Saluki27B_Qwen3.8_32k` | stock | 32768 | Qwen3.8-27B build 2-bit (Underdog/Kujira + head MTP), denso 100% VRAM (8,35 GB); best tool-calling (Underdog Bench 88/120, SWE-bench 30/50); **~31 tok/s, aceitação ~76%**; ctx máx 32K (64K estoura 12 GB) — UNICA entry abaixo do floor de 64k; ub1024: VRAM 11371 MiB, prefill ~429 tok/s (ub2048 não ajuda, VRAM 11823 apertado) |
+| `Qwen3.6_35B_General` | stock | 65536 | thinking + head MTP; ncmoe 32; ub2048; aceitação ~82-93% |
+| `Qwen3.6_35B_Code` | stock | 65536 | thinking + head MTP; ncmoe 28; **~27 tok/s, aceitação 93%** — MoE híbrido padrão; **ub2048: prefill ~890 tok/s (era ~400), VRAM ~11,5 GB** |
+| `Qwen3.6_35B_It_General` / `_It_Reasoning` | stock | 65536 | Instruct (sem/temp thinking); ncmoe 32; ub2048 |
+| `Qwen3.6_35B_A3B_Hauhau_Aggressive` | stock | 65536 | Uncensored Aggressive, multimodal; ncmoe 32; ub2048 + `--load-mode none` (faltava — regra 2) |
 | `Ornith1.5_9B_MTP` / `_9B_DFlash` | stock | 65536 | aceitação baixa (~0,40-0,42) — candidatos a remoção |
-| `Ornith1.5_35B_MTP` | stock | 65536 | agêntico (APEX Compact), ncmoe 28, aceitação ~0,80 |
+| `Ornith1.5_35B_MTP` | stock | 65536 | agêntico (APEX Compact), ncmoe 28 + `--load-mode none` (faltava — regra 2); ub2048: prefill ~990 tok/s, VRAM 9849 MiB, aceitação ~0,80 |
 | `bonsai-27b` | PrismML | 65536 | PTQ1_0 + mmproj (visão validada); 24,5 tok/s, VRAM 10657/12288 total |
 | `bonsai-27b-pq2_0` | PrismML | 65536 | PQ2_0, mais rápido em Ampere, sem visão |
-| `Xing4.0_29B_A4B` | Xing | 65536 | MoE 29B/4B + MLA + mHC; `--load-mode none` + ncmoe 24; ~12,5 tok/s |
+| `Xing4.0_29B_A4B` | Xing | 65536 | MoE 29B/4B + MLA + mHC; `--load-mode none` + ncmoe 24; ub1024: prefill ~543 tok/s, VRAM 11177 MiB; ~12,5 tok/s |
 | `Strata` | Strata | 65536 | Qwen3.8-Flash-Next Coder IQ1_M (engine Niko1221/Strata); pesos+pack em `/home/jocic/strata-data` (~86 GB NVMe), **~30 GB RAM travados** — nunca junto de outro modelo (swap obrigatório); carga 1-3 min; **~10 tok/s decode, prefill ~8 tok/s** (gargalo), MTP aceite ~68% |
 | **Variantes _XXk** | | | |
 | `Gemma4_12B_128k` / `_MTP_128k` / `_Hauhau_128k` / `_Agentic_128k` | stock | 131072 | Gemma 4 12B @ 128K validada: 9487 MiB c/ mmproj (MTP: dentro do máx 192K) |
 | `LFM2.5_8B_A1B_Hermes_128k` | stock | 131072 | 7063 MiB validado |
 | `Ornith1.5_9B_MTP_128k` | stock | 131072 | 9475 MiB validado |
-| `Qwen3.6_35B_General_96k` / `_Code_96k` / `_It_General_96k` / `_It_Reasoning_96k` / `_A3B_Hauhau_Aggressive_96k` | stock | 98304 | Code c/ ncmoe 28: 11128 MiB validado (apertado); demais ncmoe 32 — só com display idle |
+| `Qwen3.6_35B_General_96k` / `_Code_96k` / `_It_General_96k` / `_It_Reasoning_96k` / `_A3B_Hauhau_Aggressive_96k` | stock | 98304 | ub1024 (ub2048 não cabe c/ 96k); Code c/ ncmoe 28: 11577 MiB validado (apertado); demais ncmoe 32 — só com display idle |
 
 Relevância para servir (uso agêntico/opencode): **alta** = Gemma4_12B_Agentic,
 Qwen3.6_35B_Code/General, Saluki27B, bonsai-27b, Gemma4_12B; **média** =
@@ -153,6 +164,18 @@ socket). Detalhes: `DOCKER.md`.
   ocupando VRAM → OOM de compute buffer); senão, retry ou restart (flake
   conhecido).
 - **Decode absurdamente lento em MoE**: falta `--load-mode none` (regra 2).
+- **Swap "lento" entre modelos**: o container NÃO é o gargalo — medido
+  2026-10-11 (GPU idle): Docker kill→create→start ~0,7 s; `docker run` →
+  health com GGUF na page cache 2,4 s; swap Gemma↔LFM com cache quente 3,7 s;
+  com GGUF frio 10–30 s. O custo real é recarregar pesos com a page cache
+  fria: 31 GiB de RAM não seguram o cache quando Qwen3.6 (22 GB,
+  `--load-mode none`) e Strata (~30 GB travados) rodam — depois deles todo
+  swap vira leitura fria do NVMe. O llama-swap v263 NÃO reusa container
+  entre entries (o multi-model nativo do llama-server `/models/load` foi
+  removido do binário; `groups`/`matrix` só orquestram processos
+  concorrentes). Alavanca disponível se um dia valer a pena:
+  `filters.setParamsByID` funde variants que diferem só em sampling num
+  único entry (mesmo processo, zero swap) — não aplicada.
 - **YAML inválido**: `./manage.sh restart` morre na inicialização — o erro
   aparece no fim de `logs/llama-swap.log` (ex.: chave duplicada no entry).
 - **Storage**: `du -sh models/*/` — SSD 220 GB; GGUFs órfãos (sem entry no
