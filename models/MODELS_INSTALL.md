@@ -25,6 +25,8 @@ models/
 │   ├── Ternary-Bonsai-2-27B-PTQ1_0.gguf
 │   ├── Ternary-Bonsai-2-27B-PQ2_0.gguf
 │   └── Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf
+├── Xing4.0-29B-A4B-Q4_K_M/             # Xing4.0 (ver seção própria abaixo)
+│   └── Xing4.0-29B-A4B-Q4_K_M.gguf
 └── ...
 ```
 
@@ -73,8 +75,9 @@ hf download usuario/modelo arquivo.gguf --local-dir models/NOME_DO_MODELO
 ### 4. Criar a Entry no llama-swap/config.yaml
 
 Adicione uma entry em [`llama-swap/config.yaml`](../llama-swap/config.yaml)
-usando uma das macros — `docker-stock` (llama.cpp oficial) ou
-`docker-prismml` (fork PrismML, obrigatório para Bonsai):
+usando uma das macros — `docker-stock` (llama.cpp oficial),
+`docker-prismml` (fork PrismML, obrigatório para Bonsai) ou `docker-xing`
+(fork shuxiaoqiong, obrigatório para Xing4.0):
 
 ```yaml
   NOME_DO_MODELO:
@@ -136,6 +139,42 @@ instalação nova.
 
 ---
 
+## Xing4.0 29B-A4B (engine dedicada — fork shuxiaoqiong)
+
+GGUF Q4_K_M do **Xing4.0-29B-A4B** (China Telecom AI, sucessor do TeleChat —
+MoE 29B/4B ativo, MLA + mHC hyper-connections + MTP head, contexto nativo
+256K). Origem: `Venastine-Research/Xing4.0-29B-A4B-GGUF`:
+
+```bash
+hf download Venastine-Research/Xing4.0-29B-A4B-GGUF \
+  Xing4.0-29B-A4B-Q4_K_M.gguf \
+  --local-dir models/Xing4.0-29B-A4B-Q4_K_M
+```
+
+| Arquivo | Tamanho | Uso |
+|---------|---------|-----|
+| `Xing4.0-29B-A4B-Q4_K_M.gguf` | ~19 GB | entry `Xing4.0_29B_A4B` |
+
+> ⚠️ **Regra dura — nunca engine stock**: a arquitetura `xing4_0` **não está
+> no llama.cpp upstream** (PR ggml-org#29012, aberto/não mergeado). A imagem
+> stock recusa o GGUF. As entries usam a imagem local
+> `llama.cpp-xing:latest` — build em `engines/llama.cpp-xing/` a partir do
+> fork `shuxiaoqiong/llama.cpp` (branch `xing4_0-port`), pinado no commit
+> `8c379195a` (HEAD do PR). Se a imagem não existir, construa:
+> `./engines/llama.cpp-xing/build.sh`. Fingerprint em runtime:
+> `system_fingerprint: "b1-8c37919"`.
+
+> ⚠️ **`--load-mode none` é obrigatório** nesta entry: com mmap + overrides
+> de tensor para CPU (`-ncmoe`), o desempenho desaba (medido: 1,2 tok/s);
+> sem mmap: ~12,5 tok/s (RTX 3060 12GB, ncmoe 24, ctx 49152, VRAM
+> 10570/12288 MiB).
+
+> **MTP draft**: o repo só publica arquivos `-MTP` nas quantizações IQ3
+> (não há Q4_K_M-MTP) — a entry não usa speculative decoding; os tensors
+> `nextn` embutidos no GGUF são ignorados pelo loader.
+
+---
+
 ## Strata (Qwen3.8-Flash-Next) — não baixado
 
 O modelo **Strata não foi baixado** (~58 GB na variante Coder IQ1_M; decisão
@@ -168,7 +207,7 @@ Os parâmetros de cada entry vivem comentados no
 | `-b` / `-ub` | Batch / micro-batch | `4096` / `256-512` | `batch-size`/`ubatch-size` |
 
 Flags globais (flash-attn, jinja, `-np 1`, KV q8_0, cache-reuse/ram,
-threads) já vêm nas macros `docker-stock`/`docker-prismml`.
+threads) já vêm nas macros `docker-stock`/`docker-prismml`/`docker-xing`.
 
 ---
 
@@ -197,8 +236,15 @@ Modelos MoE (ex: Qwen 35B-A3B) usam `-ncmoe` para distribuir experts na CPU:
 
 ```yaml
       -m /models/NOME/modelo.gguf
+      --load-mode none
       -c 49152 -ngl 99 -ncmoe 28
 ```
+
+> ⚠️ **`--load-mode none` é praticamente obrigatório em entries MoE com
+> `-ncmoe`**: com mmap + overrides de tensor para CPU, o desempenho desaba
+> silenciosamente (medido: Qwen3.6 35B MTP de 1,3 → 27-33 tok/s; Xing4.0 de
+> 1,2 → 12,5 tok/s). O loader avisa no log do container:
+> `tensor overrides to CPU are used with mmap enabled`.
 
 ---
 

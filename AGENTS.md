@@ -1,456 +1,143 @@
-# oraculo
+# oraculo — instruções para agentes
 
-Servidor local de LLMs com **llama-swap** (proxy multi-engine sobre
-containers efêmeros de **llama.cpp** em GPU) e interface **Open WebUI**.
-Expondo:
+Servidor local de LLMs: **llama-swap** (proxy multi-engine em `127.0.0.1:8081`,
+sobe um container Docker efêmero de llama.cpp por modelo sob demanda) +
+**Open WebUI** (`:8080`) + Open Terminal (`:8000`), SearXNG (`:8888`), OpenWa
+(`:2785`). Hardware alvo: **RTX 3060 12 GB** (GPU **compartilhada** com o
+desktop pessoal) + 32 GB RAM + NVMe.
 
-- **API OpenAI-compatible** (proxy llama-swap) → porta `8081`
-- **Open WebUI** → porta `8080`
-- **Open Terminal** (execução agêntica) → porta `8000`
-- **SearXNG** (busca web privada) → porta `8888`
-- **OpenWa** (gateway WhatsApp + MCP) → porta `2785`
-
----
-
-## Documentação do Repositório
-
-**Qualquer mudança no repositório deve ser descrita e atualizada nos arquivos de documentação correspondentes.**
-
-- Alterações no `docker-compose.yml` → atualizar `DOCKER.md`
-- Alterações no `llama-swap/config.yaml` ou modelos → atualizar `AGENTS.md`
-- Alterações no `manage.sh` ou fluxo de uso → atualizar `README.md`
-- Novos requisitos de hardware/software → atualizar `README.md`
-
-Mantenha a documentação sincronizada com o código. Documentação desatualizada gera confusão e perda de conhecimento.
+**Regra do repo**: toda mudança deve ser refletida na documentação —
+`docker-compose.yml` → `DOCKER.md`; `llama-swap/config.yaml` ou modelos →
+`AGENTS.md`; `manage.sh`/fluxo de uso → `README.md`; requisitos → `README.md`.
 
 ---
 
-## Estrutura do Repositório
-
-```
-oraculo/
-├── docker-compose.yml          # Serviços auxiliares (sem o antigo llama-cpp)
-├── manage.sh                   # Gerenciamento do llama-swap (start|stop|restart|status)
-├── .env                        # Variáveis de ambiente
-│
-├── bin/llama-swap              # Binário do proxy (release; gitignored)
-├── logs/                       # llama-swap.log + pidfile (gitignored)
-├── llama-swap/
-│   ├── install.sh              # Instala a última release em bin/
-│   └── config.yaml             # Entries dos modelos — FONTE DA VERDADE dos parâmetros
-│
-├── engines/llama.cpp-prismml/  # Engine Docker dedicada do fork PrismML (Bonsai 2)
-│   ├── Dockerfile              # clone do branch `prism` em commit pinado + build CUDA sm_86
-│   └── build.sh
-│
-├── strata/                     # Infra Strata/Qwen3.8-Flash-Next (entry comentada no config)
-│   ├── Dockerfile
-│   ├── build-engine.py
-│   └── README.md               # Passos de instalação futura do modelo (~58 GB)
-│
-├── searxng/
-│   └── settings.yml            # Config do SearXNG (formats json p/ Open WebUI)
-│
-├── models/
-│   ├── models.ini              # HISTÓRICO (desativado) — parâmetros migraram p/ config.yaml
-│   ├── MODELS_INSTALL.md       # Guia de instalação de modelos
-│   └── .../
-│
-├── DOCKER.md                   # Documentação Docker detalhada
-└── README.md                   # Guia rápido de uso
-```
-
----
-
-## llama-swap — serving multi-engine (processo de host)
-
-O serving não é mais o container fixo `llama-cpp` do compose: é o
-**[llama-swap](https://github.com/mostlygeek/llama-swap)** rodando no host,
-subindo **um container Docker efêmero por modelo** sob demanda.
-
-| Item            | Valor                                                            |
-|-----------------|------------------------------------------------------------------|
-| **Binário**     | `bin/llama-swap` (release v263; instalar com `./llama-swap/install.sh`) |
-| **Escuta**      | `127.0.0.1:8081` (flag `-listen`; WebUI inalterada)              |
-| **Config**      | `llama-swap/config.yaml` — macros `docker-stock`/`docker-prismml` + 17 entries |
-| **Swap**        | 1 modelo carregado por vez; pedir outro descarrega o anterior (`cmdStop: docker rm -f ls-<Modelo>`) |
-| **TTL**         | `ttl: 300` por entry — descarrega após 5 min ocioso (substitui o `sleep-idle-seconds` do models.ini) |
-| **healthCheckTimeout** | `300` s — cobre carga a frio de GGUFs MoE de ~21 GB do NVMe |
-| **Containers**  | `--rm`, nome fixo `ls-<Modelo>`, porta pública só loopback `127.0.0.1:${PORT}` (tipicamente `:58xx`) |
-| **Monte**       | `./models:/models` (mesmo do antigo serviço)                      |
-| **Log/pidfile** | `logs/llama-swap.log`, `logs/llama-swap.pid`                      |
-
-> **Posicionamento (plano llama-swap-multi-engine)**: stack para **1 usuário
-> por vez**. Todas as entries usam `-np 1`; `np>1` só como exceção pontual
-> para modelos pequenos (exemplo comentado no fim do config.yaml). Meta de
-> prefill/decode razoável com **contexto ≥ 64k** (128k quando VRAM e prefill
-> permitirem).
-
-### Engines
-
-| Engine | Imagem | Entradas |
-|--------|--------|----------|
-| **stock** | `ghcr.io/ggml-org/llama.cpp:full-cuda` (macro `docker-stock`, `--entrypoint /app/llama-server`) | 15 entries clássicas (Gemma/Qwen/Ornith/PE) |
-| **PrismML (fork)** | `llama.cpp-prismml:latest` — build local via `engines/llama.cpp-prismml/build.sh` (macro `docker-prismml`, `--entrypoint /usr/local/bin/llama-server`) | `bonsai-27b`, `bonsai-27b-pq2_0` |
-| **Strata** | `strata:latest` (infra em `strata/`) | entry **comentada** — modelo não baixado |
-
-### Engine Bonsai dedicada — regra **nunca stock**
-
-Os GGUFs **Bonsai 2** (ternários PTQ1_0/PQ2_0) exigem o fork
-**PrismML-Eng/llama.cpp** (branch `prism`): kernels ternários + Hadamard em
-runtime são **exclusivos do fork**. A imagem stock **recusa** PTQ1_0/PQ2_0 ou
-carrega como `Q2_0` legacy gerando lixo — por isso a engine é uma imagem
-Docker dedicada construída no repo (`engines/llama.cpp-prismml/`), com o
-fork **pinado** no commit `84445367f`
-(`84445367fbaf79c00ff64bc93a0689cdb3eee54d`; o build falha se HEAD ≠ pin).
-Confirmado em runtime: `system_fingerprint: "b1-8444536"` nos responses do
-Bonsai. **Nunca** servir Bonsai com a imagem stock.
-
-### Strata (Qwen3.8-Flash-Next) — infra preparada, entry desabilitada
-
-`strata/` contém Dockerfile (upstream pinado), `build-engine.py` e
-`README.md` com os passos de instalação futura. O modelo **não foi baixado**
-(~58 GB na variante Coder IQ1_M; RAM 31 GB → única variante que cabe nos
-32 GB da máquina). A entry `Strata:` permanece **comentada** no
-`llama-swap/config.yaml` (`MODEL=IQ1_M`, `FAMILY=coder`, `CONTEXT=65536`);
-para ativar: seguir `strata/README.md` e descomentar.
-
----
-
-## docker-compose.yml
-
-Define **cinco serviços**: open-webui (interface web), open-terminal
-(execução agêntica), searxng (busca web) e openwa + openwa-docker-proxy
-(WhatsApp/MCP). O antigo serviço `llama-cpp` (e o mount do `models.ini`)
-foram **removidos** — o serving passou a ser o llama-swap, processo de host
-fora do compose:
-
-> **Decisão de design — hardware compartilhado**: a GPU é a mesma da máquina de uso pessoal. O stack é **request-driven** (modelo carrega sob demanda, descarrega após 5 min ocioso — `ttl: 300` do llama-swap) e **deliberadamente não-autônomo** — sem agentes/workflows em background que possam requerer VRAM sem supervisão. Ver seção "Decisões de Projeto" no `README.md`.
-
-### Serviço `open-webui` — Interface Web
-
-| Item          | Valor                                              |
-|---------------|-----------------------------------------------------|
-| **Imagem**    | `ghcr.io/open-webui/open-webui:main`              |
-| **Container** | `open-webui`                                       |
-| **Porta**     | `8080` (network_mode: host)                        |
-| **Rede**      | `host`                                             |
-| **Volumes**   | `open-webui-data → /app/backend/data`              |
-| **Env**       | `OAI_API_BASE`, `WEBSEARCH_ENGINE`, `SEARXNG_QUERY_URL`, `TERMINAL_SERVER_CONNECTIONS` |
-
-Interface web para interagir com os LLMs via navegador. Configurada para conectar ao proxy llama-swap automaticamente.
-
-| Variável                  | Valor                                        | Descrição                                  |
-|---------------------------|----------------------------------------------|--------------------------------------------|
-| `OAI_API_BASE`            | `http://localhost:8081/v1`                   | API do proxy llama-swap                    |
-| `WEBUI_SECRET_KEY`        | (gerado)                                     | Persistência de tokens OAuth/MCP           |
-| `WEBSEARCH_ENGINE`        | `searxng`                                    | Motor de busca web nativo                  |
-| `SEARXNG_QUERY_URL`       | `http://localhost:8888/search?q=<query>`     | Endpoint do SearXNG                        |
-| `TERMINAL_SERVER_CONNECTIONS` | (JSON) `oraculo-terminal` @ `:8000`      | Conexão pré-configurada com o Open Terminal |
-
-> **Importante**: `WEBUI_SECRET_KEY` é obrigatório em setups Docker. Sem ele, ferramentas MCP conectadas via OAuth não persistem tokens entre reinicializações.
-
-> ⚠️ **ConfigVar**: `WEBSEARCH_ENGINE`, `SEARXNG_QUERY_URL` e `TERMINAL_SERVER_CONNECTIONS` são persistidos no `webui.db` na primeira inicialização — após isso, o **banco tem precedência sobre o env**. Para alterar: UI admin ou edição direta do `webui.db`.
-
-### Serviço `open-terminal` — Execução Agêntica
-
-| Item          | Valor                                              |
-|---------------|-----------------------------------------------------|
-| **Imagem**    | `ghcr.io/open-webui/open-terminal`                |
-| **Container** | `open-terminal`                                    |
-| **Porta**     | `127.0.0.1:8000` (somente localhost)               |
-| **Volumes**   | `open-terminal-data → /home/user`                  |
-| **Env**       | `OPEN_TERMINAL_API_KEY`                            |
-
-Substrato de execução (shell, filesystem, código) para o agente do Open WebUI. Conexão pré-configurada como **"Oraculo Terminal"**. Requer modelo com **Function Calling = Native**.
-
-### Serviço `searxng` — Busca Web
-
-| Item          | Valor                                              |
-|---------------|-----------------------------------------------------|
-| **Imagem**    | `searxng/searxng`                                  |
-| **Container** | `searxng`                                          |
-| **Porta**     | `127.0.0.1:8888` (somente localhost)               |
-| **Volumes**   | `./searxng/settings.yml → /etc/searxng/settings.yml` |
-
-Metabuscador privado usado como motor de busca web do Open WebUI. O `settings.yml` habilita `formats: [html, json]` — **o JSON é obrigatório** para a integração.
-
-### Serviços `openwa` + `openwa-docker-proxy` — WhatsApp/MCP
-
-| Item          | openwa                                             | openwa-docker-proxy                        |
-|---------------|-----------------------------------------------------|--------------------------------------------|
-| **Imagem**    | `ghcr.io/rmyndharis/openwa:main`                  | `tecnativa/docker-socket-proxy:v0.4.2`     |
-| **Porta**     | `127.0.0.1:2785`                                   | — (rede interna)                           |
-| **Volumes**   | `openwa-data`, `openwa-sessions`                   | Docker socket (read-only, ops mínimas)     |
-| **Redes**     | `openwa-network`, `openwa-internal`                | `openwa-network`, `openwa-internal`        |
-
-Gateway WhatsApp com MCP Streamable HTTP em `http://localhost:2785/mcp`. Autenticação via `X-API-Key`/`Bearer` — key gerada na primeira inicialização, salva em `openwa-data/.api-key`. O proxy é o único container do compose com acesso ao Docker socket.
-
-> O openwa também está conectado ao Open WebUI como **tool server MCP** (persistido em `tool_server.connections` no `webui.db`).
-
----
-
-## manage.sh
-
-Script de gerenciamento via CLI — **reescrito** para o llama-swap (substitui
-o antigo ciclo `docker compose` do serviço `llama-cpp`).
-
-### Uso
+## Comandos essenciais
 
 ```bash
-./manage.sh start               # Inicia o llama-swap em background (porta 8081)
-./manage.sh stop                # Encerra o llama-swap via pidfile
-./manage.sh restart             # Para e inicia novamente
-./manage.sh status              # Mostra se está rodando
+./manage.sh start|stop|restart|status   # llama-swap (processo de HOST, fora do compose)
+docker compose ps                       # serviços auxiliares (webui, terminal, searxng, openwa)
+tail -f logs/llama-swap.log             # log do proxy (swap, health checks)
+docker logs ls-<Modelo>                 # log do container do modelo carregado
+
+# Testar modelo (o primeiro request dispara a carga; swap automático entre modelos)
+curl -s http://localhost:8081/v1/models
+curl -s http://localhost:8081/v1/chat/completions -H "Content-Type: application/json" \
+  -d '{"model":"<Entry>","messages":[{"role":"user","content":"oi"}],"max_tokens":50}'
+# timings no response: prompt_per_token_ms, predicted_per_token_ms, draft_n_accepted
 ```
 
-### Comportamento interno
-
-| Comando     | Ação                                                                       |
-|-------------|-----------------------------------------------------------------------------|
-| `start`     | Idempotente (avisa se já rodando); `nohup bin/llama-swap -listen 127.0.0.1:8081 -config llama-swap/config.yaml`, pidfile em `logs/llama-swap.pid`, log em `logs/llama-swap.log`; aguarda a porta responder antes de reportar sucesso |
-| `stop`      | SIGTERM no PID do pidfile, fallback SIGKILL após 10 s; limpa o pidfile; sem processo → não falha |
-| `restart`   | `stop` + `start`                                                            |
-| `status`    | Reporta PID/porta (exit 1 se parado)                                        |
+Após editar `llama-swap/config.yaml`: `./manage.sh restart`. Não há
+load/unload manual — apontar o request para outro `model` faz o swap
+(`docker rm -f ls-<Anterior>`); descarrega sozinho após 5 min ocioso (`ttl: 300`).
 
 ---
 
-## Modelos (llama-swap/config.yaml)
+## Arquitetura
 
-**Fonte da verdade**: [`llama-swap/config.yaml`](llama-swap/config.yaml) —
-17 entries (15 stock + 2 Bonsai) com os parâmetros de cada modelo comentados
-no próprio YAML. `/v1/models` lista as 17; **2/17 são não-carregáveis**
-(`PE_T2I_Heretic`/`PE_I2I_Heretic` — GGUFs ausentes em disco).
-
-| Entry                                   | Engine  | Contexto | Notas                                          |
-|-----------------------------------------|---------|----------|------------------------------------------------|
-| `Gemma4_12B`                           | stock   | 49152    | Gemma 4 12B IT (Q4_K_XL); multimodal (texto)   |
-| `Gemma4_12B_MTP`                       | stock   | 64000    | + drafter MTP; cache split q8_0 (target) + f16 (draft); máx. validado 196608 |
-| `Gemma4_12B_Hauhau`                    | stock   | 49152    | Gemma 4 12B Uncensored Balanced (HauhauCS); multimodal (texto, imagem, áudio) |
-| `Qwen3.6_28B_A3B`                      | stock   | 49152    | Qwen 3.6 28B-A3B MoE (Q4_K_M); 28 experts CPU  |
-| `Qwen3.6_35B_General`                  | stock   | 98304    | Thinking General (Q4_K_M); 32 experts CPU / temp=1.0 / penalidades |
-| `Qwen3.6_35B_General_VL`               | stock   | 49152    | Thinking General VL; 28 experts CPU / mmproj pendente |
-| `Qwen3.6_35B_Code`                     | stock   | 49152    | Thinking Code; 28 experts CPU / temp=0.6 / sem penalty |
-| `Qwen3.6_35B_It_General`               | stock   | 98304    | Instruct General; 32 experts CPU / temp=0.7 / top-p=0.8 |
-| `Qwen3.6_35B_It_Reasoning`             | stock   | 98304    | Instruct Reasoning; 32 experts CPU / temp=1.0  |
-| `Ornith1.5_9B_MTP`                      | stock   | 65536    | Ornith 1.5 9B MTP (Q4_K_M, protoLabsAI) / acceptance ~0.40 |
-| `Ornith1.5_9B_DFlash`                   | stock   | 65536    | Ornith 1.5 9B + DFlash draft (audreyt) / acceptance ~0.42 |
-| `Ornith1.5_35B_MTP`                     | stock   | 49152    | Ornith 1.5 35B-A3B MTP (APEX Compact, mudler) / 28 experts CPU / acceptance ~0.80 |
-| `Qwen3.6_35B_A3B_Hauhau_Aggressive`    | stock   | 98304    | Qwen 3.6 35B Uncensored Aggressive (HauhauCS) / 32 experts CPU / multimodal |
-| `PE_T2I_Heretic`                       | stock   | 16384    | PE Heretic t2i / alias `pe-t2i` — **GGUF ausente em disco** (entry lista mas não carrega) |
-| `PE_I2I_Heretic`                       | stock   | 16384    | PE Heretic i2i + mmproj / alias `pe-i2i` — **GGUF/mmproj ausentes em disco** |
-| `bonsai-27b`                            | PrismML | 65536    | **Primária** — Bonsai 2 27B PTQ1_0 (5,6 GB) + mmproj Q8_0 (visão validada); ver medições abaixo |
-| `bonsai-27b-pq2_0`                      | PrismML | 65536    | **Secundária** — PQ2_0 (6,8 GB, default mais rápido em Ampere); ctx 65536 sem OOM, VRAM total 10250 MiB |
-| `Strata` (comentada)                    | Strata  | 65536    | Qwen3.8-Flash-Next (Coder IQ1_M) — modelo ~58 GB **não baixado**; ativar via `strata/README.md` |
-
-### Bonsai 2 27B — medições validadas (task 007, RTX 3060 12 GB)
-
-Entry primária `bonsai-27b` (PTQ1_0 + mmproj Q8_0) com **ctx efetivo 65536**:
-
-| Métrica | Valor medido |
-|---------|--------------|
-| Prefill | ≈ **540 tok/s** (539,66 em 3410 tokens de prompt) |
-| Decode  | ≈ **24,5 tok/s** (128 tokens em 5230,88 ms ⇒ 40,87 ms/token) |
-| VRAM    | **9146 MiB** no processo Bonsai; **10657/12288 MiB** total na GPU — sem OOM |
-
-(Nota do config.yaml registrou 9967 MiB totais em execução anterior; a
-variação é do display Hyprland/Wayland. Fallback de ctx para 49152 nunca foi
-necessário — nota mantida no comentário da entry.) Sampling sem flags
-explícitas: os defaults de thinking (temp 1.0, top_p 0.95, top_k 20) vivem
-nos metadados do GGUF. **MTP do Bonsai não foi baixado** (fora de escopo).
-
-### Presets Ornith 1.5
-
-Os modelos GGUF oficiais do Ornith 1.5 foram baixados em quantização Q4_K_M: 9B (5.78 GB) e 35B-A3B (21.71 GB). O preset 9B mantém contexto de 65.536 tokens; o 35B-A3B usa contexto de 49.152 tokens e configuração MoE com `-ncmoe 28`. O `mmproj` não foi instalado.
-
-### Preset `Gemma4_12B_MTP` — MTP Speculative decoding
-
-Configura o **Gemma 4 12B IT** com um **drafter MTP** (`mtp-gemma-4-12B-it.gguf`) para speculative decoding por multi-token prediction. Em RTX 3060 12GB alcança **contexto de 196.608 tokens (192K)** a ~**100 tok/s** (~72-85% de aceitação de draft), com 100% na GPU (zero CPU offload). A entry atual usa `-c 64000`; os parâmetros completos vivem comentados na entry do `llama-swap/config.yaml`.
-
-> ⚠️ **Sobre o contexto de 262.144 (256K)**: a config original do post X (ctx=262144) **falha OOM nesta máquina** porque Hyprland/Wayland ocupa ~880 MiB de VRAM da GPU (compartilhada com o display). O máximo validado nesta GPU+sw é **196.608** (192K), que deixa ~100 MiB de folga. Para atingir 256K seria preciso liberar a VRAM do display (GPU dedicada só para display, ou console/tty) ou usar uma GPU com mais VRAM.
-
-**Truque de VRAM — split do KV cache:**
-
-| Cache          | Tipo   | Motivo                                                           |
-|----------------|--------|------------------------------------------------------------------|
-| Target (K/V)   | `q8_0` | Herdado do macro (`-ctk/-ctv`); economiza VRAM no contexto longo (192K) |
-| Draft  (K/V)   | `f16`  | Quantizar o cache do draft derruba a taxa de aceitação; f16 (`-ctkd/-ctvd`) mantém ~70-85% de aceitação |
+- **`llama-swap/config.yaml` é a FONTE DA VERDADE** dos parâmetros de cada
+  modelo (17 entries: 14 stock + 2 Bonsai + 1 Xing; `/v1/models` lista as 17,
+  todas carregáveis). `models/models.ini` é HISTÓRICO desativado — nada o lê.
+- Macros no config: `docker-stock` (imagem oficial
+  `ghcr.io/ggml-org/llama.cpp:full-cuda`, entrypoint `/app/llama-server`),
+  `docker-prismml` e `docker-xing` (imagens locais, entrypoint
+  `/usr/local/bin/llama-server`), `docker-stop`.
+- **O llama-swap NÃO executa o cmd via shell (shlex)**: nada de `;`, pipes ou
+  redirects no `cmd` — um único comando por entry.
+- Engines dedicadas vivem em `engines/<fork>/` (Dockerfile + build.sh),
+  clonando o fork **pinado em commit** (o build falha se HEAD ≠ pin):
+  - `engines/llama.cpp-prismml/` — commit `84445367f` (branch `prism`)
+  - `engines/llama.cpp-xing/` — commit `8c379195a` (branch `xing4_0-port`)
+  - Verificar engine em runtime: `system_fingerprint` nos responses
+    (`b1-8444536` PrismML, `b1-8c37919` Xing).
+- Instalar modelo novo: guia em `models/MODELS_INSTALL.md`
+  (`hf download ... --local-dir models/<Dir>` + entry no config + restart).
 
 ---
 
-## models.ini — HISTÓRICO (desativado)
+## Regras duras (erros que já custaram horas)
 
-> ⚠️ **Desativado** com a migração para o llama-swap (plano
-> llama-swap-multi-engine; tasks 002/006). O arquivo
-> [`models/models.ini`](models/models.ini) **permanece no repo como
-> referência** de config do antigo serviço `llama-cpp` (container fixo com
-> `--models-preset`), mas **não é lido por nada**: o serviço saiu do compose
-> e o mount `./models.ini → /app/models.ini` foi removido. Os parâmetros de
-> cada modelo agora vivem **comentados no `llama-swap/config.yaml`**.
-
-Convenções da tradução INI → flags do llama-server (do cabeçalho do
-config.yaml), para leitura do histórico:
-
-| models.ini                    | llama-swap / llama-server                        |
-|-------------------------------|--------------------------------------------------|
-| `ngl = all`                   | `-ngl 99`                                        |
-| `sleep-idle-seconds = 300`    | campo YAML `ttl: 300`                            |
-| `alias = <nome>`              | campo YAML `aliases:`                            |
-| `cache-type-k/v = q8_0`       | `-ctk q8_0 -ctv q8_0` (macro)                    |
-| `cache-reuse = 256`           | `--cache-reuse 256` (macro)                      |
-| `parallel = 1`                | `-np 1` (macro)                                  |
-| `flash-attn = on` / `jinja = 1` | `-fa on` / `--jinja` (macro)                  |
-| `threads = 5`                 | `-t 5` (macro)                                   |
-| `cache-ram = 2048`            | `--cache-ram 2048` (macro; override `0` na entry MTP) |
-| `n-cpu-moe = N`               | `-ncmoe N`                                       |
-| `ctx-size`, `temp`, `top-p`, `top-k`, `min-p`, `presence-penalty`, `repeat-penalty`, `batch-size`, `ubatch-size`, `model-draft`, `spec-type`, `spec-draft-n-max`, `mmproj` | flags homônimas `-c`, `--temp`, `--top-p`, `--top-k`, `--min-p`, `--presence-penalty`, `--repeat-penalty`, `-b`, `-ub`, `--model-draft`, `--spec-type`, `--spec-draft-n-max`, `--mmproj` |
-
----
-
-## API OpenAI-Compatible
-
-Exposta pelo proxy llama-swap em `127.0.0.1:8081`; o roteamento/swap para o
-container do modelo é transparente para o cliente.
-
-### Endpoints
-
-| Endpoint | Método | Descrição |
-|----------|--------|-----------|
-| `/v1/models` | GET | Lista as entries do `llama-swap/config.yaml` |
-| `/v1/chat/completions` | POST | Geração de texto / chat (gatilho do swap) |
-| `/v1/embeddings` | POST | Embeddings |
-
-### Exemplo de uso com curl
-
-```bash
-# Listar modelos
-curl http://localhost:8081/v1/models
-
-# Chat completion
-curl http://localhost:8081/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "Qwen3.6_35B_Code",
-    "messages": [{"role": "user", "content": "Olá, como você está?"}],
-    "temperature": 0.7
-  }'
-```
-
-### Exemplo com Python (openai library)
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://localhost:8081/v1",
-    api_key="llama-cpp-local"
-)
-
-response = client.chat.completions.create(
-    model="Qwen3.6_35B_Code",
-    messages=[{"role": "user", "content": "Explique o que é um transformer"}],
-    temperature=0.7
-)
-
-print(response.choices[0].message.content)
-```
+1. **NUNCA servir Bonsai 2 nem Xing4.0 com a imagem stock.**
+   - Bonsai (ternários PTQ1_0/PQ2_0): kernels só no fork PrismML; stock recusa
+     ou carrega como Q2_0 legacy gerando lixo.
+   - Xing4.0 (arquitetura `xing4_0`): suporte só no fork shuxiaoqiong (PR
+     ggml-org#29012, não mergeado); stock recusa o GGUF.
+2. **MoE híbrido exige `--load-mode none`** nas entries com `-ncmoe`. Com
+   mmap + overrides de tensor para CPU o decode desaba silenciosamente
+   (medido: Xing 1,2→12,5 tok/s; Qwen3.6 MTP 1,3→27-33 tok/s). O loader
+   avisa: `tensor overrides to CPU are used with mmap enabled`.
+3. **A GPU é compartilhada com o desktop/jogos.** Antes de diagnosticar
+   `exit 125`/falha de carga, rode `nvidia-smi`: um jogo pode estar ocupando
+   1-2 GB (causa real já observada: OOM de compute buffer, não flake do
+   daemon). Display Hyprland/Wayland ocupa ~880 MiB em idle.
+4. **Flake real `exit 125`** também existe (transiente na primeira carga após
+   restart, múltiplos modelos/sessões): retry do request ou `./manage.sh
+   restart` resolve. Capturar stderr de `docker run`/`docker events` na
+   próxima ocorrência para provar a causa.
+5. **Speculative decoding MTP self-draft** (GGUFs com tensors `nextn`
+   embutidos — Qwen3.6-MTP, Ornith-MTP): usar `--spec-type draft-mtp`
+   **sem** `--model-draft`. Para drafts separados (Gemma MTP, DFlash) usar
+   `--model-draft` + `-ctkd f16 -ctvd f16` (quantizar KV do draft derruba a
+   aceitação).
+6. Open WebUI: `WEBSEARCH_ENGINE`, `SEARXNG_QUERY_URL` e
+   `TERMINAL_SERVER_CONNECTIONS` são persistidos no `webui.db` na primeira
+   inicialização — **o banco tem precedência sobre o env** depois disso.
+   SearXNG precisa de `formats: [html, json]` no `searxng/settings.yml`.
 
 ---
 
-## Fluxo de Trabalho
+## Modelos (RTX 3060 12 GB — medições e2e)
 
-```bash
-# Verificar status dos serviços auxiliares
-docker compose ps
+| Entry | Engine | Ctx | Notas / tok/s medido |
+|-------|--------|-----|----------------------|
+| `Gemma4_12B` | stock | 49152 | Gemma 4 12B IT QAT; multimodal (texto) |
+| `Gemma4_12B_MTP` | stock | 64000 | drafter MTP separado; ~100 tok/s, aceitação ~72-85%; máx validado 196608 (256K falha OOM pelo display) |
+| `Gemma4_12B_Hauhau` | stock | 49152 | Uncensored Balanced; multimodal (texto, imagem, áudio) |
+| `Gemma4_12B_Agentic` | stock | 49152 | agentic fable5/tau2, denso 100% VRAM (7,4 GB); **~24 tok/s, prefill 8 ms/tok** — worker de workflows |
+| `Mellum2.1_12B_A2.5B` | stock | 49152 | JetBrains código thinking, MoE cabe inteiro (8,1 GB); **~90 tok/s** |
+| `LFM2.5_8B_A1B_Hermes` | stock | 49152 | Hermes agentic, MoE cabe inteiro (5,2 GB); **~129 tok/s** — smoke tests |
+| `Qwen3.6_35B_General` | stock | 98304 | thinking + head MTP; ncmoe 32; aceitação ~82-93% |
+| `Qwen3.6_35B_Code` | stock | 49152 | thinking + head MTP; ncmoe 28; **~27 tok/s, aceitação 93%** — MoE híbrido padrão |
+| `Qwen3.6_35B_It_General` / `_It_Reasoning` | stock | 98304 | Instruct (sem/temp thinking); ncmoe 32 |
+| `Qwen3.6_35B_A3B_Hauhau_Aggressive` | stock | 98304 | Uncensored Aggressive, multimodal; ncmoe 32 |
+| `Ornith1.5_9B_MTP` / `_9B_DFlash` | stock | 65536 | aceitação baixa (~0,40-0,42) — candidatos a remoção |
+| `Ornith1.5_35B_MTP` | stock | 49152 | agêntico (APEX Compact), ncmoe 28, aceitação ~0,80 |
+| `bonsai-27b` | PrismML | 65536 | PTQ1_0 + mmproj (visão validada); 24,5 tok/s, VRAM 10657/12288 total |
+| `bonsai-27b-pq2_0` | PrismML | 65536 | PQ2_0, mais rápido em Ampere, sem visão |
+| `Xing4.0_29B_A4B` | Xing | 49152 | MoE 29B/4B + MLA + mHC; `--load-mode none` + ncmoe 24; ~12,5 tok/s |
+| `Strata` (comentada) | strata | 65536 | modelo ~58 GB não baixado; ativar via `strata/README.md` |
 
-# Iniciar/parar o serving (llama-swap, processo de host)
-./manage.sh start
-./manage.sh stop
-
-# Status do llama-swap
-./manage.sh status
-
-# Ver logs do serving
-tail -f logs/llama-swap.log        # proxy (swap, health checks)
-docker logs ls-<Modelo>            # container do modelo carregado
-
-# Testar API
-curl http://localhost:8081/v1/models
-```
-
----
-
-## Trocar Modelo Ativo
-
-O llama-swap mantém **1 modelo carregado por vez** (equivale ao antigo
-`--models-max 1`) e o swap é **automático por request**: apontar o request
-para outro `model` descarrega o container anterior (`docker rm -f
-ls-<Anterior>`) e sobe o novo. Não existem mais os endpoints
-`load_model`/`unload_model` do serviço antigo, nem edição de `models.ini` —
-parâmetros vivem em `llama-swap/config.yaml` (após editar: `./manage.sh
-restart`).
+Relevância para servir (uso agêntico/opencode): **alta** = Gemma4_12B_Agentic,
+Qwen3.6_35B_Code/General, bonsai-27b, Gemma4_12B; **média** = LFM/Mellum,
+Xing, Ornith 35B, Hauhau, bonsai-pq2_0, It_*; **baixa** = Ornith 9B (×2).
 
 ---
 
-## Troubleshooting
+## docker-compose (serviços auxiliares — sem o serving)
 
-### GPU não é reconhecida
+`open-webui` (host `:8080`, conecta ao proxy via `OAI_API_BASE`,
+`WEBUI_SECRET_KEY` obrigatório p/ persistir tokens OAuth/MCP) ·
+`open-terminal` (execução agêntica `:8000`, requer modelo com Function
+Calling = Native) · `searxng` (`:8888`, JSON habilitado) · `openwa` +
+`openwa-docker-proxy` (WhatsApp/MCP `:2785/mcp`, key em
+`openwa-data/.api-key`; o proxy é o único container com acesso ao Docker
+socket). Detalhes: `DOCKER.md`.
 
-```bash
-# Verificar NVIDIA Container Toolkit
-docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu22.04 nvidia-smi
+> Design: stack request-driven e **deliberadamente não-autônomo** — sem
+> agentes/workflows em background que possam requerer VRAM sem supervisão
+> (GPU compartilhada). `-np 1` em todas as entries (single-user).
 
-# Verificar se o container do modelo em curso tem acesso à GPU
-docker inspect ls-<Modelo> | grep -A5 GPU
-```
+---
 
-### Modelo não carrega
+## Troubleshooting rápido
 
-```bash
-# Verificar se o arquivo .gguf existe em models/ (montado em /models)
-ls -la models/<dir-do-modelo>/
-
-# Ver o log do proxy (swap, health checks, erros de carga)
-tail -n 50 logs/llama-swap.log
-
-# Ver o log do container do modelo (enquanto Up)
-docker logs ls-<Modelo>
-```
-
-### Falha intermitente `exit 125` na primeira carga após restart
-
-Flake **recorrente entre sessões e modelos**, documentado na validação e2e
-(task 007): após `./manage.sh start`, a primeira carga de um modelo falha
-às vezes com `upstream command exited prematurely` no log do llama-swap (o
-`docker run` sai com `code=125`). Assinatura recorrente em
-`logs/llama-swap.log` (linhas 15, 17, 23, 25, 36/37, 49/50, 105, 121,
-140-143) atingindo `Ornith1.5_9B_MTP` (≥2 sessões; chegou a falhar em 4
-sessões consecutivas), `bonsai-27b` e `Gemma4_12B`; tipicamente na primeira
-carga da sessão (exceção verificada: a linha 121 foi a segunda carga da
-sessão). A recuperação pelo retry/health-check seguinte está confirmada
-**apenas em parte das ocorrências** (121→122, 140-143→144); nas demais o log
-mostra shutdown da sessão sem recuperação, com sucesso só em sessão
-posterior. **Causa indeterminada**: a hipótese de transiente do daemon
-docker nunca foi provada; a de conflito de nome com container órfão está
-**enfraquecida** pela assepsia prévia registrada no log (`logs/llama-swap.log:35`:
-`docker rm -f ls-<Modelo>` antes do `docker run`, e ainda assim `exit 125`
-na linha 36). Workaround: repetir o request ou `./manage.sh restart`.
-Follow-up: na próxima ocorrência, capturar stderr do `docker run` /
-`docker events`.
-
-### Entries PE sem GGUF em disco
-
-`PE_T2I_Heretic` e `PE_I2I_Heretic` aparecem no `/v1/models` mas os
-diretórios `models/pe_t2i_heretic-Q4_K_M/` e `models/pe_i2i_heretic-Q4_K_M/`
-estão vazios — as entries **não carregam** (2/17 não-funcionais) até os
-GGUFs serem baixados; nota também nos comentários das entries do config.yaml.
-
-### Storage cheio
-
-```bash
-# Verificar uso
-du -sh models/*/
-
-# Limpar modelos não usados
-rm -rf models/NOME_DO_MODELO/
-```
+- **Modelo não carrega**: GGUF existe em `models/<dir>/`? →
+  `tail -n 50 logs/llama-swap.log` → `docker logs ls-<Modelo>` (enquanto Up).
+- **Falha de carga / `exit 125`**: primeiro `nvidia-smi` (jogo/desktop
+  ocupando VRAM → OOM de compute buffer); senão, retry ou restart (flake
+  conhecido).
+- **Decode absurdamente lento em MoE**: falta `--load-mode none` (regra 2).
+- **YAML inválido**: `./manage.sh restart` morre na inicialização — o erro
+  aparece no fim de `logs/llama-swap.log` (ex.: chave duplicada no entry).
+- **Storage**: `du -sh models/*/` — SSD 220 GB; GGUFs órfãos (sem entry no
+  config) são candidatos a remoção.

@@ -67,6 +67,23 @@ macros:
     -ctk q8_0 -ctv q8_0
     --cache-reuse 256 --cache-ram 2048
 
+  # Macro Xing4.0 — mesma receita do docker-prismml, mas com a imagem local
+  # do fork shuxiaoqiong (engines/llama.cpp-xing/, commit pinado 8c379195a).
+  # REGRA DURA: NUNCA usar a imagem stock para GGUFs Xing4.0 — o suporte à
+  # arquitetura `xing4_0` (MoE 29B/4B + MLA + mHC) vive no PR ggml-org#29012,
+  # ainda não mergeado; a stock recusa o GGUF. Mesmo padrão de entrypoint do
+  # PrismML (base nvidia/cuda herda nvidia_entrypoint.sh).
+  "docker-xing": >
+    docker run --rm --name ls-${MODEL_ID} --gpus all
+    --entrypoint /usr/local/bin/llama-server
+    -p 127.0.0.1:${PORT}:8080
+    -v ./models:/models
+    llama.cpp-xing:latest
+    --host 0.0.0.0 --port 8080
+    -fa on --jinja -np 1 -t 5
+    -ctk q8_0 -ctv q8_0
+    --cache-reuse 256 --cache-ram 2048
+
   # Stop do container: rm -f é determinístico e imediato (SIGKILL ao
   # processo do container -> VRAM liberada na hora; --rm remove o container).
   # Nota: se um crash do llama-swap deixar container órfão, o próximo
@@ -113,26 +130,16 @@ models:
     ttl: 300
 
   # ---------------------------------------------------------------------
-  # Qwen 3.6 28B-A3B MoE (REAP20, Q4_K_M)
-  # Caminho corrigido: o INI aponta Qwen3.6-28B-REAP20-A3B/, mas o diretório
-  # em disco é Qwen3.6-28B-REAP20-A3B-Q4_K_M/.
-  # ---------------------------------------------------------------------
-  Qwen3.6_28B_A3B:
-    cmd: |
-      ${docker-stock}
-      -m /models/Qwen3.6-28B-REAP20-A3B-Q4_K_M/Qwen3.6-28B-REAP20-A3B-Q4_K_M.gguf
-      -c 49152 -ngl 99 -ncmoe 28
-      -b 4096 -ub 512
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  # ---------------------------------------------------------------------
-  # Qwen 3.6 35B-A3B Thinking General (Q4_K_M) — MoE (32 experts CPU)
+  # Qwen 3.6 35B-A3B Thinking General (Q4_K_M + head MTP embutido) — MoE
+  # GGUF: variante -MTP (tensors nextn validados no header) — speculative
+  # decoding self-draft via --spec-type draft-mtp (sem --model-draft).
   # ---------------------------------------------------------------------
   Qwen3.6_35B_General:
     cmd: |
       ${docker-stock}
-      -m /models/unsloth_Qwen3.6_35B_A3B/Qwen3.6-35B-A3B-Q4_K_M.gguf
+      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
+      --load-mode none
+      --spec-type draft-mtp --spec-draft-n-max 2
       -c 98304 -ngl 99 -ncmoe 32
       -b 4096 -ub 512
       --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
@@ -141,28 +148,14 @@ models:
     ttl: 300
 
   # ---------------------------------------------------------------------
-  # Qwen 3.6 35B-A3B Thinking General VL (Q4_K_M) — mmproj pendente
-  # (necessário baixar mmproj separadamente; flag --mmproj comentada)
-  # ---------------------------------------------------------------------
-  Qwen3.6_35B_General_VL:
-    cmd: |
-      ${docker-stock}
-      -m /models/unsloth_Qwen3.6_35B_A3B/Qwen3.6-35B-A3B-Q4_K_M.gguf
-      # --mmproj /models/unsloth_Qwen3.6_35B_A3B/mmproj-F16.gguf
-      -c 49152 -ngl 99 -ncmoe 28
-      -b 4096 -ub 512
-      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
-      --presence-penalty 1.5 --repeat-penalty 1.0
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  # ---------------------------------------------------------------------
-  # Qwen 3.6 35B-A3B Thinking Code (Q4_K_M) — temp 0.6, sem penalty
+  # Qwen 3.6 35B-A3B Thinking Code (Q4_K_M + head MTP) — temp 0.6, sem penalty
   # ---------------------------------------------------------------------
   Qwen3.6_35B_Code:
     cmd: |
       ${docker-stock}
-      -m /models/unsloth_Qwen3.6_35B_A3B/Qwen3.6-35B-A3B-Q4_K_M.gguf
+      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
+      --load-mode none
+      --spec-type draft-mtp --spec-draft-n-max 2
       -c 49152 -ngl 99 -ncmoe 28
       -b 4096 -ub 512
       --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
@@ -171,12 +164,14 @@ models:
     ttl: 300
 
   # ---------------------------------------------------------------------
-  # Qwen 3.6 35B-A3B Instruct General (Q4_K_M)
+  # Qwen 3.6 35B-A3B Instruct General (Q4_K_M + head MTP)
   # ---------------------------------------------------------------------
   Qwen3.6_35B_It_General:
     cmd: |
       ${docker-stock}
-      -m /models/unsloth_Qwen3.6_35B_A3B/Qwen3.6-35B-A3B-Q4_K_M.gguf
+      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
+      --load-mode none
+      --spec-type draft-mtp --spec-draft-n-max 2
       -c 98304 -ngl 99 -ncmoe 32
       -b 4096 -ub 512
       --temp 0.7 --top-p 0.8 --top-k 20 --min-p 0.0
@@ -185,12 +180,14 @@ models:
     ttl: 300
 
   # ---------------------------------------------------------------------
-  # Qwen 3.6 35B-A3B Instruct Reasoning (Q4_K_M)
+  # Qwen 3.6 35B-A3B Instruct Reasoning (Q4_K_M + head MTP)
   # ---------------------------------------------------------------------
   Qwen3.6_35B_It_Reasoning:
     cmd: |
       ${docker-stock}
-      -m /models/unsloth_Qwen3.6_35B_A3B/Qwen3.6-35B-A3B-Q4_K_M.gguf
+      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
+      --load-mode none
+      --spec-type draft-mtp --spec-draft-n-max 2
       -c 98304 -ngl 99 -ncmoe 32
       -b 4096 -ub 512
       --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
@@ -272,39 +269,6 @@ models:
     ttl: 300
 
   # ---------------------------------------------------------------------
-  # PE Heretic t2i — equivale a:
-  #   llama-server -m pe_t2i_heretic-Q4_K_M.gguf -ngl 99 -c 16384 --jinja -a pe-t2i
-  # (ATENÇÃO) GGUF não está em disco (diretório models/pe_t2i_heretic-Q4_K_M/
-  # vazio); a entry aparece no /v1/models mas só carrega após baixar o modelo.
-  # ---------------------------------------------------------------------
-  PE_T2I_Heretic:
-    cmd: |
-      ${docker-stock}
-      -m /models/pe_t2i_heretic-Q4_K_M/pe_t2i_heretic-Q4_K_M.gguf
-      -c 16384 -ngl 99
-    cmdStop: ${docker-stop}
-    ttl: 300
-    aliases:
-      - pe-t2i
-
-  # ---------------------------------------------------------------------
-  # PE Heretic i2i (visão) — equivale a:
-  #   llama-server -m pe_i2i_heretic-Q4_K_M.gguf --mmproj pe_i2i_heretic.mmproj-bf16.gguf -c 16384 --jinja
-  # (ATENÇÃO) GGUF/mmproj não estão em disco (diretório
-  # models/pe_i2i_heretic-Q4_K_M/ vazio); ver nota da entry PE_T2I acima.
-  # ---------------------------------------------------------------------
-  PE_I2I_Heretic:
-    cmd: |
-      ${docker-stock}
-      -m /models/pe_i2i_heretic-Q4_K_M/pe_i2i_heretic-Q4_K_M.gguf
-      --mmproj /models/pe_i2i_heretic-Q4_K_M/pe_i2i_heretic.mmproj-bf16.gguf
-      -c 16384 -ngl 99
-    cmdStop: ${docker-stop}
-    ttl: 300
-    aliases:
-      - pe-i2i
-
-  # ---------------------------------------------------------------------
   # Bonsai 2 27B (PrismML fork) — GGUFs ternários PTQ1_0/PQ2_0, movidos de
   # /home/jocic/bonsai-llm (task 004). Engine: imagem local
   # llama.cpp-prismml:latest (commit pinado 84445367f) — NUNCA stock.
@@ -357,6 +321,75 @@ models:
   #     strata:latest
   #   cmdStop: docker rm -f ls-${MODEL_ID}
   #   ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Gemma 4 12B Agentic (yuxinlu1, fable5/composer2.5/tau2) — denso 12B,
+  # 100% VRAM (7,4 GB Q4_K_M). Finetune agêntico: terminal, tool-use,
+  # tool-calling (tau2) — worker de workflows opencode. Sem flags MoE.
+  # ---------------------------------------------------------------------
+  Gemma4_12B_Agentic:
+    cmd: |
+      ${docker-stock}
+      -m /models/gemma-4-12B-agentic-fable5/gemma4-v2-Q4_K_M.gguf
+      -c 49152 -ngl 99
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Mellum 2.1 12B-A2.5B Thinking (JetBrains) — MoE pequeno, cabe inteiro
+  # na VRAM (8,1 GB Q4_K_M, sem offload de CPU). Especialista em código
+  # com thinking. Arquitetura `mellum` no llama.cpp upstream.
+  # ---------------------------------------------------------------------
+  Mellum2.1_12B_A2.5B:
+    cmd: |
+      ${docker-stock}
+      -m /models/Mellum2.1-12B-A2.5B-Thinking/Mellum2.1-12B-A2.5B-Thinking-Q4_K_M.gguf
+      -c 49152 -ngl 99
+      -b 4096 -ub 512
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # LFM 2.5 8B-A1B Hermes Agentic Coder (DuoNeural) — MoE minúsculo,
+  # cabe inteiro na VRAM (5,2 GB Q4_K_M). Template Hermes agêntico —
+  # smoke tests baratos de workflow (decode dezenas de tok/s).
+  # Arquitetura `lfm2moe` no llama.cpp upstream.
+  # ---------------------------------------------------------------------
+  LFM2.5_8B_A1B_Hermes:
+    cmd: |
+      ${docker-stock}
+      -m /models/LFM2.5-8B-A1B-Hermes-Agentic-Coder/LFM2.5-8B-A1B-Hermes-Agentic-Coder-Abliterated-v3-Q4_K_M.gguf
+      -c 49152 -ngl 99
+      -b 4096 -ub 512
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Xing4.0 29B-A4B (Venastine-Research, Q4_K_M) — engine dedicada
+  # llama.cpp-xing (fork shuxiaoqiong, PR ggml-org#29012 — NUNCA stock).
+  # Arquitetura: MoE 29B/4B ativo (64 experts roteados + 1 shared, 40
+  # camadas), MLA (kv_lora 512), mHC hyper-connections, MTP head; contexto
+  # nativo 256K.
+  # - --load-mode none é OBRIGATÓRIO: com mmap + overrides de tensor p/ CPU
+  #   (-ncmoe), o loader avisa e o desempenho desaba (1,2 tok/s medido);
+  #   sem mmap: 12,7 tok/s (validado 2026-10-10).
+  # - MoE: -ncmoe 24/64 experts na CPU — VRAM 10570/12288 MiB com ctx 49152
+  #   (nº 28 testado: 11,1 tok/s; 24 dá +15% com folga de ~1,7 GB).
+  # - Sampling do README oficial: temp 1.0 / top_p 0.95 / repeat-penalty 1.05.
+  # - MTP draft: arquivo Q4_K_M-MTP não existe no repo (só IQ3) — sem spec
+  #   decoding; tensors nextn do GGUF são ignorados pelo loader.
+  # - Modelo thinking: resposta vem em reasoning_content + content.
+  # ---------------------------------------------------------------------
+  Xing4.0_29B_A4B:
+    cmd: |
+      ${docker-xing}
+      -m /models/Xing4.0-29B-A4B-Q4_K_M/Xing4.0-29B-A4B-Q4_K_M.gguf
+      --load-mode none
+      -c 49152 -ngl 99 -ncmoe 24
+      -b 4096 -ub 512
+      --temp 1.0 --top-p 0.95 --repeat-penalty 1.05
+    cmdStop: ${docker-stop}
+    ttl: 300
 
   # =====================================================================
   # Exemplo comentado — paralelismo np=2 (APENAS referência).

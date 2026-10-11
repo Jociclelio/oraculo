@@ -274,28 +274,24 @@ Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
 | Gemma4_12B | 49152 | Multimodal (texto) |
 | Gemma4_12B_MTP | 64000 | MTP speculative decoding / cache split q8_0 (target) + f16 (draft); máx. validado 192K |
 | Gemma4_12B_Hauhau | 49152 | Multimodal (texto, imagem, áudio) |
-| Qwen3.6_28B_A3B | 49152 | MoE (28 experts CPU) |
-| Qwen3.6_35B_General | 98304 | MoE (32 experts CPU) / temp=1.0 |
-| Qwen3.6_35B_General_VL | 49152 | MoE (28 experts CPU) / mmproj pendente |
-| Qwen3.6_35B_Code | 49152 | MoE (28 experts CPU) / temp=0.6 |
-| Qwen3.6_35B_It_General | 98304 | MoE (32 experts CPU) / temp=0.7 |
-| Qwen3.6_35B_It_Reasoning | 98304 | MoE (32 experts CPU) / temp=1.0 |
+| Gemma4_12B_Agentic | 49152 | Denso 12B 100% VRAM / agentic-terminal-tool-use / ~24 tok/s |
+| Mellum2.1_12B_A2.5B | 49152 | MoE pequeno 100% VRAM / código thinking / ~90 tok/s |
+| LFM2.5_8B_A1B_Hermes | 49152 | MoE minúsculo 100% VRAM / Hermes agentic / ~129 tok/s |
+| Qwen3.6_35B_General | 98304 | MoE (32 experts CPU) / head MTP (draft-mtp n=2) / aceitação ~82-93% |
+| Qwen3.6_35B_Code | 49152 | MoE (28 experts CPU) / head MTP / temp=0.6 / ~27 tok/s |
+| Qwen3.6_35B_It_General | 98304 | MoE (32 experts CPU) / head MTP / temp=0.7 |
+| Qwen3.6_35B_It_Reasoning | 98304 | MoE (32 experts CPU) / head MTP / temp=1.0 |
 | Ornith1.5_9B_MTP | 65536 | MTP speculative decoding / acceptance ~0.40 |
 | Ornith1.5_9B_DFlash | 65536 | DFlash speculative decoding / acceptance ~0.42 |
 | Ornith1.5_35B_MTP | 49152 | MoE (28 experts CPU) / MTP / acceptance ~0.80 |
 | Qwen3.6_35B_A3B_Hauhau_Aggressive | 98304 | MoE (32 experts CPU) / multimodal |
-| PE_T2I_Heretic | 16384 | Text-to-image / alias `pe-t2i` — **GGUF ausente em disco** (não carrega) |
-| PE_I2I_Heretic | 16384 | Image-to-image (visão) / alias `pe-i2i` — **GGUF ausente em disco** (não carrega) |
 | bonsai-27b | 65536 | **Bonsai 2 27B PTQ1_0** (primária) + mmproj Q8_0 (visão) — engine PrismML; prefill ≈ 540 tok/s, decode ≈ 24,5 tok/s, VRAM 9146 MiB (processo) |
 | bonsai-27b-pq2_0 | 65536 | **Bonsai 2 27B PQ2_0** (secundária, mais rápida em Ampere) — engine PrismML; ctx 65536 sem OOM |
+| Xing4.0_29B_A4B | 49152 | MoE 29B/4B (fork shuxiaoqiong 8c379195a) / `--load-mode none` + `-ncmoe 24` / ~12,5 tok/s |
 
 > **Strata (Qwen3.8-Flash-Next)**: entry **comentada** no config — infra
 > pronta em [`strata/`](strata/), modelo (~58 GB, variante Coder IQ1_M) não
 > baixado. Ativação: seguir `strata/README.md` e descomentar a entry.
-
-> **Limitação conhecida**: `PE_T2I_Heretic` e `PE_I2I_Heretic` aparecem no
-> `/v1/models` mas os GGUFs não estão em disco (`models/pe_*_heretic-Q4_K_M/`
-> vazios) — 2/17 entries não-carregáveis até baixar os modelos.
 
 ---
 
