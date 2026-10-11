@@ -18,3 +18,6 @@ searxng/settings.yml
 # llama-swap (binário local e logs de runtime)
 bin/
 logs/
+
+# grafo de conhecimento compartilhado (opencode <-> Open WebUI)
+mcp-data/

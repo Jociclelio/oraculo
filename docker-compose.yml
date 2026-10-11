@@ -55,6 +55,64 @@ services:
       - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
 
   # =========================================================
+  # mcp-playwright — Playwright MCP como tool server do Open WebUI
+  # =========================================================
+  # O Open WebUI fala MCP apenas via Streamable HTTP, então o
+  # @playwright/mcp roda aqui em modo HTTP (entrypoint da imagem já
+  # traz --headless --browser chromium --no-sandbox).
+  # MCP Streamable HTTP: http://localhost:8931/mcp
+  # network_mode: host para que o navegador alcance os serviços locais
+  # (8080/8081/8888); por isso o bind é 127.0.0.1, não 0.0.0.0.
+  # =========================================================
+  mcp-playwright:
+    image: mcr.microsoft.com/playwright/mcp:v0.0.83
+    container_name: mcp-playwright
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - "--port"
+      - "8931"
+      - "--host"
+      - "127.0.0.1"
+    shm_size: "1073741824"
+
+  # =========================================================
+  # mcp-memory — server-memory (stdio) exposto via supergateway
+  # =========================================================
+  # @modelcontextprotocol/server-memory é stdio-only; o supergateway
+  # faz a ponte stdio → Streamable HTTP para o Open WebUI.
+  # MCP Streamable HTTP: http://localhost:8932/mcp
+  # Compartilha o memory.json do opencode (mesmo grafo de conhecimento).
+  # =========================================================
+  mcp-memory:
+    image: supercorp/supergateway:4.1.0
+    container_name: mcp-memory
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8932:8932"
+    user: "1000:1000"
+    environment:
+      - MEMORY_FILE_PATH=/data/memory.json
+      - npm_config_cache=/tmp/npm-cache
+    command:
+      - "--stdio"
+      - "npx -y @modelcontextprotocol/server-memory"
+      - "--outputTransport"
+      - "streamableHttp"
+      - "--stateful"
+      - "--sessionTimeout"
+      - "300000"
+      - "--port"
+      - "8932"
+      - "--streamableHttpPath"
+      - "/mcp"
+    volumes:
+      # diretório (não arquivo): o server-memory grava com rename atômico,
+      # que falha (EBUSY) sobre bind mount de arquivo único
+      - ./mcp-data:/data
+      - ./mcp-data/npm-cache:/tmp/npm-cache
+
+  # =========================================================
   # openwa-docker-proxy — Proxy seguro para Docker socket
   # =========================================================
   # Expõe apenas as operações necessárias (containers, images, volumes,

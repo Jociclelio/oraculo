@@ -88,10 +88,12 @@ load/unload manual — apontar o request para outro `model` faz o swap
    aceitação do draft** (0,46-0,48 em temp 0.0/0.6/1.0 — hipótese refutada);
    o que afeta é `--spec-draft-n-max`: sweet spot 3-4, acima de 6 a
    aceitação por draft colapsa e o tok/s cai (~60% do pico em n=8).
- 6. Open WebUI: `WEBSEARCH_ENGINE`, `SEARXNG_QUERY_URL` e
-    `TERMINAL_SERVER_CONNECTIONS` são persistidos no `webui.db` na primeira
-    inicialização — **o banco tem precedência sobre o env** depois disso.
-    SearXNG precisa de `formats: [html, json]` no `searxng/settings.yml`.
+ 6. Open WebUI: `WEBSEARCH_ENGINE`, `SEARXNG_QUERY_URL`,
+    `TERMINAL_SERVER_CONNECTIONS` e `TOOL_SERVER_CONNECTIONS` são persistidos
+    no `webui.db` na primeira inicialização — **o banco tem precedência sobre
+    o env** depois disso (registrar MCP = escrever na chave
+    `tool_server.connections` do banco, não no compose). SearXNG precisa de
+    `formats: [html, json]` no `searxng/settings.yml`.
  7. **Prefill de MoE com experts na CPU é dominado por streaming de pesos —
     `-ub 2048` dobra o prefill.** Medido 2026-10-11 (Qwen3.6_35B_Code, prompt
     5,6k tok, display idle): ub512→400 tok/s; ub1024→594; ub2048→865-909
@@ -152,7 +154,11 @@ mas prefill ~8 tok/s); **baixa** = Ornith 9B (×2).
 Calling = Native) · `searxng` (`:8888`, JSON habilitado) · `openwa` +
 `openwa-docker-proxy` (WhatsApp/MCP `:2785/mcp`, key em
 `openwa-data/.api-key`; o proxy é o único container com acesso ao Docker
-socket). Detalhes: `DOCKER.md`.
+socket) · `mcp-playwright` (`:8931/mcp`, `mcr.microsoft.com/playwright/mcp`
+pinado, headless) · `mcp-memory` (`:8932/mcp`, supergateway faz a ponte
+stdio→Streamable HTTP do `@modelcontextprotocol/server-memory`; grafo em
+`mcp-data/memory.json`, **compartilhado com o memory do opencode** —
+`MEMORY_FILE_PATH` aponta para esse caminho). Detalhes: `DOCKER.md`.
 
 > Design: stack request-driven e **deliberadamente não-autônomo** — sem
 > agentes/workflows em background que possam requerer VRAM sem supervisão

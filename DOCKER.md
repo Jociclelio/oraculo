@@ -32,13 +32,14 @@ cp .env.example .env   # ou criar manualmente
 
 ---
 
-## Serviços (5 — sem `llama-cpp`)
+## Serviços (7 — sem `llama-cpp`)
 
 > **Mudança de arquitetura (task 006 do plano llama-swap-multi-engine)**: o
 > serviço `llama-cpp` e o mount do `models.ini` foram **removidos** do
 > compose. O serving passou a ser o **llama-swap, processo de host** (seção
 > abaixo). `docker compose config --services` → `open-webui`,
-> `open-terminal`, `searxng`, `openwa`, `openwa-docker-proxy`.
+> `open-terminal`, `searxng`, `mcp-playwright`, `mcp-memory`, `openwa`,
+> `openwa-docker-proxy`.
 
 ### open-webui — Interface Web
 
@@ -115,6 +116,75 @@ Gateway WhatsApp com MCP habilitado. Sessões não iniciam automaticamente (`AUT
 - **Acesso**: somente leitura ao Docker socket, com operações mínimas liberadas (`CONTAINERS`, `IMAGES`, `VOLUMES`, `INFO`, `PING`, `POST`, `DELETE`)
 
 Único container **do compose** com acesso ao Docker socket; o openwa o usa via `DOCKER_HOST=tcp://openwa-docker-proxy:2375`. (Os containers de modelo criados pelo llama-swap usam o socket diretamente pelo daemon, via CLI `docker` no host.)
+
+### mcp-playwright — Playwright MCP (ferramenta de navegador)
+
+- **Imagem**: `mcr.microsoft.com/playwright/mcp:v0.0.83` (pinado)
+- **Container**: `mcp-playwright` (`network_mode: host`)
+- **MCP Streamable HTTP**: `http://localhost:8931/mcp` (bind `127.0.0.1`)
+- **`shm_size`**: 1 GiB (chromium estoura o `/dev/shm` padrão de 64 MiB)
+
+O entrypoint da imagem já traz `--headless --browser chromium --no-sandbox`;
+o `command` do compose só acrescenta `--port 8931 --host 127.0.0.1`. Usa rede
+host de propósito: em bridge o `localhost` do container é o próprio container e
+o navegador não alcança `:8080`/`:8081`/`:8888` (`ERR_CONNECTION_REFUSED`); com
+rede host o bind tem de ser `127.0.0.1` para não expor o MCP na LAN. Serve para
+o agente abrir URL, clicar, preencher formulário, ler SPA e tirar screenshot
+(25 tools: `browser_navigate`, `browser_click`, `browser_snapshot`, …).
+
+### mcp-memory — Grafo de conhecimento (stdio → HTTP)
+
+- **Imagem**: `supercorp/supergateway:4.1.0` (pinado)
+- **Container**: `mcp-memory` (`user: 1000:1000`)
+- **Porta**: `127.0.0.1:8932`
+- **MCP Streamable HTTP**: `http://localhost:8932/mcp`
+- **Volumes**: `./mcp-data → /data` (o `memory.json`), `./mcp-data/npm-cache → /tmp/npm-cache`
+
+`@modelcontextprotocol/server-memory` é **stdio-only**; o supergateway faz a
+ponte stdio → Streamable HTTP (`--outputTransport streamableHttp --stateful
+--sessionTimeout 300000`). O mesmo `mcp-data/memory.json` é usado pelo **memory
+do opencode** (`MEMORY_FILE_PATH` em `~/.config/opencode/opencode.json`), ou
+seja, um único grafo compartilhado entre os dois clientes.
+
+> **Gotchas**: (1) montar o `memory.json` como **arquivo** quebra a gravação —
+> o server faz rename atômico e recebe `EBUSY` sobre bind mount de arquivo
+> único; monte o **diretório**. (2) rodando como root o arquivo ficava
+> `root:root` e o opencode (uid 1000) não conseguia escrever — daí o
+> `user: "1000:1000"` com cache do npm em diretório do próprio usuário.
+
+### Conexões MCP do Open WebUI (`tool_server.connections`)
+
+O Open WebUI fala MCP **somente via Streamable HTTP** (sem stdio nativo). As
+conexões ficam na chave `tool_server.connections` do `webui.db` — **o banco tem
+precedência sobre o env `TOOL_SERVER_CONNECTIONS`** depois da primeira
+inicialização (mesma regra do `WEBSEARCH_ENGINE`). Registradas (admin-only,
+`config.access_grants` vazio):
+
+| id | URL | Origem |
+|----|-----|--------|
+| `openwa` | `http://localhost:2785/mcp` | compose (bearer) |
+| `context7` | `https://mcp.context7.com/mcp` | SaaS (sem auth) |
+| `playwright` | `http://localhost:8931/mcp` | compose |
+| `memory` | `http://localhost:8932/mcp` | compose |
+
+No chat, as tools entram pelo seletor de ferramentas (o request leva
+`tool_ids: ["server:mcp:<id>"]`). Verificar de fora da UI, com o próprio
+cliente do Open WebUI:
+
+```bash
+docker exec -i open-webui python - <<'PY'
+import asyncio
+from open_webui.utils.mcp.client import MCPClient
+async def main():
+    c = MCPClient(); await c.connect("http://localhost:8932/mcp")
+    print([t["name"] for t in await c.list_tool_specs()])
+asyncio.run(main())
+PY
+```
+
+> O log de startup `Initialized 0 tool server(s)` **não** é erro: o
+> pre-fetch só cobre conexões `openapi`; MCP é conectado sob demanda por
+> `connect_mcp_server()` a cada request.
 
 ---
 

@@ -9,6 +9,8 @@ containers efêmeros de **llama.cpp** para inferência GPU) e interface
 - **Open Terminal** (execução agêntica) → porta `8000`
 - **SearXNG** (busca web privada) → porta `8888`
 - **OpenWa** (gateway WhatsApp + MCP) → porta `2785`
+- **Playwright MCP** (navegador p/ o Open WebUI) → porta `8931`
+- **Memory MCP** (grafo de conhecimento p/ Open WebUI + opencode) → porta `8932`
 
 ---
 
@@ -244,6 +246,25 @@ docker exec openwa cat /app/data/.api-key
 ```
 
 Já conectado ao Open WebUI como **tool server MCP**. Para usar no opencode/pi, adicionar como MCP streamable-http com header `X-API-Key`.
+
+---
+
+## MCP no Open WebUI
+
+O Open WebUI aceita MCP **só via Streamable HTTP**, então os servidores stdio
+rodam como serviços do compose atrás de uma ponte HTTP. Quatro conexões
+registradas (Admin > Integrations > External Tool Servers; ficam no `webui.db`,
+que tem precedência sobre o env):
+
+| Ferramenta | URL | Para que serve |
+|-----------|-----|----------------|
+| `context7` | `https://mcp.context7.com/mcp` | documentação atualizada de libs/APIs |
+| `playwright` | `http://localhost:8931/mcp` | navegador real: abrir, clicar, preencher, screenshot |
+| `memory` | `http://localhost:8932/mcp` | grafo de conhecimento persistente (compartilhado com o opencode via `mcp-data/memory.json`) |
+| `openwa` | `http://localhost:2785/mcp` | WhatsApp (ver acima) |
+
+No chat, ativar a ferramenta no seletor de ferramentas. Detalhes e gotchas:
+`DOCKER.md`.
 
 ---
 
