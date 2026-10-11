@@ -1,9 +1,9 @@
-# Strata (Qwen3.8-Flash-Next) — infra preparada, instalação futura
+# Strata (Qwen3.8-Flash-Next) — INSTALADA (2026-10-11), entry ativa no llama-swap
 
 Infraestrutura do **Strata** (engine oficial para o Qwen3.8-Flash-Next,
-https://github.com/Niko1221/Strata) preparada no repo **sem baixar o modelo**
-(~58 GB na variante Coder — fora de escopo, decisão do plano llama-swap
-multi-engine).
+https://github.com/Niko1221/Strata). Modelo **Coder IQ1_M instalado** em
+`/home/jocic/strata-data` (86 GB reais: 55 GB de pesos + 25 GB de pack de
+experts + 6,5 GB do draft MTP) e entry `Strata` **ativa** no llama-swap.
 
 - `Dockerfile` — adaptado do Dockerfile oficial do upstream, com o código
   clonado em commit pinado (`61b3fb5dd3f1e8ec09cf7e4e05208bc6d3c46406`) e as
@@ -13,8 +13,8 @@ multi-engine).
 - `build-engine.py` — script de compilação da engine, extraído do heredoc do
   Dockerfile upstream (o builder Docker desta máquina, sem buildx, não suporta
   heredoc: com heredoc o RUN "passa" sem executar e a imagem sai sem engine).
-- `llama-swap/config.yaml` — entry do Strata **desabilitada (comentada)**, com
-  `MODEL=IQ1_M`, `FAMILY=coder` e `CONTEXT=65536`.
+- `llama-swap/config.yaml` — entry do Strata **ativa**, com `MODEL=IQ1_M`,
+  `FAMILY=coder` e `CONTEXT=65536`.
 
 ## Requisitos (nesta máquina)
 
@@ -22,7 +22,7 @@ multi-engine).
 |-----------|-------|----------|
 | GPU | NVIDIA 12 GB+ (driver >= 580, nvidia-container-toolkit) | RTX 3060 12 GB — OK |
 | **RAM** | **31 GB** para a variante **Coder** (a máquina tem 32 GB; é a única variante que cabe — Q2_0/IQ2_XS exigem 37,6/39,2 GB de RAM+VRAM segundo o upstream, ou modo low-RAM com GPU de 24 GB; as demais não cabem) | 31 GiB — OK |
-| Disco | ~58 GB para o modelo (Coder IQ1_M; ~65 GB com a camada MTP) + pack preparado | em `/home` (NVMe XPG Gammix S70, ~320 GB livres) |
+| Disco | ~58 GB para o modelo (Coder IQ1_M; ~65 GB com a camada MTP) + pack preparado | 86 GB usados em `/home` (NVMe XPG Gammix S70) |
 | Engine | compilada no `docker build` (CPU nativa + CUDA sm_86) | feita no build da imagem |
 
 > A variante **Coder** mantém 91% do SWE-bench Verified do modelo cheio, mas é
@@ -33,7 +33,7 @@ multi-engine).
 > 12 GB). Trocar com `docker run -e MODEL=... -e FAMILY=...` (e `REINSTALL=1`
 > para trocar configurações de um modelo já instalado).
 
-## Passos de instalação futura (quando autorizado)
+## Instalação (executada em 2026-10-11 — registro dos passos)
 
 O modelo deve ficar em **`/home` (NVMe)**, nunca no SSD SATA nem no HDD: o
 primeiro start lê/escreve ~58 GB e o pack de experts é acessado durante a
@@ -61,20 +61,25 @@ docker run --rm --gpus all \
 #    ~30 GB vão para a RAM — o shard 1 do Coder tem 29,6 GB.)
 ```
 
-## Entry de ativação no llama-swap
+## Entry no llama-swap (ativa desde 2026-10-11)
 
-Com o modelo instalado e testado (passo acima), descomentar no
-`llama-swap/config.yaml` o bloco `Strata:` (já pronto, com `MODEL=IQ1_M`,
-`FAMILY=coder`, `CONTEXT=65536` e o mount `/home/jocic/strata-data:/data`) e
-reiniciar o proxy:
-
-```bash
-./manage.sh stop && ./manage.sh start
-curl http://localhost:8081/v1/models   # Strata deve aparecer
-```
+O bloco `Strata:` no `llama-swap/config.yaml` está descomentado (com
+`MODEL=IQ1_M`, `FAMILY=coder`, `CONTEXT=65536` e o mount
+`/home/jocic/strata-data:/data`). O setup feito pelo primeiro start ficou
+persistido no volume (`/data/config`, `/data/packs`, `/data/mtp`) — os
+próximos starts partem direto para a carga (~30 s com page cache quente;
+1-3 min a frio).
 
 O llama-swap faz o swap automático: ao pedir o modelo `Strata`, o modelo
-anterior é descarregado (`docker rm -f`) e o container do Strata sobe.
+anterior é descarregado (`docker rm -f`) e o container do Strata sobe; ao
+pedir outro modelo, o container do Strata é removido (libera os ~30 GB de
+RAM). **Nunca rodar o Strata fora do swap** (ex.: um `docker run` manual
+tipo o `strata-boot` de teste) — ele trava ~30 GB de RAM e ~11 GB de VRAM e
+impede os demais modelos de carregar (OOM em loop no proxy).
+
+Validação (2026-10-11, via proxy `:8081`): carga ok, health check `/health`
+200, **decode ~10 tok/s, prefill ~8 tok/s** (gargalo real para prompts
+longos), MTP self-draft com aceitação ~68%.
 
 ## Notas operacionais
 

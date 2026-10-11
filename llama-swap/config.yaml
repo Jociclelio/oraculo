@@ -17,6 +17,13 @@
 #   ngl = all      -> -ngl 99  (todas as camadas na GPU)
 #   sleep-idle-seconds = 300 -> ttl: 300 (campo YAML do llama-swap)
 #   alias = <nome> -> campo `aliases` da entry do llama-swap
+#
+# Convenção de NOME/CONTEXTO (tuning 2026-10-10):
+#   - Toda entry SEM sufixo de contexto roda em 64k (-c 65536) — floor.
+#   - Variante com ctx maior: sufixo _XXk (ex.: Gemma4_12B_128k = 131072).
+#   - Modelo que não alcança 64k: sufixo _32k (ex.: Saluki27B_Qwen3.8_32k).
+#   - VRAM validada por carga real (RTX 3060 12 GB, display idle ~900 MiB);
+#     com jogos/desktop pesado (1,8+ GB) entries de MoE híbrido podem OOM.
 
 # Espera máxima pelo healthcheck do modelo ao carregar. 300 s cobre o
 # carregamento a frio dos GGUFs de 21 GB (MoE 35B) a partir do NVMe.
@@ -100,7 +107,7 @@ models:
       ${docker-stock}
       -m /models/gemma-4-12B-it-qat-UD-Q4_K_XL/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf
       --mmproj /models/gemma-4-12B-it-qat-UD-Q4_K_XL/mmproj-F32.gguf
-      -c 49152 -ngl 99
+      -c 65536 -ngl 99
     cmdStop: ${docker-stop}
     ttl: 300
 
@@ -123,7 +130,7 @@ models:
       --spec-type draft-mtp --spec-draft-n-max 4
       -ngl 99 --spec-draft-ngl 99
       -ctkd f16 -ctvd f16
-      -c 64000 -b 4096 -ub 1280
+      -c 65536 -b 4096 -ub 1280
       --temp 1.0 --top-p 0.95 --top-k 64 --repeat-penalty 1.0
       --cache-ram 0
     cmdStop: ${docker-stop}
@@ -140,7 +147,7 @@ models:
       -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
       --load-mode none
       --spec-type draft-mtp --spec-draft-n-max 2
-      -c 98304 -ngl 99 -ncmoe 32
+      -c 65536 -ngl 99 -ncmoe 32
       -b 4096 -ub 512
       --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
       --presence-penalty 1.5 --repeat-penalty 1.0
@@ -156,7 +163,7 @@ models:
       -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
       --load-mode none
       --spec-type draft-mtp --spec-draft-n-max 2
-      -c 49152 -ngl 99 -ncmoe 28
+      -c 65536 -ngl 99 -ncmoe 28
       -b 4096 -ub 512
       --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
       --presence-penalty 0.0 --repeat-penalty 1.0
@@ -172,7 +179,7 @@ models:
       -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
       --load-mode none
       --spec-type draft-mtp --spec-draft-n-max 2
-      -c 98304 -ngl 99 -ncmoe 32
+      -c 65536 -ngl 99 -ncmoe 32
       -b 4096 -ub 512
       --temp 0.7 --top-p 0.8 --top-k 20 --min-p 0.0
       --presence-penalty 1.5 --repeat-penalty 1.0
@@ -188,7 +195,7 @@ models:
       -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
       --load-mode none
       --spec-type draft-mtp --spec-draft-n-max 2
-      -c 98304 -ngl 99 -ncmoe 32
+      -c 65536 -ngl 99 -ncmoe 32
       -b 4096 -ub 512
       --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
       --presence-penalty 1.5 --repeat-penalty 1.0
@@ -234,7 +241,7 @@ models:
       ${docker-stock}
       -m /models/Ornith-1.5-35B-MTP-APEX-Compact/Ornith-1.5-35B-A3B-APEX-MTP-Compact.gguf
       --spec-type draft-mtp --spec-draft-n-max 1
-      -c 49152 -ngl 99 -ncmoe 28
+      -c 65536 -ngl 99 -ncmoe 28
       -b 4096 -ub 512
       --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
     cmdStop: ${docker-stop}
@@ -249,7 +256,7 @@ models:
       ${docker-stock}
       -m /models/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
       --mmproj /models/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/mmproj-Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf
-      -c 49152 -ngl 99
+      -c 65536 -ngl 99
       --temp 1.0 --top-p 0.95 --top-k 64
     cmdStop: ${docker-stop}
     ttl: 300
@@ -263,7 +270,7 @@ models:
       ${docker-stock}
       -m /models/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
       --mmproj /models/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf
-      -c 98304 -ngl 99 -ncmoe 32
+      -c 65536 -ngl 99 -ncmoe 32
       -b 4096 -ub 512
     cmdStop: ${docker-stop}
     ttl: 300
@@ -303,24 +310,25 @@ models:
     ttl: 300
 
   # ---------------------------------------------------------------------
-  # Strata (Qwen3.8-Flash-Next) — DESABILITADA (modelo ~58 GB não baixado).
-  # Infra em strata/ (Dockerfile adaptado do upstream + strata/README.md com
-  # os passos de instalação futura: RAM 31 GB p/ a variante Coder (IQ1_M),
-  # modelo em /home — NVMe). Env MODEL/FAMILY/CONTEXT são lidas pelo
-  # docker-entrypoint.sh da imagem no primeiro start (defaults no Dockerfile);
-  # aqui explícitas. Para ativar: instalar conforme strata/README.md e
-  # descomentar a entry.
+  # Strata (Qwen3.8-Flash-Next Coder IQ1_M) — INSTALADA 2026-10-11.
+  # Engine dedicada (github.com/Niko1221/Strata, commit pinado no Dockerfile
+  # de strata/). Modelo em /home/jocic/strata-data (NVMe; ~86 GB: 55 GB
+  # pesos IQ1_M + 25 GB pack de experts + 6,5 GB MTP draft). RAM ~30 GB
+  # travada (máquina tem 31) — NUNCA rodar junto de outro modelo; o swap do
+  # llama-swap (docker rm -f do anterior) é obrigatório. Carga 1-3 min
+  # (healthCheckTimeout 300 cobre). Env MODEL/FAMILY/CONTEXT lidas pelo
+  # docker-entrypoint.sh (setup já feito; restarts partem direto p/ o start).
   # ---------------------------------------------------------------------
-  # Strata:
-  #   cmd: |
-  #     docker run --rm --name ls-${MODEL_ID} --gpus all
-  #     -p 127.0.0.1:${PORT}:8080
-  #     --ulimit memlock=-1
-  #     -v /home/jocic/strata-data:/data
-  #     -e MODEL=IQ1_M -e FAMILY=coder -e CONTEXT=65536
-  #     strata:latest
-  #   cmdStop: docker rm -f ls-${MODEL_ID}
-  #   ttl: 300
+  Strata:
+    cmd: |
+      docker run --rm --name ls-${MODEL_ID} --gpus all
+      -p 127.0.0.1:${PORT}:8080
+      --ulimit memlock=-1
+      -v /home/jocic/strata-data:/data
+      -e MODEL=IQ1_M -e FAMILY=coder -e CONTEXT=65536
+      strata:latest
+    cmdStop: docker rm -f ls-${MODEL_ID}
+    ttl: 300
 
   # ---------------------------------------------------------------------
   # Gemma 4 12B Agentic (yuxinlu1, fable5/composer2.5/tau2) — denso 12B,
@@ -331,7 +339,7 @@ models:
     cmd: |
       ${docker-stock}
       -m /models/gemma-4-12B-agentic-fable5/gemma4-v2-Q4_K_M.gguf
-      -c 49152 -ngl 99
+      -c 65536 -ngl 99
     cmdStop: ${docker-stop}
     ttl: 300
 
@@ -344,7 +352,7 @@ models:
     cmd: |
       ${docker-stock}
       -m /models/Mellum2.1-12B-A2.5B-Thinking/Mellum2.1-12B-A2.5B-Thinking-Q4_K_M.gguf
-      -c 49152 -ngl 99
+      -c 65536 -ngl 99
       -b 4096 -ub 512
     cmdStop: ${docker-stop}
     ttl: 300
@@ -359,7 +367,7 @@ models:
     cmd: |
       ${docker-stock}
       -m /models/LFM2.5-8B-A1B-Hermes-Agentic-Coder/LFM2.5-8B-A1B-Hermes-Agentic-Coder-Abliterated-v3-Q4_K_M.gguf
-      -c 49152 -ngl 99
+      -c 65536 -ngl 99
       -b 4096 -ub 512
     cmdStop: ${docker-stop}
     ttl: 300
@@ -385,9 +393,162 @@ models:
       ${docker-xing}
       -m /models/Xing4.0-29B-A4B-Q4_K_M/Xing4.0-29B-A4B-Q4_K_M.gguf
       --load-mode none
-      -c 49152 -ngl 99 -ncmoe 24
+      -c 65536 -ngl 99 -ncmoe 24
       -b 4096 -ub 512
       --temp 1.0 --top-p 0.95 --repeat-penalty 1.05
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Underdog Saluki 27B (variante MTP da Kujira) — build 2-bit (IQ2-mix)
+  # do Qwen3.8-27B denso, ~54 GB -> 8,35 GB; cabe 100% na VRAM. Best-in-class
+  # em tool-calling/agents (Underdog Bench 88/120; SWE-bench 30/50 fixes);
+  # roda no llama.cpp stock (sem engine dedicada). Variante MTP: mesmos
+  # pesos + head nextn do Qwen3.8-27B -> draft-mtp self-draft (~66 tok/s
+  # na 3080 12GB; aceitação 60-96%).
+  # (ATENÇÃO) 12 GB: manter ctx 32768 — com 64K + q8_0 KV + MTP a VRAM
+  # estoura (medido na 3080 12GB pelo autor do repo).
+  # Sampling: temp 0.6 / top-p 0.95 (recomendação Qwen p/ thinking).
+  # ---------------------------------------------------------------------
+  Saluki27B_Qwen3.8_32k:
+    cmd: |
+      ${docker-stock}
+      -m /models/Underdog-Saluki-27B-1.0-MTP/Underdog-Saluki-27B-1.0-IQ2-mix-MTP.gguf
+      --spec-type draft-mtp --spec-draft-n-max 2
+      -c 32768 -ngl 99
+      -b 4096 -ub 512
+      --temp 0.6 --top-p 0.95
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # =====================================================================
+  # VARIANTES DE CONTEXTO LONGO (_XXk) — ver convenção no topo do arquivo.
+  # ctx validado por carga real; variante _96k/_128k só existe onde couber
+  # (VRAM medida com display idle; margem apertada em MoE híbrido).
+  # =====================================================================
+
+  Gemma4_12B_128k:
+    cmd: |
+      ${docker-stock}
+      -m /models/gemma-4-12B-it-qat-UD-Q4_K_XL/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf
+      --mmproj /models/gemma-4-12B-it-qat-UD-Q4_K_XL/mmproj-F32.gguf
+      -c 131072 -ngl 99
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  Gemma4_12B_MTP_128k:
+    cmd: |
+      ${docker-stock}
+      -m /models/gemma-4-12B-it-qat-UD-Q4_K_XL/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf
+      --mmproj /models/gemma-4-12B-it-qat-UD-Q4_K_XL/mmproj-F32.gguf
+      --model-draft /models/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/mtp-gemma-4-12B-it.gguf
+      --spec-type draft-mtp --spec-draft-n-max 4
+      -ngl 99 --spec-draft-ngl 99
+      -ctkd f16 -ctvd f16
+      -c 131072 -b 4096 -ub 1280
+      --temp 1.0 --top-p 0.95 --top-k 64 --repeat-penalty 1.0
+      --cache-ram 0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  Gemma4_12B_Hauhau_128k:
+    cmd: |
+      ${docker-stock}
+      -m /models/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
+      --mmproj /models/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/mmproj-Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf
+      -c 131072 -ngl 99
+      --temp 1.0 --top-p 0.95 --top-k 64
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  Gemma4_12B_Agentic_128k:
+    cmd: |
+      ${docker-stock}
+      -m /models/gemma-4-12B-agentic-fable5/gemma4-v2-Q4_K_M.gguf
+      -c 131072 -ngl 99
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  LFM2.5_8B_A1B_Hermes_128k:
+    cmd: |
+      ${docker-stock}
+      -m /models/LFM2.5-8B-A1B-Hermes-Agentic-Coder/LFM2.5-8B-A1B-Hermes-Agentic-Coder-Abliterated-v3-Q4_K_M.gguf
+      -c 131072 -ngl 99
+      -b 4096 -ub 512
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  Ornith1.5_9B_MTP_128k:
+    cmd: |
+      ${docker-stock}
+      -m /models/Ornith-1.5-9B-MTP-Q4_K_M/Ornith-1.5-9B-MTP-Q4_K_M.gguf
+      --spec-type draft-mtp --spec-draft-n-max 3
+      -c 131072 -ngl 99
+      -b 4096 -ub 256
+      --temp 0.7 --top-p 0.8 --top-k 20 --min-p 0.0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  Qwen3.6_35B_General_96k:
+    cmd: |
+      ${docker-stock}
+      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
+      --load-mode none
+      --spec-type draft-mtp --spec-draft-n-max 2
+      -c 98304 -ngl 99 -ncmoe 32
+      -b 4096 -ub 512
+      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
+      --presence-penalty 1.5 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  Qwen3.6_35B_Code_96k:
+    cmd: |
+      ${docker-stock}
+      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
+      --load-mode none
+      --spec-type draft-mtp --spec-draft-n-max 2
+      -c 98304 -ngl 99 -ncmoe 28
+      -b 4096 -ub 512
+      --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
+      --presence-penalty 0.0 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  Qwen3.6_35B_It_General_96k:
+    cmd: |
+      ${docker-stock}
+      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
+      --load-mode none
+      --spec-type draft-mtp --spec-draft-n-max 2
+      -c 98304 -ngl 99 -ncmoe 32
+      -b 4096 -ub 512
+      --temp 0.7 --top-p 0.8 --top-k 20 --min-p 0.0
+      --presence-penalty 1.5 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  Qwen3.6_35B_It_Reasoning_96k:
+    cmd: |
+      ${docker-stock}
+      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
+      --load-mode none
+      --spec-type draft-mtp --spec-draft-n-max 2
+      -c 98304 -ngl 99 -ncmoe 32
+      -b 4096 -ub 512
+      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
+      --presence-penalty 1.5 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  Qwen3.6_35B_A3B_Hauhau_Aggressive_96k:
+    cmd: |
+      ${docker-stock}
+      -m /models/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
+      --mmproj /models/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf
+      --load-mode none
+      -c 98304 -ngl 99 -ncmoe 32
+      -b 4096 -ub 512
     cmdStop: ${docker-stop}
     ttl: 300
 

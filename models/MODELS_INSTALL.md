@@ -77,7 +77,12 @@ hf download usuario/modelo arquivo.gguf --local-dir models/NOME_DO_MODELO
 Adicione uma entry em [`llama-swap/config.yaml`](../llama-swap/config.yaml)
 usando uma das macros — `docker-stock` (llama.cpp oficial),
 `docker-prismml` (fork PrismML, obrigatório para Bonsai) ou `docker-xing`
-(fork shuxiaoqiong, obrigatório para Xing4.0):
+(fork shuxiaoqiong, obrigatório para Xing4.0).
+
+**Convenção de contexto no nome da entry** (validar VRAM por carga real):
+entry sem sufixo = 64k (floor, `-c 65536`); contexto maior = sufixo `_XXk`
+(ex.: `Gemma4_12B_128k` = `-c 131072`); abaixo do floor = sufixo `_32k`
+(ex.: `Saluki27B_Qwen3.8_32k`).
 
 ```yaml
   NOME_DO_MODELO:

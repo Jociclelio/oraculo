@@ -31,7 +31,7 @@ Três engines por baixo:
 |--------|--------|-----|
 | llama.cpp **stock** | `ghcr.io/ggml-org/llama.cpp:full-cuda` | todos os modelos clássicos (Gemma, Qwen, Ornith, PE) |
 | llama.cpp **fork PrismML** (dedicada) | `llama.cpp-prismml:latest` — build local em [`engines/llama.cpp-prismml/`](engines/llama.cpp-prismml/), commit pinado `84445367f` | GGUFs ternários **Bonsai 2 27B** — regra **nunca stock** (kernels ternários + Hadamard são exclusivos do fork) |
-| **Strata** (Qwen3.8-Flash-Next) | infra em [`strata/`](strata/) | entry **comentada/desabilitada** — modelo (~58 GB) não baixado |
+| **Strata** (Qwen3.8-Flash-Next) | `strata:latest` — build local em [`strata/`](strata/), commit pinado `61b3fb5dd` | **Qwen3.8-Flash-Next Coder IQ1_M** — instalado em `/home/jocic/strata-data` (NVMe); entry `Strata` ativa |
 
 > **Posicionamento: stack para 1 usuário por vez.** Todas as entries usam
 > `-np 1`; entradas paralelas (`np>1`) só como exceção pontual para modelos
@@ -277,6 +277,7 @@ Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
 | Gemma4_12B_Agentic | 49152 | Denso 12B 100% VRAM / agentic-terminal-tool-use / ~24 tok/s |
 | Mellum2.1_12B_A2.5B | 49152 | MoE pequeno 100% VRAM / código thinking / ~90 tok/s |
 | LFM2.5_8B_A1B_Hermes | 49152 | MoE minúsculo 100% VRAM / Hermes agentic / ~129 tok/s |
+| Saluki27B_Qwen3.8 | 32768 | Qwen3.8-27B 2-bit (denso 100% VRAM) + head MTP / best tool-calling / ~31 tok/s |
 | Qwen3.6_35B_General | 98304 | MoE (32 experts CPU) / head MTP (draft-mtp n=2) / aceitação ~82-93% |
 | Qwen3.6_35B_Code | 49152 | MoE (28 experts CPU) / head MTP / temp=0.6 / ~27 tok/s |
 | Qwen3.6_35B_It_General | 98304 | MoE (32 experts CPU) / head MTP / temp=0.7 |
@@ -288,10 +289,13 @@ Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
 | bonsai-27b | 65536 | **Bonsai 2 27B PTQ1_0** (primária) + mmproj Q8_0 (visão) — engine PrismML; prefill ≈ 540 tok/s, decode ≈ 24,5 tok/s, VRAM 9146 MiB (processo) |
 | bonsai-27b-pq2_0 | 65536 | **Bonsai 2 27B PQ2_0** (secundária, mais rápida em Ampere) — engine PrismML; ctx 65536 sem OOM |
 | Xing4.0_29B_A4B | 49152 | MoE 29B/4B (fork shuxiaoqiong 8c379195a) / `--load-mode none` + `-ncmoe 24` / ~12,5 tok/s |
+| Strata | 65536 | **Qwen3.8-Flash-Next Coder IQ1_M** (engine Strata) / pesos+pack em `/home/jocic/strata-data` (NVMe) / **~30 GB RAM travados** — nunca junto de outro modelo / carga 1-3 min / ~10 tok/s decode, prefill ~8 tok/s |
 
-> **Strata (Qwen3.8-Flash-Next)**: entry **comentada** no config — infra
-> pronta em [`strata/`](strata/), modelo (~58 GB, variante Coder IQ1_M) não
-> baixado. Ativação: seguir `strata/README.md` e descomentar a entry.
+> **Strata (Qwen3.8-Flash-Next)**: instalada em 2026-10-11 (variante Coder
+> IQ1_M — a única que cabe nos 32 GB da máquina). O swap do llama-swap é
+> obrigatório: ao pedir `Strata`, o modelo anterior é descarregado (libera
+> ~30 GB de RAM); ao pedir outro, o container do Strata é removido.
+> Detalhes: [`strata/README.md`](strata/README.md).
 
 ---
 
@@ -348,4 +352,4 @@ du -sh models/*/
 | [`DOCKER.md`](DOCKER.md) | Guia focado em Docker |
 | [`llama-swap/config.yaml`](llama-swap/config.yaml) | Entries/parâmetros dos modelos (fonte da verdade) |
 | [`models/MODELS_INSTALL.md`](models/MODELS_INSTALL.md) | Instalação de modelos (Bonsai via `hf download`, etc.) |
-| [`strata/README.md`](strata/README.md) | Infra Strata e instalação futura do Qwen3.8-Flash-Next |
+| [`strata/README.md`](strata/README.md) | Engine/instalação Strata (Qwen3.8-Flash-Next) — instalada, entry ativa |

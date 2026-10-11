@@ -36,8 +36,12 @@ load/unload manual — apontar o request para outro `model` faz o swap
 ## Arquitetura
 
 - **`llama-swap/config.yaml` é a FONTE DA VERDADE** dos parâmetros de cada
-  modelo (17 entries: 14 stock + 2 Bonsai + 1 Xing; `/v1/models` lista as 17,
-  todas carregáveis). `models/models.ini` é HISTÓRICO desativado — nada o lê.
+  modelo (30 entries: 27 carregáveis = 23 stock + 2 Bonsai + 1 Xing + 1
+  Strata). `models/models.ini` é HISTÓRICO desativado — nada o lê.
+  **Convenção de contexto** (VRAM validada por carga real, display idle):
+  entry SEM sufixo = **64k** (floor); `_XXk` = contexto maior validado;
+  `_32k` = não alcança o floor. Com jogos no desktop (1,8+ GB VRAM) as
+  variantes longas de MoE híbrido podem OOM.
 - Macros no config: `docker-stock` (imagem oficial
   `ghcr.io/ggml-org/llama.cpp:full-cuda`, entrypoint `/app/llama-server`),
   `docker-prismml` e `docker-xing` (imagens locais, entrypoint
@@ -75,10 +79,15 @@ load/unload manual — apontar o request para outro `model` faz o swap
    restart` resolve. Capturar stderr de `docker run`/`docker events` na
    próxima ocorrência para provar a causa.
 5. **Speculative decoding MTP self-draft** (GGUFs com tensors `nextn`
-   embutidos — Qwen3.6-MTP, Ornith-MTP): usar `--spec-type draft-mtp`
-   **sem** `--model-draft`. Para drafts separados (Gemma MTP, DFlash) usar
+   embutidos — Qwen3.6-MTP, Saluki, Ornith-MTP): usar `--spec-type draft-mtp`
+   **sem** `--model-draft`; nesse modo `-ctkd/-ctvd` NÃO afetam a aceitação
+   (medido: idêntico com q8_0 vs f16) — o draft consome o estado residual do
+   target, não cache próprio. Para drafts separados (Gemma MTP, DFlash) usar
    `--model-draft` + `-ctkd f16 -ctvd f16` (quantizar KV do draft derruba a
-   aceitação).
+   aceitação). Medições (Gemma4_12B, 2 prompts): **temperatura NÃO afeta a
+   aceitação do draft** (0,46-0,48 em temp 0.0/0.6/1.0 — hipótese refutada);
+   o que afeta é `--spec-draft-n-max`: sweet spot 3-4, acima de 6 a
+   aceitação por draft colapsa e o tok/s cai (~60% do pico em n=8).
 6. Open WebUI: `WEBSEARCH_ENGINE`, `SEARXNG_QUERY_URL` e
    `TERMINAL_SERVER_CONNECTIONS` são persistidos no `webui.db` na primeira
    inicialização — **o banco tem precedência sobre o env** depois disso.
@@ -90,26 +99,33 @@ load/unload manual — apontar o request para outro `model` faz o swap
 
 | Entry | Engine | Ctx | Notas / tok/s medido |
 |-------|--------|-----|----------------------|
-| `Gemma4_12B` | stock | 49152 | Gemma 4 12B IT QAT; multimodal (texto) |
-| `Gemma4_12B_MTP` | stock | 64000 | drafter MTP separado; ~100 tok/s, aceitação ~72-85%; máx validado 196608 (256K falha OOM pelo display) |
-| `Gemma4_12B_Hauhau` | stock | 49152 | Uncensored Balanced; multimodal (texto, imagem, áudio) |
-| `Gemma4_12B_Agentic` | stock | 49152 | agentic fable5/tau2, denso 100% VRAM (7,4 GB); **~24 tok/s, prefill 8 ms/tok** — worker de workflows |
-| `Mellum2.1_12B_A2.5B` | stock | 49152 | JetBrains código thinking, MoE cabe inteiro (8,1 GB); **~90 tok/s** |
-| `LFM2.5_8B_A1B_Hermes` | stock | 49152 | Hermes agentic, MoE cabe inteiro (5,2 GB); **~129 tok/s** — smoke tests |
-| `Qwen3.6_35B_General` | stock | 98304 | thinking + head MTP; ncmoe 32; aceitação ~82-93% |
-| `Qwen3.6_35B_Code` | stock | 49152 | thinking + head MTP; ncmoe 28; **~27 tok/s, aceitação 93%** — MoE híbrido padrão |
-| `Qwen3.6_35B_It_General` / `_It_Reasoning` | stock | 98304 | Instruct (sem/temp thinking); ncmoe 32 |
-| `Qwen3.6_35B_A3B_Hauhau_Aggressive` | stock | 98304 | Uncensored Aggressive, multimodal; ncmoe 32 |
+| `Gemma4_12B` | stock | 65536 | Gemma 4 12B IT QAT; multimodal (texto) |
+| `Gemma4_12B_MTP` | stock | 65536 | drafter MTP separado; ~100 tok/s; máx validado 196608 (256K falha OOM pelo display) |
+| `Gemma4_12B_Hauhau` | stock | 65536 | Uncensored Balanced; multimodal (texto, imagem, áudio) |
+| `Gemma4_12B_Agentic` | stock | 65536 | agentic fable5/tau2, denso 100% VRAM (7,4 GB); **~24 tok/s, prefill 8 ms/tok** — worker de workflows |
+| `Mellum2.1_12B_A2.5B` | stock | 65536 | JetBrains código thinking, MoE cabe inteiro (8,1 GB); **~90 tok/s** |
+| `LFM2.5_8B_A1B_Hermes` | stock | 65536 | Hermes agentic, MoE cabe inteiro (5,2 GB); **~129 tok/s** — smoke tests |
+| `Saluki27B_Qwen3.8_32k` | stock | 32768 | Qwen3.8-27B build 2-bit (Underdog/Kujira + head MTP), denso 100% VRAM (8,35 GB); best tool-calling (Underdog Bench 88/120, SWE-bench 30/50); **~31 tok/s, aceitação ~76%**; ctx máx 32K (64K estoura 12 GB) — UNICA entry abaixo do floor de 64k |
+| `Qwen3.6_35B_General` | stock | 65536 | thinking + head MTP; ncmoe 32; aceitação ~82-93% |
+| `Qwen3.6_35B_Code` | stock | 65536 | thinking + head MTP; ncmoe 28; **~27 tok/s, aceitação 93%** — MoE híbrido padrão |
+| `Qwen3.6_35B_It_General` / `_It_Reasoning` | stock | 65536 | Instruct (sem/temp thinking); ncmoe 32 |
+| `Qwen3.6_35B_A3B_Hauhau_Aggressive` | stock | 65536 | Uncensored Aggressive, multimodal; ncmoe 32 |
 | `Ornith1.5_9B_MTP` / `_9B_DFlash` | stock | 65536 | aceitação baixa (~0,40-0,42) — candidatos a remoção |
-| `Ornith1.5_35B_MTP` | stock | 49152 | agêntico (APEX Compact), ncmoe 28, aceitação ~0,80 |
+| `Ornith1.5_35B_MTP` | stock | 65536 | agêntico (APEX Compact), ncmoe 28, aceitação ~0,80 |
 | `bonsai-27b` | PrismML | 65536 | PTQ1_0 + mmproj (visão validada); 24,5 tok/s, VRAM 10657/12288 total |
 | `bonsai-27b-pq2_0` | PrismML | 65536 | PQ2_0, mais rápido em Ampere, sem visão |
-| `Xing4.0_29B_A4B` | Xing | 49152 | MoE 29B/4B + MLA + mHC; `--load-mode none` + ncmoe 24; ~12,5 tok/s |
-| `Strata` (comentada) | strata | 65536 | modelo ~58 GB não baixado; ativar via `strata/README.md` |
+| `Xing4.0_29B_A4B` | Xing | 65536 | MoE 29B/4B + MLA + mHC; `--load-mode none` + ncmoe 24; ~12,5 tok/s |
+| `Strata` | Strata | 65536 | Qwen3.8-Flash-Next Coder IQ1_M (engine Niko1221/Strata); pesos+pack em `/home/jocic/strata-data` (~86 GB NVMe), **~30 GB RAM travados** — nunca junto de outro modelo (swap obrigatório); carga 1-3 min; **~10 tok/s decode, prefill ~8 tok/s** (gargalo), MTP aceite ~68% |
+| **Variantes _XXk** | | | |
+| `Gemma4_12B_128k` / `_MTP_128k` / `_Hauhau_128k` / `_Agentic_128k` | stock | 131072 | Gemma 4 12B @ 128K validada: 9487 MiB c/ mmproj (MTP: dentro do máx 192K) |
+| `LFM2.5_8B_A1B_Hermes_128k` | stock | 131072 | 7063 MiB validado |
+| `Ornith1.5_9B_MTP_128k` | stock | 131072 | 9475 MiB validado |
+| `Qwen3.6_35B_General_96k` / `_Code_96k` / `_It_General_96k` / `_It_Reasoning_96k` / `_A3B_Hauhau_Aggressive_96k` | stock | 98304 | Code c/ ncmoe 28: 11128 MiB validado (apertado); demais ncmoe 32 — só com display idle |
 
 Relevância para servir (uso agêntico/opencode): **alta** = Gemma4_12B_Agentic,
-Qwen3.6_35B_Code/General, bonsai-27b, Gemma4_12B; **média** = LFM/Mellum,
-Xing, Ornith 35B, Hauhau, bonsai-pq2_0, It_*; **baixa** = Ornith 9B (×2).
+Qwen3.6_35B_Code/General, Saluki27B, bonsai-27b, Gemma4_12B; **média** =
+LFM/Mellum, Xing, Ornith 35B, Hauhau, bonsai-pq2_0, It_*, Strata (coder forte
+mas prefill ~8 tok/s); **baixa** = Ornith 9B (×2).
 
 ---
 
