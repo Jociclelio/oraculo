@@ -131,12 +131,23 @@ def clean_headers(headers):
     return {k: v for k, v in headers.items() if k.lower() not in HOP_BY_HOP}
 
 
+def upstream_url(request: web.Request) -> str:
+    """Caminho cru (percent-preserved).
+
+    rel_url.path decodifica %2F — e no backend do ComfyUI a codificação é
+    semântica: /api/userdata/workflows%2Ffoo.json casa com /userdata/{file}
+    e o handler decodifica; com a barra real a rota de segmento único não
+    casa e dá 404 (quebrou o override de templates na UI nativa).
+    """
+    return f"{UPSTREAM}{request.raw_path}"
+
+
 async def proxy_http(request: web.Request):
     await ensure_vram(request)
     body = await request.read()
     async with session.request(
         request.method,
-        f"{UPSTREAM}{request.rel_url.path_qs}",
+        upstream_url(request),
         data=body,
         headers=clean_headers(request.headers),
     ) as resp:
@@ -149,7 +160,7 @@ async def proxy_ws(request: web.Request):
     await ensure_vram(request)
     ws_server = web.WebSocketResponse()
     await ws_server.prepare(request)
-    async with session.ws_connect(f"{UPSTREAM}{request.rel_url.path_qs}") as ws_client:
+    async with session.ws_connect(upstream_url(request)) as ws_client:
         async def to_client():
             async for msg in ws_server:
                 if msg.type == WSMsgType.TEXT:

@@ -226,6 +226,22 @@ HF/torch em volumes nomeados (`comfyui-hf-cache`, `comfyui-torch-cache`).
 - Saídas em `./comfyui/output/` (ignorado pelo git); workflows API versionados
   em `./comfyui/workflows/`.
 
+**Templates da UI nativa** (override de template): os oficiais
+`image_qwen_image_2_1_{t2i,image_edit}` foram adaptados à nossa stack
+(turbo int8 + w4a8, 8 passos) e vivem versionados em
+`comfyui/workflows/templates/`, instalados em
+`comfyui/user/default/workflows/` (o frontend do ComfyUI checa esse
+override antes do template embutido, que aponta para os modelos
+não-turbo/int8 que não temos).
+
+**Gotcha do shim**: o frontend pede userdata com `%2F` codificado
+(`/api/userdata/workflows%2Ffoo.json`) e o backend decodifica — mas
+`rel_url.path` do aiohttp já decodifica, o que quebrava a rota
+(`/userdata/{file}` é de segmento único). O shim repassa
+`request.raw_path` (percent-preserved) por isso. Sintoma do bug anterior:
+override de template dava 404 e a UI nativa carregava o builtin com
+modelos ausentes.
+
 **Workflows API para o Open WebUI** (adaptados dos templates oficiais
 `image_qwen_image_2_1_{t2i,image_edit}`; turbo = 8 passos, CFG 1, euler/simple):
 
