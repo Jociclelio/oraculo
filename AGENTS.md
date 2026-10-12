@@ -15,8 +15,8 @@ desktop pessoal) + 32 GB RAM + NVMe.
 ## Comandos essenciais
 
 ```bash
-./manage.sh start|stop|restart|status   # llama-swap (processo de HOST, fora do compose)
-docker compose ps                       # serviços auxiliares (webui, terminal, searxng, openwa)
+./manage.sh start|stop|restart|status   # TUDO: llama-swap (HOST) + compose (webui, terminal, searxng, comfyui, mcps, openwa)
+./manage.sh swap|services start|stop    # controle fino: só o proxy, ou só o compose
 tail -f logs/llama-swap.log             # log do proxy (swap, health checks)
 docker logs ls-<Modelo>                 # log do container do modelo carregado
 

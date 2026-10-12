@@ -1,6 +1,10 @@
 #!/bin/bash
-# manage.sh — gerencia o llama-swap (proxy único em 127.0.0.1:8081) em background.
-# Substitui o antigo ciclo docker compose do serviço llama-cpp.
+# manage.sh — gerencia a stack inteira:
+#   1. llama-swap (proxy de modelos em 127.0.0.1:8081, processo de HOST)
+#   2. serviços auxiliares via docker compose (webui, terminal, searxng,
+#      comfyui, mcp-playwright, mcp-memory, openwa + docker-proxy)
+#
+# start = llama-swap + docker compose up -d | stop = llama-swap + compose down
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -17,12 +21,41 @@ is_running() {
   [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null
 }
 
+# --- serviços auxiliares (docker compose) ---------------------------------
+# O compose tem restart policy própria, mas "desligar tudo" exige down: com
+# restart: always/unless-stopped os containers voltariam sozinhos no boot.
+compose_any_up() {
+  [ -n "$(docker compose ps -q 2>/dev/null)" ]
+}
+
+compose_up() {
+  echo "Subindo serviços auxiliares (docker compose up -d)..."
+  if ! docker compose up -d; then
+    echo "Erro: docker compose up -d falhou." >&2
+    return 1
+  fi
+  docker compose ps
+}
+
+compose_down() {
+  if ! compose_any_up; then
+    echo "Serviços auxiliares já estão parados."
+    return 0
+  fi
+  echo "Parando serviços auxiliares (docker compose down)..."
+  docker compose down
+}
+
 do_start() {
   if is_running; then
     echo "llama-swap já está em execução (PID $(cat "$PIDFILE"))."
-    echo "Use '$0 stop' antes de iniciar novamente."
-    exit 0
+  else
+    start_llama_swap
   fi
+  compose_up
+}
+
+start_llama_swap() {
 
   # Pidfile órfão (processo já morreu) — limpar antes de iniciar.
   rm -f "$PIDFILE"
@@ -74,6 +107,11 @@ do_start() {
 }
 
 do_stop() {
+  stop_llama_swap
+  compose_down
+}
+
+stop_llama_swap() {
   if [ ! -f "$PIDFILE" ]; then
     echo "llama-swap não está rodando (pidfile ausente)."
     return 0
@@ -88,11 +126,12 @@ do_stop() {
     return 0
   fi
 
-  # Segurança: só encerrar se o PID pertence ao llama-swap.
+  # Segurança: só encerrar se o PID pertence ao llama-swap. Não impede o
+  # compose down (desligar tudo continua funcionando).
   if ! ps -p "$pid" -o comm= 2>/dev/null | grep -q "llama-swap"; then
-    echo "Erro: PID $pid no pidfile não corresponde ao llama-swap." >&2
-    echo "Remova $PIDFILE manualmente após verificar o processo." >&2
-    exit 1
+    echo "Aviso: PID $pid no pidfile não corresponde ao llama-swap; não será morto." >&2
+    echo "Revise $PIDFILE manualmente." >&2
+    return 0
   fi
 
   echo "Parando llama-swap (PID $pid)..."
@@ -135,12 +174,17 @@ do_unload() {
 }
 
 do_status() {
+  local rc=0
   if is_running; then
     echo "llama-swap em execução (PID $(cat "$PIDFILE")), porta $PORT."
   else
     echo "llama-swap não está em execução."
-    exit 1
+    rc=1
   fi
+  echo ""
+  echo "Serviços auxiliares (docker compose):"
+  docker compose ps
+  exit "$rc"
 }
 
 case "$1" in
@@ -160,14 +204,33 @@ case "$1" in
   unload)
     do_unload
     ;;
+  swap)
+    # Controle fino: só o llama-swap (não toca no compose).
+    case "$2" in
+      start)   start_llama_swap ;;
+      stop)    stop_llama_swap ;;
+      restart) stop_llama_swap; start_llama_swap ;;
+      *) echo "Uso: $0 swap {start|stop|restart}" >&2; exit 1 ;;
+    esac
+    ;;
+  services)
+    # Controle fino: só os serviços auxiliares (não toca no llama-swap).
+    case "$2" in
+      start) compose_up ;;
+      stop)  compose_down ;;
+      *) echo "Uso: $0 services {start|stop}" >&2; exit 1 ;;
+    esac
+    ;;
   *)
-    echo "Uso: $0 {start|stop|restart|status}"
+    echo "Uso: $0 {start|stop|restart|status|unload|swap|services}"
     echo ""
-    echo "  start    Inicia o llama-swap em background (pidfile + log em logs/)"
-    echo "  stop     Encerra o processo via pidfile (SIGTERM, fallback SIGKILL)"
-    echo "  restart  Para e inicia novamente"
-    echo "  status   Mostra se o llama-swap está rodando"
-  echo "  unload   Remove containers ls-* (libera VRAM p/ ComfyUI)"
+    echo "  start            Inicia TUDO: llama-swap + docker compose up -d"
+    echo "  stop             Desliga TUDO: llama-swap + docker compose down"
+    echo "  restart          Para e inicia novamente (tudo)"
+    echo "  status           llama-swap + docker compose ps"
+    echo "  unload           Descarrega modelos ls-* (libera VRAM p/ ComfyUI)"
+    echo "  swap <sub>       Só o llama-swap: start|stop|restart"
+    echo "  services <sub>   Só o compose (webui/terminal/searxng/comfyui/mcp/openwa): start|stop"
     exit 1
     ;;
 esac

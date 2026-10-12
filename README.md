@@ -116,20 +116,15 @@ models/
 ### 5. Iniciar os serviços
 
 ```bash
-# Serviços auxiliares (Open WebUI, Open Terminal, SearXNG, OpenWa)
-docker compose up -d
-
-# Proxy de serving (processo de host, porta 8081)
+# Sobe TUDO: llama-swap (proxy de serving, porta 8081) + serviços auxiliares
+# (Open WebUI, Open Terminal, SearXNG, ComfyUI, MCPs, OpenWa via compose)
 ./manage.sh start
 ```
 
 ### 6. Verificar que está rodando
 
 ```bash
-# Status dos serviços Docker
-docker compose ps
-
-# Status do llama-swap (pidfile em logs/llama-swap.pid)
+# Status: llama-swap (pidfile em logs/llama-swap.pid) + docker compose ps
 ./manage.sh status
 
 # Testar API (lista as entries do config.yaml)
@@ -294,17 +289,16 @@ Detalhes (modelos, workflows, mapeamento de nós): `DOCKER.md` e
 
 | Comando | Descrição |
 |---------|-----------|
-| `./manage.sh start` | Iniciar o llama-swap em background (pidfile + log em `logs/`) |
-| `./manage.sh stop` | Parar o llama-swap (SIGTERM → SIGKILL) |
-| `./manage.sh restart` | Parar e iniciar novamente |
-| `./manage.sh status` | Ver se o llama-swap está rodando |
-| `docker compose up -d` | Iniciar os serviços auxiliares |
-| `docker compose down` | Parar os serviços auxiliares |
-| `docker compose ps` | Ver status dos serviços |
+| `./manage.sh start` | Iniciar TUDO: llama-swap em background + `docker compose up -d` |
+| `./manage.sh stop` | Desligar TUDO: llama-swap (SIGTERM → SIGKILL) + `docker compose down` |
+| `./manage.sh restart` | Parar e iniciar novamente (tudo) |
+| `./manage.sh status` | llama-swap + `docker compose ps` |
+| `./manage.sh swap {start\|stop\|restart}` | Só o llama-swap (não toca no compose) |
+| `./manage.sh services {start\|stop}` | Só os serviços auxiliares (compose) |
 | `tail -f logs/llama-swap.log` | Logs do proxy llama-swap (swap, health checks) |
 | `docker logs ls-<Modelo>` | Logs do container do modelo carregado no momento |
 | `docker logs open-webui` | Ver logs do open-webui |
-| `./manage.sh unload` | Remover containers `ls-*` (libera VRAM p/ ComfyUI) |
+| `./manage.sh unload` | Descarregar modelos `ls-*` (libera VRAM p/ ComfyUI) |
 
 ---
 
