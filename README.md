@@ -11,6 +11,7 @@ containers efêmeros de **llama.cpp** para inferência GPU) e interface
 - **OpenWa** (gateway WhatsApp + MCP) → porta `2785`
 - **Playwright MCP** (navegador p/ o Open WebUI) → porta `8931`
 - **Memory MCP** (grafo de conhecimento p/ Open WebUI + opencode) → porta `8932`
+- **ComfyUI** (geração/edição de imagens, Qwen-Image 2.1 Turbo) → porta `8188`
 
 ---
 
@@ -268,6 +269,26 @@ No chat, ativar a ferramenta no seletor de ferramentas. Detalhes e gotchas:
 
 ---
 
+## Geração de imagens (ComfyUI)
+
+Serviço `comfyui` (porta `8188`) roda o **Qwen-Image 2.1 Turbo** (7B DiT
+int8_convrot, 8 passos, CFG 1) para geração e edição de imagens, integrado ao
+Open WebUI (engine `comfyui`, já configurada no `webui.db`).
+
+No chat do Open WebUI: ativar **Imagem** no menu de integrações do campo de
+mensagem e pedir a imagem; para editar, anexar a imagem e descrever a
+mudança. A UI nativa do ComfyUI fica em `http://localhost:8188`.
+
+**VRAM compartilhada**: a geração usa ~8-9 GB da 3060. Antes de gerar, o
+llama-swap não pode ter modelo carregado — o `ttl: 300` descarrega após
+5 min ocioso, ou force com `./manage.sh unload`. Ao terminar, o ComfyUI
+libera a VRAM sozinho (`--disable-smart-memory`; sobra ~190 MiB de contexto).
+
+Detalhes (modelos, workflows, mapeamento de nós): `DOCKER.md` e
+`models/MODELS_INSTALL.md`.
+
+---
+
 ## Gerenciamento
 
 | Comando | Descrição |
@@ -282,6 +303,7 @@ No chat, ativar a ferramenta no seletor de ferramentas. Detalhes e gotchas:
 | `tail -f logs/llama-swap.log` | Logs do proxy llama-swap (swap, health checks) |
 | `docker logs ls-<Modelo>` | Logs do container do modelo carregado no momento |
 | `docker logs open-webui` | Ver logs do open-webui |
+| `./manage.sh unload` | Remover containers `ls-*` (libera VRAM p/ ComfyUI) |
 
 ---
 

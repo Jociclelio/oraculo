@@ -113,6 +113,24 @@ do_stop() {
   echo "llama-swap parado."
 }
 
+do_unload() {
+  # Remove os containers de modelo do llama-swap (ls-*) para liberar VRAM.
+  # Útil antes de gerar imagens no ComfyUI quando o ttl de 5 min ainda não
+  # descarregou o modelo (o llama-swap não tem unload manual; apontar o
+  # request para outro modelo também força o swap).
+  local names
+  names=$(docker ps --format "{{.Names}}" | grep "^ls-" || true)
+  if [ -z "$names" ]; then
+    echo "Nenhum container de modelo (ls-*) em execução — VRAM já livre."
+    return 0
+  fi
+  echo "$names" | while read -r c; do
+    echo "Removendo $c..."
+    docker rm -f "$c" >/dev/null
+  done
+  echo "Containers de modelo removidos; VRAM liberada."
+}
+
 do_status() {
   if is_running; then
     echo "llama-swap em execução (PID $(cat "$PIDFILE")), porta $PORT."
@@ -136,6 +154,9 @@ case "$1" in
   status)
     do_status
     ;;
+  unload)
+    do_unload
+    ;;
   *)
     echo "Uso: $0 {start|stop|restart|status}"
     echo ""
@@ -143,6 +164,7 @@ case "$1" in
     echo "  stop     Encerra o processo via pidfile (SIGTERM, fallback SIGKILL)"
     echo "  restart  Para e inicia novamente"
     echo "  status   Mostra se o llama-swap está rodando"
+  echo "  unload   Remove containers ls-* (libera VRAM p/ ComfyUI)"
     exit 1
     ;;
 esac

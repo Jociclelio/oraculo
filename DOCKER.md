@@ -32,14 +32,14 @@ cp .env.example .env   # ou criar manualmente
 
 ---
 
-## Serviços (7 — sem `llama-cpp`)
+## Serviços (8 — sem `llama-cpp`)
 
 > **Mudança de arquitetura (task 006 do plano llama-swap-multi-engine)**: o
 > serviço `llama-cpp` e o mount do `models.ini` foram **removidos** do
 > compose. O serving passou a ser o **llama-swap, processo de host** (seção
 > abaixo). `docker compose config --services` → `open-webui`,
-> `open-terminal`, `searxng`, `mcp-playwright`, `mcp-memory`, `openwa`,
-> `openwa-docker-proxy`.
+> `open-terminal`, `searxng`, `comfyui`, `mcp-playwright`, `mcp-memory`,
+> `openwa`, `openwa-docker-proxy`.
 
 ### open-webui — Interface Web
 
@@ -185,6 +185,93 @@ PY
 > O log de startup `Initialized 0 tool server(s)` **não** é erro: o
 > pre-fetch só cobre conexões `openapi`; MCP é conectado sob demanda por
 > `connect_mcp_server()` a cada request.
+
+### comfyui — Geração/edição de imagens (Qwen-Image 2.1 Turbo)
+
+- **Imagem**: `yanwk/comfyui-boot:cu126-slim-20261005` (pinada; ComfyUI
+  v0.38.2 + ComfyUI-Manager, CUDA 12.6 / Python 3.12)
+- **Container**: `comfyui` — UI em `http://localhost:8188` (bind `127.0.0.1`), API `/prompt`
+- **`gpus: all`** (o daemon já tem runtime nvidia default; ver `comando.txt`)
+- **`CLI_ARGS=--disable-smart-memory`**: descarrega os pesos da VRAM para RAM
+  ao fim de cada geração. Sem isso o ComfyUI retém ~4-6 GB e a próxima carga
+  de LLM no llama-swap dá OOM. Custo: recarregar pesos da RAM na run seguinte
+  (segundos, irrelevante no turbo de 8 passos).
+
+**Modelos** (fonte da verdade: `models/comfyui/`, montado em
+`/root/ComfyUI/models`; guia de instalação: `models/MODELS_INSTALL.md`):
+
+| Papel | Arquivo | Tamanho |
+|-------|---------|---------|
+| Difusão (principal) | `diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors` | 7,26 GB |
+| Difusão (fallback GGUF) | `diffusion_models/qwen_image_2.1_turbo_Q4_K_M.gguf` | 4,0 GB |
+| Text encoder | `text_encoders/qwen3vl_8b_w4a8.safetensors` | 5,9 GB |
+| VAE | `vae/qwen_image_2.1_vae_bf16.safetensors` | 645 MB |
+
+O `int8_convrot` é nativo do ComfyUI (sem custom node) e mais rápido que o
+GGUF em Ampere; o GGUF Q4_K_M exige o custom node `ComfyUI-GGUF` (não
+instalado — instalar via Manager se precisar do fallback).
+
+**Volumes**: `./models/comfyui → /root/ComfyUI/models`;
+`./comfyui/{custom_nodes,input,output,user}` → idem no container; caches de
+HF/torch em volumes nomeados (`comfyui-hf-cache`, `comfyui-torch-cache`).
+
+- O entrypoint copia o bundle `/default-comfyui-bundle/ComfyUI` para
+  `/root/ComfyUI` no primeiro boot com `--no-clobber` — os binds vazios são
+  populados automaticamente (inclusive o Manager em `custom_nodes`).
+- O núcleo do ComfyUI vive na camada gravável do container: persiste entre
+  restarts, mas **recriar o container** volta ao snapshot da imagem (pip
+  installs do usuário vão para `/root/.local`, mesmo comportamento).
+- Saídas em `./comfyui/output/` (ignorado pelo git); workflows API versionados
+  em `./comfyui/workflows/`.
+
+**Workflows API para o Open WebUI** (adaptados dos templates oficiais
+`image_qwen_image_2_1_{t2i,image_edit}`; turbo = 8 passos, CFG 1, euler/simple):
+
+| Workflow | Arquivo |
+|----------|---------|
+| Text-to-image | `comfyui/workflows/qwen_image_2_1_turbo_t2i_api.json` |
+| Edição de imagem | `comfyui/workflows/qwen_image_2_1_turbo_edit_api.json` |
+
+Grafo essencial (ambos): `UNETLoader` → `QwenImage21Cache` → `KSampler`;
+`CLIPLoader (qwen_image)` + `VAELoader` → `TextEncodeQwenImage21`. No t2i o
+latente vem de `EmptyLatentImage`; na edição vem da **saída 2 do encoder**
+(a referência define o canvas). Slots de referência no API JSON usam a chave
+`images.image_1` (não `image_1` — validação aceita ambas, a execução não).
+
+**Configuração no Open WebUI** (gravada em `webui.db` — banco tem precedência
+sobre env, regra 6; reconfigurável em Admin > Settings > Images):
+
+| Chave | Valor |
+|-------|-------|
+| `image_generation.enable` / `engine` | `true` / `comfyui` |
+| `image_generation.model` | `qwen_image_2.1_turbo_int8_convrot.safetensors` |
+| `image_generation.size` / `steps` | `1024x1024` / `8` |
+| `image_generation.comfyui.base_url` | `http://localhost:8188` |
+| `image_generation.comfyui.workflow` + `.nodes` | t2i API JSON + mapeamento |
+| `images.edit.enable` / `engine` | `true` / `comfyui` |
+| `images.edit.comfyui.base_url` / `workflow` / `nodes` | mesmo server + edit API JSON |
+
+Mapeamento de nós (`nodes`: `[{"type","node_ids","key"}]`; types: `model`,
+`prompt`, `negative_prompt`, `image`, `width`, `height`, `n`, `steps`, `seed`):
+
+| Parâmetro | t2i | edit |
+|-----------|-----|------|
+| prompt | `prompt` → nó 6 | `prompt` → nó 6 |
+| model | `unet_name` → nó 1 | `unet_name` → nó 1 |
+| width/height | → nó 5 (EmptyLatentImage) | — (canvas vem da referência) |
+| steps/seed | → nó 7 (KSampler) | — |
+| image | — | `image` → nó 5 (LoadImage; o Open WebUI faz upload antes) |
+
+**VRAM COMPARTILHADA** (a mesma 3060 do llama-swap e do desktop):
+
+- Pico na geração 1024x1024: ~8-9 GB (encoder w4a8 → descarrega → DiT int8).
+- Pós-run com `--disable-smart-memory`: **~190 MiB** (só contexto CUDA) —
+  medido com display ativo.
+- Antes de gerar, nenhum container `ls-*` pode estar carregado: o `ttl: 300`
+  do llama-swap resolve sozinho após 5 min ocioso; para forçar,
+  `./manage.sh unload` (remove os containers `ls-*`).
+- Jogos no desktop (ex.: CS2 ~2,2 GB) competem pelos mesmos 12 GB.
+
 
 ---
 

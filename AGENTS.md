@@ -105,6 +105,13 @@ load/unload manual — apontar o request para outro `model` faz o swap
     ubatch relê os pesos dos experts na RAM; ubatch maior amortiza o custo.
     Nota: KV do Qwen3.6 é pequeno (só 10/41 camadas têm KV; 2 heads × 256 →
     ~10,6 KiB/tok em q8_0) — o gargalo é FFN de experts, não attention.
+ 8. **Geração de imagem (ComfyUI) e inferência de LLM dividem a mesma VRAM.**
+    O ComfyUI (yanwk/comfyui-boot, porta 8188) roda com
+    `--disable-smart-memory`: ao fim de cada geração os pesos voltam para RAM
+    e a VRAM cai para ~190 MiB de contexto. No sentido inverso, o modelo de
+    difusão (pico ~8-9 GB) exige os containers `ls-*` descarregados — o
+    `ttl: 300` resolve após 5 min ocioso; para forçar, `./manage.sh unload`.
+    Sem isso a carga do LLM ou do DiT dá OOM de compute buffer.
 
 ---
 
@@ -158,7 +165,9 @@ socket) · `mcp-playwright` (`:8931/mcp`, `mcr.microsoft.com/playwright/mcp`
 pinado, headless) · `mcp-memory` (`:8932/mcp`, supergateway faz a ponte
 stdio→Streamable HTTP do `@modelcontextprotocol/server-memory`; grafo em
 `mcp-data/memory.json`, **compartilhado com o memory do opencode** —
-`MEMORY_FILE_PATH` aponta para esse caminho). Detalhes: `DOCKER.md`.
+`MEMORY_FILE_PATH` aponta para esse caminho) · `comfyui` (`:8188`,
+yanwk/comfyui-boot pinado; Qwen-Image 2.1 Turbo int8, geração + edição,
+integrado ao Open WebUI). Detalhes: `DOCKER.md`.
 
 > Design: stack request-driven e **deliberadamente não-autônomo** — sem
 > agentes/workflows em background que possam requerer VRAM sem supervisão

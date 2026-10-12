@@ -21,3 +21,9 @@ logs/
 
 # grafo de conhecimento compartilhado (opencode <-> Open WebUI)
 mcp-data/
+
+# comfyui — runtime (saídas, uploads, perfil, custom nodes da imagem)
+comfyui/output/
+comfyui/input/
+comfyui/user/
+comfyui/custom_nodes/

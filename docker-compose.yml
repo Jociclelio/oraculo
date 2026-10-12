@@ -55,6 +55,36 @@ services:
       - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
 
   # =========================================================
+  # comfyui — Geração/edição de imagens (Qwen-Image 2.1 Turbo)
+  # =========================================================
+  # Imagem yanwk/comfyui-boot (ComfyUI + Manager, pinada).
+  # UI: http://localhost:8188 | API: /prompt (usada pelo Open WebUI)
+  # Modelos: ./models/comfyui (diffusion_models/text_encoders/vae)
+  # Saídas: ./comfyui/output | Workflows API p/ Open WebUI: ./comfyui/workflows
+  # VRAM COMPARTILHADA: antes de gerar, nenhum container ls-* carregado
+  # (ttl 300 do llama-swap descarrega sozinho; unload forçado: ./manage.sh unload).
+  # =========================================================
+  comfyui:
+    image: yanwk/comfyui-boot:cu126-slim-20261005
+    container_name: comfyui
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8188:8188"
+    # Pesos saem da VRAM ao fim de cada geração (libera p/ llama-swap);
+    # recarregam da RAM na próxima run (~s), custo irrelevante no turbo 8 passos
+    environment:
+      - CLI_ARGS=--disable-smart-memory
+    gpus: all
+    volumes:
+      - ./models/comfyui:/root/ComfyUI/models
+      - ./comfyui/custom_nodes:/root/ComfyUI/custom_nodes
+      - ./comfyui/input:/root/ComfyUI/input
+      - ./comfyui/output:/root/ComfyUI/output
+      - ./comfyui/user:/root/ComfyUI/user
+      - comfyui-hf-cache:/root/.cache/huggingface
+      - comfyui-torch-cache:/root/.cache/torch
+
+  # =========================================================
   # mcp-playwright — Playwright MCP como tool server do Open WebUI
   # =========================================================
   # O Open WebUI fala MCP apenas via Streamable HTTP, então o
@@ -183,6 +213,8 @@ networks:
     name: openwa-network
 
 volumes:
+  comfyui-hf-cache:
+  comfyui-torch-cache:
   open-webui-data:
   open-terminal-data:
   openwa-data:

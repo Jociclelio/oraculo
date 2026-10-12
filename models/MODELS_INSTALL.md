@@ -27,6 +27,10 @@ models/
 │   └── Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf
 ├── Xing4.0-29B-A4B-Q4_K_M/             # Xing4.0 (ver seção própria abaixo)
 │   └── Xing4.0-29B-A4B-Q4_K_M.gguf
+├── comfyui/                            # Difusão (ver seção "Modelos de Difusão")
+│   ├── diffusion_models/
+│   ├── text_encoders/
+│   └── vae/
 └── ...
 ```
 
@@ -291,6 +295,44 @@ docker logs ls-NOME_DO_MODELO
 > Se a carga falhar com `exit 125` na primeira tentativa após restart, é o
 > flake documentado no README/AGENTS (troubleshooting): repetir o request ou
 > `./manage.sh restart`.
+
+---
+
+## Modelos de Difusão (ComfyUI)
+
+Os modelos de imagem do ComfyUI vivem em `models/comfyui/` (montado em
+`/root/ComfyUI/models` do container `comfyui`) e são versionados **fora** do
+git (mesma regra dos GGUFs). Stack atual: **Qwen-Image 2.1 Turbo**
+(7B DiT, 8 passos, CFG 1 — geração e edição no mesmo modelo).
+
+```bash
+# Difusão — int8_convrot oficial (principal; nativo do ComfyUI, mais rápido em Ampere)
+hf download Comfy-Org/Qwen-Image-2.1 \
+  diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors \
+  --local-dir models/comfyui
+
+# Fallback GGUF (exige custom node ComfyUI-GGUF, não instalado)
+# hf download Abiray/Qwen-Image-2.1-Turbo-GGUF \
+#   qwen_image_2.1_turbo_Q4_K_M.gguf --local-dir models/comfyui/diffusion_models
+
+# Text encoder — Qwen3-VL 8B w4a8 (variante de menor VRAM)
+hf download Comfy-Org/Qwen-Image-2.1 \
+  text_encoders/qwen3vl_8b_w4a8.safetensors \
+  --local-dir models/comfyui
+
+# VAE
+hf download Comfy-Org/Qwen-Image-2.1 \
+  vae/qwen_image_2.1_vae_bf16.safetensors \
+  --local-dir models/comfyui
+```
+
+Alternativas oficiais no mesmo repo (`Comfy-Org/Qwen-Image-2.1`): difusão
+`_bf16` (14,2 GB) / `_int8_convrot` (não-turbo, 25+ passos); text encoder
+`_bf16` / `_int8_convrot`. Não baixar os encoders de prompt-enhancement
+(`qwen3.5_9b_*_pe_*`) — opcionais nos templates e ~5 GB cada.
+
+Depois de baixar: `docker restart comfyui` (o ComfyUI escaneia os diretórios
+no boot). Workflows API e mapeamento: `../DOCKER.md` (seção comfyui).
 
 ---
 
