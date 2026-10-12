@@ -117,6 +117,23 @@ load/unload manual — apontar o request para outro `model` faz o swap
     mesmo endpoint. Sem isso a carga do LLM ou do DiT dá OOM de compute
     buffer (`VRAM grow failed` no log do ComfyUI = DiT carregou com LLM
     residente).
+ 9. **KV cache NÃO sobrevive ao unload/swap — e `--slot-save-path` NÃO
+    resolve (ainda).** O KV cache vive no processo do `llama-server`: quando
+    o llama-swap remove o container `ls-*` (unload do gpu-shim, swap ou
+    `ttl: 300`), a conversa é re-prefil inteira no retorno. O
+    `--slot-save-path` + `/slots/0?action=save|restore` **parece** funcionar
+    (save/restore respondem 200 com `n_restored == n_saved`) mas em modelos
+    **híbridos/recorrentes e SWA** o reuso é ZERO — o formato não serializa
+    os context checkpoints e o servidor cai em `forcing full prompt
+    re-processing` (bug ggml-org/llama.cpp#28194; medido aqui no LFM2.5:
+    `cache_n: 0` com LCP similarity 1.000). Quase todo o nosso zoológico é
+    híbrido/SWA (Qwen3.6/3.8 GDN, LFM2.5, Saluki, Gemma4 SWA). Decisão
+    (2026-10-12): **aguardar fix no upstream**; se um dia for urgente, os
+    caminhos mapeados são o patch `--slot-save-checkpoints` do ky095n
+    (comentário do issue) ou o fork prompt-disk-cache do qqkzlm (snapshot
+    automático, medido no Qwen3.6-35B: prefill 40k tokens 151 s → 1,35 s).
+    O custo hoje: re-prefill ~870-900 tok/s (Qwen3.6, ub2048) + recarga fria
+    de pesos (10-30 s) — só na primeira mensagem após imagem/swap.
 
 ---
 
