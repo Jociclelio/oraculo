@@ -280,14 +280,27 @@ Mapeamento de nós (`nodes`: `[{"type","node_ids","key"}]`; types: `model`,
 | steps/seed | → nó 7 (KSampler) | — |
 | image | — | `image` → nós **5 e 10** (LoadImage; upload automático) |
 
-**Múltiplas imagens na edição**: a tool `edit_image` do Open WebUI aceita
-lista (`image_urls`), o router faz upload de todas e o mapeamento distribui
-`image[i] → node_ids[i]` — com `node_ids ["5","10"]` a 1ª imagem é a editada
-(`images.image_1`) e a 2ª é referência (`images.image_2`), endereçável no
-prompt como `<image2>` (o Qwen-Image 2.1 suporta até 16 slots; só 2 estão
-ligados). Com uma única imagem, o nó 10 carrega `input/placeholder.png`
-(cinza neutro) como image_2 — validado que a edição simples não degrada
-(maçã → lima: 42% de pixels alterados, igual ao teste sem placeholder).
+**Múltiplas imagens na edição (10 slots)**: a tool `edit_image` do Open
+WebUI aceita lista (`image_urls`), o router faz upload de todas e o
+mapeamento distribui `image[i] → node_ids[i]` — `node_ids ["5","10".."18"]`
+ligam os 10 slots do `TextEncodeQwenImage21` (`images.image_1`..`image_10`):
+a 1ª imagem é a editada, as demais são referências endereçáveis no prompt
+como `<image2>`..`<image10>` (o nó aceita 16; 10 é o que o template oficial
+liga). Sem imagem num slot, o LoadImage correspondente carrega
+`input/placeholder.png` (64×64, cinza).
+
+**`resolution=0` no nó 6 é obrigatório com referências**: o parâmetro define
+o orçamento de pixels para REDIMENSIONAR cada referência — com o default
+1024, cada placeholder de 64×64 era ampliado para ~1024² e entrava com
+~4k tokens na sequência do DiT (9 placeholders ≈ +36k tokens → OOM no
+KSampler com CUDA a ~100 MiB livres). Com 0, cada referência entra no
+tamanho próprio (o canvas vem do latente do encoder, ou seja, do tamanho
+de image_1). Validado: 1 imagem + 9 placeholders sem degradação (42,5%
+alterados, igual ao baseline) e composição com 3 imagens (99,6%).
+
+**Referências grandes custam caro**: 10 fotos de 12 MP viram dezenas de
+milhões de tokens de atenção — se uma edição de muitas referências der OOM
+ou ficar lenta, é o tamanho delas, não o engine.
 
 **VRAM COMPARTILHADA** (a mesma 3060 do llama-swap e do desktop) — a
 liberação é bidirecional e automática, sem job em background:

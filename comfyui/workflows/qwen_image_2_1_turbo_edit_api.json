@@ -61,7 +61,7 @@
       "prompt": "",
       "negative_prompt": "",
       "max_length": 1024,
-      "resolution": 1024,
+      "resolution": 0,
       "vae": [
         "4",
         0
@@ -72,6 +72,38 @@
       ],
       "images.image_2": [
         "10",
+        0
+      ],
+      "images.image_3": [
+        "11",
+        0
+      ],
+      "images.image_4": [
+        "12",
+        0
+      ],
+      "images.image_5": [
+        "13",
+        0
+      ],
+      "images.image_6": [
+        "14",
+        0
+      ],
+      "images.image_7": [
+        "15",
+        0
+      ],
+      "images.image_8": [
+        "16",
+        0
+      ],
+      "images.image_9": [
+        "17",
+        0
+      ],
+      "images.image_10": [
+        "18",
         0
       ]
     },
@@ -146,6 +178,78 @@
     "class_type": "LoadImage",
     "_meta": {
       "title": "Imagem de referência 2 (substituída pelo Open WebUI)"
+    }
+  },
+  "11": {
+    "inputs": {
+      "image": "placeholder.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 3 (substituída pelo Open WebUI)"
+    }
+  },
+  "12": {
+    "inputs": {
+      "image": "placeholder.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 4 (substituída pelo Open WebUI)"
+    }
+  },
+  "13": {
+    "inputs": {
+      "image": "placeholder.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 5 (substituída pelo Open WebUI)"
+    }
+  },
+  "14": {
+    "inputs": {
+      "image": "placeholder.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 6 (substituída pelo Open WebUI)"
+    }
+  },
+  "15": {
+    "inputs": {
+      "image": "placeholder.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 7 (substituída pelo Open WebUI)"
+    }
+  },
+  "16": {
+    "inputs": {
+      "image": "placeholder.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 8 (substituída pelo Open WebUI)"
+    }
+  },
+  "17": {
+    "inputs": {
+      "image": "placeholder.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 9 (substituída pelo Open WebUI)"
+    }
+  },
+  "18": {
+    "inputs": {
+      "image": "placeholder.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 10 (substituída pelo Open WebUI)"
     }
   }
 }
