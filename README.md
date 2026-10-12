@@ -279,10 +279,11 @@ No chat do Open WebUI: ativar **Imagem** no menu de integrações do campo de
 mensagem e pedir a imagem; para editar, anexar a imagem e descrever a
 mudança. A UI nativa do ComfyUI fica em `http://localhost:8188`.
 
-**VRAM compartilhada**: a geração usa ~8-9 GB da 3060. Antes de gerar, o
-llama-swap não pode ter modelo carregado — o `ttl: 300` descarrega após
-5 min ocioso, ou force com `./manage.sh unload`. Ao terminar, o ComfyUI
-libera a VRAM sozinho (`--disable-smart-memory`; sobra ~190 MiB de contexto).
+**VRAM compartilhada, liberação automática nos dois sentidos**: ao pedir
+uma imagem com um LLM carregado, o gpu-shim (na frente do ComfyUI) avalia a
+VRAM e descarrega o llama-swap (`GET /unload`) antes de gerar; ao terminar,
+o ComfyUI devolve a VRAM (`--disable-smart-memory`, sobra ~190 MiB) e o
+próximo chat recarrega o LLM sozinho. Liberação manual: `./manage.sh unload`.
 
 Detalhes (modelos, workflows, mapeamento de nós): `DOCKER.md` e
 `models/MODELS_INSTALL.md`.

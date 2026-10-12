@@ -114,10 +114,13 @@ do_stop() {
 }
 
 do_unload() {
-  # Remove os containers de modelo do llama-swap (ls-*) para liberar VRAM.
-  # Útil antes de gerar imagens no ComfyUI quando o ttl de 5 min ainda não
-  # descarregou o modelo (o llama-swap não tem unload manual; apontar o
-  # request para outro modelo também força o swap).
+  # Libera a VRAM dos modelos LLM antes de gerar imagens no ComfyUI.
+  # Preferência: GET /unload do llama-swap (síncrono, ~0,5 s; o gpu-shim do
+  # ComfyUI chama o mesmo endpoint a cada request). Fallback: docker rm -f.
+  if curl -fsS --max-time 60 "http://127.0.0.1:$PORT/unload" >/dev/null 2>&1; then
+    echo "llama-swap descarregou os modelos; VRAM liberada."
+    return 0
+  fi
   local names
   names=$(docker ps --format "{{.Names}}" | grep "^ls-" || true)
   if [ -z "$names" ]; then

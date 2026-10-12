@@ -27,3 +27,6 @@ comfyui/output/
 comfyui/input/
 comfyui/user/
 comfyui/custom_nodes/
+
+# comfyui — script default criado pelo entrypoint da imagem
+comfyui/user-scripts/set-proxy.sh

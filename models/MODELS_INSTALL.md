@@ -311,10 +311,6 @@ hf download Comfy-Org/Qwen-Image-2.1 \
   diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors \
   --local-dir models/comfyui
 
-# Fallback GGUF (exige custom node ComfyUI-GGUF, não instalado)
-# hf download Abiray/Qwen-Image-2.1-Turbo-GGUF \
-#   qwen_image_2.1_turbo_Q4_K_M.gguf --local-dir models/comfyui/diffusion_models
-
 # Text encoder — Qwen3-VL 8B w4a8 (variante de menor VRAM)
 hf download Comfy-Org/Qwen-Image-2.1 \
   text_encoders/qwen3vl_8b_w4a8.safetensors \

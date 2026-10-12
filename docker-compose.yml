@@ -58,22 +58,23 @@ services:
   # comfyui — Geração/edição de imagens (Qwen-Image 2.1 Turbo)
   # =========================================================
   # Imagem yanwk/comfyui-boot (ComfyUI + Manager, pinada).
-  # UI: http://localhost:8188 | API: /prompt (usada pelo Open WebUI)
+  # UI: http://localhost:8188 (gpu-shim: unload de VRAM prévio) | API: /prompt
   # Modelos: ./models/comfyui (diffusion_models/text_encoders/vae)
   # Saídas: ./comfyui/output | Workflows API p/ Open WebUI: ./comfyui/workflows
   # VRAM COMPARTILHADA: antes de gerar, nenhum container ls-* carregado
   # (ttl 300 do llama-swap descarrega sozinho; unload forçado: ./manage.sh unload).
   # =========================================================
+  # Rede host: o gpu-shim (8188) precisa alcançar o llama-swap (:8081) no
+  # host p/ unload prévio de VRAM, e o ComfyUI escuta só em 127.0.0.1:8189.
   comfyui:
     image: yanwk/comfyui-boot:cu126-slim-20261005
     container_name: comfyui
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:8188:8188"
+    network_mode: host
     # Pesos saem da VRAM ao fim de cada geração (libera p/ llama-swap);
     # recarregam da RAM na próxima run (~s), custo irrelevante no turbo 8 passos
     environment:
-      - CLI_ARGS=--disable-smart-memory
+      - CLI_ARGS=--listen 127.0.0.1 --port 8189 --disable-smart-memory
     gpus: all
     volumes:
       - ./models/comfyui:/root/ComfyUI/models
@@ -81,6 +82,7 @@ services:
       - ./comfyui/input:/root/ComfyUI/input
       - ./comfyui/output:/root/ComfyUI/output
       - ./comfyui/user:/root/ComfyUI/user
+      - ./comfyui/user-scripts:/root/user-scripts
       - comfyui-hf-cache:/root/.cache/huggingface
       - comfyui-torch-cache:/root/.cache/torch
 

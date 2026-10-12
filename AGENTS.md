@@ -105,13 +105,18 @@ load/unload manual — apontar o request para outro `model` faz o swap
     ubatch relê os pesos dos experts na RAM; ubatch maior amortiza o custo.
     Nota: KV do Qwen3.6 é pequeno (só 10/41 camadas têm KV; 2 heads × 256 →
     ~10,6 KiB/tok em q8_0) — o gargalo é FFN de experts, não attention.
- 8. **Geração de imagem (ComfyUI) e inferência de LLM dividem a mesma VRAM.**
-    O ComfyUI (yanwk/comfyui-boot, porta 8188) roda com
-    `--disable-smart-memory`: ao fim de cada geração os pesos voltam para RAM
-    e a VRAM cai para ~190 MiB de contexto. No sentido inverso, o modelo de
-    difusão (pico ~8-9 GB) exige os containers `ls-*` descarregados — o
-    `ttl: 300` resolve após 5 min ocioso; para forçar, `./manage.sh unload`.
-    Sem isso a carga do LLM ou do DiT dá OOM de compute buffer.
+ 8. **Geração de imagem (ComfyUI) e inferência de LLM dividem a mesma VRAM —
+    liberação bidirecional automática.** O ComfyUI
+    (yanwk/comfyui-boot, porta 8188 via gpu-shim; núcleo em 127.0.0.1:8189)
+    roda com `--disable-smart-memory`: ao fim de cada geração os pesos
+    voltam para RAM e a VRAM cai para ~190 MiB. No sentido inverso, o
+    gpu-shim (`comfyui/user-scripts/gpu-shim.py`) avalia a VRAM livre no
+    caminho de geração (Open WebUI/API; polling da UI nativa nunca
+    descarrega) e, se < 8 GiB, chama `GET :8081/unload` do llama-swap
+    (síncrono) antes de repassar o request. `./manage.sh unload` usa o
+    mesmo endpoint. Sem isso a carga do LLM ou do DiT dá OOM de compute
+    buffer (`VRAM grow failed` no log do ComfyUI = DiT carregou com LLM
+    residente).
 
 ---
 

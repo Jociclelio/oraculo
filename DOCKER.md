@@ -190,7 +190,8 @@ PY
 
 - **Imagem**: `yanwk/comfyui-boot:cu126-slim-20261005` (pinada; ComfyUI
   v0.38.2 + ComfyUI-Manager, CUDA 12.6 / Python 3.12)
-- **Container**: `comfyui` — UI em `http://localhost:8188` (bind `127.0.0.1`), API `/prompt`
+- **Container**: `comfyui` (`network_mode: host`) — UI/API em
+  `http://localhost:8188` via gpu-shim; ComfyUI em `127.0.0.1:8189`
 - **`gpus: all`** (o daemon já tem runtime nvidia default; ver `comando.txt`)
 - **`CLI_ARGS=--disable-smart-memory`**: descarrega os pesos da VRAM para RAM
   ao fim de cada geração. Sem isso o ComfyUI retém ~4-6 GB e a próxima carga
@@ -202,19 +203,20 @@ PY
 
 | Papel | Arquivo | Tamanho |
 |-------|---------|---------|
-| Difusão (principal) | `diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors` | 7,26 GB |
-| Difusão (fallback GGUF) | `diffusion_models/qwen_image_2.1_turbo_Q4_K_M.gguf` | 4,0 GB |
+| Difusão | `diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors` | 7,26 GB |
 | Text encoder | `text_encoders/qwen3vl_8b_w4a8.safetensors` | 5,9 GB |
 | VAE | `vae/qwen_image_2.1_vae_bf16.safetensors` | 645 MB |
 
-O `int8_convrot` é nativo do ComfyUI (sem custom node) e mais rápido que o
-GGUF em Ampere; o GGUF Q4_K_M exige o custom node `ComfyUI-GGUF` (não
-instalado — instalar via Manager se precisar do fallback).
+O `int8_convrot` é nativo do ComfyUI (sem custom node) e mais rápido que
+GGUF em Ampere — decisão validada: os GGUFs de difusão foram removidos
+(`ComfyUI-GGUF` nem é instalado).
 
 **Volumes**: `./models/comfyui → /root/ComfyUI/models`;
 `./comfyui/{custom_nodes,input,output,user}` → idem no container; caches de
 HF/torch em volumes nomeados (`comfyui-hf-cache`, `comfyui-torch-cache`).
 
+- `./comfyui/user-scripts` → `/root/user-scripts`: `pre-start.sh` (sourced
+  pelo entrypoint) sobe o gpu-shim; log em `comfyui/user/gpu-shim.log`.
 - O entrypoint copia o bundle `/default-comfyui-bundle/ComfyUI` para
   `/root/ComfyUI` no primeiro boot com `--no-clobber` — os binds vazios são
   populados automaticamente (inclusive o Manager em `custom_nodes`).
@@ -262,15 +264,29 @@ Mapeamento de nós (`nodes`: `[{"type","node_ids","key"}]`; types: `model`,
 | steps/seed | → nó 7 (KSampler) | — |
 | image | — | `image` → nó 5 (LoadImage; o Open WebUI faz upload antes) |
 
-**VRAM COMPARTILHADA** (a mesma 3060 do llama-swap e do desktop):
+**VRAM COMPARTILHADA** (a mesma 3060 do llama-swap e do desktop) — a
+liberação é bidirecional e automática, sem job em background:
 
-- Pico na geração 1024x1024: ~8-9 GB (encoder w4a8 → descarrega → DiT int8).
-- Pós-run com `--disable-smart-memory`: **~190 MiB** (só contexto CUDA) —
-  medido com display ativo.
-- Antes de gerar, nenhum container `ls-*` pode estar carregado: o `ttl: 300`
-  do llama-swap resolve sozinho após 5 min ocioso; para forçar,
-  `./manage.sh unload` (remove os containers `ls-*`).
-- Jogos no desktop (ex.: CS2 ~2,2 GB) competem pelos mesmos 12 GB.
+- **DiT → LLM**: `CLI_ARGS=--disable-smart-memory` descarrega os pesos para
+  RAM ao fim de cada geração; a VRAM cai para **~190 MiB** (só contexto
+  CUDA). O próximo request de chat recarrega o LLM normalmente.
+- **LLM → DiT**: o ComfyUI escuta em `127.0.0.1:8189` atrás do **gpu-shim**
+  (`comfyui/user-scripts/gpu-shim.py`, sobe via `pre-start.sh` na porta
+  canônica 8188). O shim repassa HTTP e WebSocket e, no caminho de geração
+  (Open WebUI/API — requests sem `Origin` da UI nativa), avalia a VRAM
+  livre via `nvidia-smi`: se < 8 GiB, chama `GET :8081/unload` do
+  llama-swap (síncrono, ~0,5 s) e espera a VRAM estabilizar/aparecer antes
+  de repassar. O teardown do processo do LLM pode levar dezenas de
+  segundos — o shim aguenta isso (teto 45 s, encerra cedo se estável).
+  O polling da UI nativa do ComfyUI **nunca** descarrega o LLM (gate por
+  `Origin: …:8188`).
+- Sem modelo LLM carregado, o shim não faz nada (VRAM livre > 8 GiB). Com
+  jogos no desktop (ex.: CS2 ~2,2 GB), a geração ainda cabe (medido).
+- `./manage.sh unload` usa o mesmo endpoint `GET /unload` para liberação
+  manual (fallback `docker rm -f` se o llama-swap estiver fora).
+- O "aborted" no log do llama-swap durante carga de modelo é esperado se
+  algo chamar `/unload` no meio de um health check — o gate por VRAM evita
+  isso no fluxo normal.
 
 
 ---
