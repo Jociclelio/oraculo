@@ -278,7 +278,16 @@ Mapeamento de nós (`nodes`: `[{"type","node_ids","key"}]`; types: `model`,
 | model | `unet_name` → nó 1 | `unet_name` → nó 1 |
 | width/height | → nó 5 (EmptyLatentImage) | — (canvas vem da referência) |
 | steps/seed | → nó 7 (KSampler) | — |
-| image | — | `image` → nó 5 (LoadImage; o Open WebUI faz upload antes) |
+| image | — | `image` → nós **5 e 10** (LoadImage; upload automático) |
+
+**Múltiplas imagens na edição**: a tool `edit_image` do Open WebUI aceita
+lista (`image_urls`), o router faz upload de todas e o mapeamento distribui
+`image[i] → node_ids[i]` — com `node_ids ["5","10"]` a 1ª imagem é a editada
+(`images.image_1`) e a 2ª é referência (`images.image_2`), endereçável no
+prompt como `<image2>` (o Qwen-Image 2.1 suporta até 16 slots; só 2 estão
+ligados). Com uma única imagem, o nó 10 carrega `input/placeholder.png`
+(cinza neutro) como image_2 — validado que a edição simples não degrada
+(maçã → lima: 42% de pixels alterados, igual ao teste sem placeholder).
 
 **VRAM COMPARTILHADA** (a mesma 3060 do llama-swap e do desktop) — a
 liberação é bidirecional e automática, sem job em background:

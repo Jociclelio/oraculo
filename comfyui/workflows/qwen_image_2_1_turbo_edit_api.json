@@ -69,6 +69,10 @@
       "images.image_1": [
         "5",
         0
+      ],
+      "images.image_2": [
+        "10",
+        0
       ]
     },
     "class_type": "TextEncodeQwenImage21",
@@ -133,6 +137,15 @@
     "class_type": "SaveImage",
     "_meta": {
       "title": "Salvar imagem"
+    }
+  },
+  "10": {
+    "inputs": {
+      "image": "placeholder.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 2 (substituída pelo Open WebUI)"
     }
   }
 }
