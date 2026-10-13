@@ -145,6 +145,38 @@ services:
       - ./mcp-data/npm-cache:/tmp/npm-cache
 
   # =========================================================
+  # 9router — Proxy de roteamento para providers cloud de LLM
+  # =========================================================
+  # Fallback cloud opcional ao serving local (llama-swap): agrega 40+
+  # providers (free tiers: OpenCode Free, Kiro; API-key: OpenRouter, Groq...)
+  # atrás de um endpoint OpenAI-compatible único.
+  # Dashboard: http://localhost:20128/dashboard | API: /v1
+  # Segredos no .env (JWT_SECRET/INITIAL_PASSWORD/API_KEY_SECRET/MACHINE_ID_SALT).
+  # Senha default `123456` se INITIAL_PASSWORD não for setada — sempre setar.
+  # Conveniência, NÃO infraestrutura: listas de modelos free mudam sem aviso.
+  # =========================================================
+  9router:
+    image: decolua/9router:0.5.95
+    container_name: 9router
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:20128:20128"
+    environment:
+      - DATA_DIR=/app/data
+      - PORT=20128
+      - HOSTNAME=0.0.0.0
+      - NODE_ENV=production
+      - BASE_URL=http://localhost:20128
+      - NEXT_PUBLIC_BASE_URL=http://localhost:20128
+      - JWT_SECRET=${JWT_SECRET}
+      - INITIAL_PASSWORD=${INITIAL_PASSWORD}
+      - API_KEY_SECRET=${API_KEY_SECRET}
+      - MACHINE_ID_SALT=${MACHINE_ID_SALT}
+      - ENABLE_REQUEST_LOGS=false
+    volumes:
+      - 9router-data:/app/data
+
+  # =========================================================
   # openwa-docker-proxy — Proxy seguro para Docker socket
   # =========================================================
   # Expõe apenas as operações necessárias (containers, images, volumes,
@@ -221,3 +253,4 @@ volumes:
   open-terminal-data:
   openwa-data:
   openwa-sessions:
+  9router-data:

@@ -1,11 +1,12 @@
 # Docker — Stack Oraculo (Open WebUI + agentes; serving via llama-swap no host)
 
 Stack Docker com **Open WebUI** (interface web), **Open Terminal** (substrato
-de execução agêntica), **SearXNG** (busca web) e **OpenWa** (gateway WhatsApp
-com MCP). O **serving de LLM saiu do compose**: o antigo serviço `llama-cpp`
-foi substituído pelo **llama-swap**, um **processo de host** (fora do
-`docker-compose.yml`) que sobe **containers Docker efêmeros por modelo**
-sob demanda.
+de execução agêntica), **SearXNG** (busca web), **OpenWa** (gateway WhatsApp
+com MCP) e **9Router** (roteamento para providers cloud de LLM — fallback
+opcional ao serving local). O **serving de LLM saiu do compose**: o antigo
+serviço `llama-cpp` foi substituído pelo **llama-swap**, um **processo de
+host** (fora do `docker-compose.yml`) que sobe **containers Docker efêmeros
+por modelo** sob demanda.
 
 ---
 
@@ -27,19 +28,23 @@ cp .env.example .env   # ou criar manualmente
 |----------|-----------|
 | `WEBUI_SECRET_KEY` | Chave secreta do Open WebUI (persistência OAuth/MCP) |
 | `OPEN_TERMINAL_API_KEY` | Autenticação do open-terminal (gerar com `openssl rand -hex 32`) |
+| `JWT_SECRET` | 9Router — assinatura de sessões (gerar com `openssl rand -hex 32`) |
+| `INITIAL_PASSWORD` | 9Router — senha do dashboard `:20128` (**nunca** deixar o default `123456`) |
+| `API_KEY_SECRET` | 9Router — segredo das API keys de endpoint (gerar com `openssl rand -hex 32`) |
+| `MACHINE_ID_SALT` | 9Router — salt do machine ID (gerar com `openssl rand -hex 32`) |
 
 > O SearXNG usa `searxng/settings.yml` (local, gitignored) — copiar de `searxng/settings.example.yml` e definir um `secret_key` aleatório.
 
 ---
 
-## Serviços (8 — sem `llama-cpp`)
+## Serviços (9 — sem `llama-cpp`)
 
 > **Mudança de arquitetura (task 006 do plano llama-swap-multi-engine)**: o
 > serviço `llama-cpp` e o mount do `models.ini` foram **removidos** do
 > compose. O serving passou a ser o **llama-swap, processo de host** (seção
 > abaixo). `docker compose config --services` → `open-webui`,
 > `open-terminal`, `searxng`, `comfyui`, `mcp-playwright`, `mcp-memory`,
-> `openwa`, `openwa-docker-proxy`.
+> `9router`, `openwa`, `openwa-docker-proxy`.
 
 ### open-webui — Interface Web
 
@@ -108,6 +113,43 @@ curl "http://localhost:8888/search?q=teste&format=json"
 - **Volumes**: `openwa-data → /app/data`, `openwa-sessions → /app/data/sessions`
 
 Gateway WhatsApp com MCP habilitado. Sessões não iniciam automaticamente (`AUTO_START_SESSIONS=false`).
+
+### 9router — Proxy de roteamento para providers cloud de LLM
+
+- **Imagem**: `decolua/9router:0.5.95` (pinada)
+- **Container**: `9router`
+- **Porta**: `127.0.0.1:20128` (somente localhost)
+- **Dashboard**: `http://localhost:20128/dashboard` (login = `INITIAL_PASSWORD`)
+- **API OpenAI-compatible**: `http://localhost:20128/v1` (API key gerada no dashboard)
+- **Volume**: `9router-data → /app/data` (SQLite: contas, providers, quotas)
+
+Proxy local (MIT) que agrega 40+ providers de LLM atrás de um endpoint
+único, com fallback automático (Subscription → Cheap → Free). No oraculo é
+**camada cloud opcional** — o serving local (llama-swap) é o caminho
+primário; o 9router entra quando o modelo local não basta ou a GPU está
+ocupada (jogo/ComfyUI).
+
+**Providers** (conectar em *Dashboard → Providers*):
+
+| Tier | Provider | Custo |
+|------|----------|-------|
+| Free | **OpenCode Free** | sem auth; lista de modelos muda sem aviso |
+| Free | **Kiro AI** | ~50 créditos/mês (Claude 4.5 + GLM-5 + MiniMax) |
+| API-key | OpenRouter, Groq, GLM, MiniMax, Kimi… | paga-se direto ao provider |
+
+**Uso no Open WebUI**: *Admin → Settings → Connections → OpenAI API* →
+adicionar `http://localhost:20128/v1` + a API key do dashboard. Os modelos
+aparecem com prefixo do provider (ex.: `oc/...`, `kr/...`) ao lado dos
+locais do llama-swap.
+
+**Segurança**: `INITIAL_PASSWORD` obrigatória no `.env` (o default do app é
+`123456`); bind `127.0.0.1` — nunca expor a porta para fora da máquina.
+Prompts que passam pelo proxy saem para os providers cloud.
+
+> **Posicionamento**: conveniência, NÃO infraestrutura. Tiers free mudam ou
+> descontinuam sem aviso (iFlow/Qwen Code/Gemini CLI já saíram do ar em
+> 2026) — não construir workflow dependendo deles. Não rotear assinaturas
+> pagas por ele (zona cinzenta de ToS).
 
 ### openwa-docker-proxy — Proxy do Docker socket
 
@@ -364,7 +406,8 @@ Detalhes de entries/parâmetros: [`llama-swap/config.yaml`](llama-swap/config.ya
 │   open-webui (8080, network_mode: host)                          │
 │   containers efêmeros ls-<Modelo> (127.0.0.1:58xx→8080)          │
 │     ↑ criados/destruídos pelo llama-swap (fora do compose)       │
-│   searxng (8888) · open-terminal (8000) — bridge, só localhost   │
+│   searxng (8888) · open-terminal (8000) · 9router (20128)         │
+│     — bridge, só localhost                                        │
 └─────────────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────────────┐
 │  openwa-network      ←→  openwa + openwa-docker-proxy            │

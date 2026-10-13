@@ -12,6 +12,7 @@ containers efêmeros de **llama.cpp** para inferência GPU) e interface
 - **Playwright MCP** (navegador p/ o Open WebUI) → porta `8931`
 - **Memory MCP** (grafo de conhecimento p/ Open WebUI + opencode) → porta `8932`
 - **ComfyUI** (geração/edição de imagens, Qwen-Image 2.1 Turbo) → porta `8188`
+- **9Router** (proxy de fallback cloud p/ LLMs free/API-key) → porta `20128`
 
 ---
 
@@ -242,6 +243,23 @@ docker exec openwa cat /app/data/.api-key
 ```
 
 Já conectado ao Open WebUI como **tool server MCP**. Para usar no opencode/pi, adicionar como MCP streamable-http com header `X-API-Key`.
+
+## 9Router (fallback cloud)
+
+Proxy de roteamento para **providers cloud de LLM** — camada opcional e
+complementar ao serving local (llama-swap, que é a prioridade). Agrega 40+
+providers atrás de um endpoint OpenAI-compatible único, com fallback
+automático: `http://localhost:20128/v1` (dashboard em
+`http://localhost:20128/dashboard`, senha = `INITIAL_PASSWORD` do `.env`).
+
+- **Free tiers**: OpenCode Free (sem auth, lista de modelos muda sem aviso) e Kiro (~50 créditos/mês).
+- **API-key**: OpenRouter, Groq, GLM, MiniMax etc. — conectar em *Dashboard → Providers*.
+- **Uso**: apontar o Open WebUI (Admin > Connections > OpenAI API) ou o opencode para `http://localhost:20128/v1` com a API key gerada no dashboard; modelos com prefixo do provider (ex.: `oc/...`, `kr/...`).
+
+> **Posicionamento**: conveniência, NÃO infraestrutura — os modelos "free"
+> mudam/desaparecem sem aviso; o serving local continua sendo o caminho
+> primário. Prompts que passarem por ele saem da rede local para os
+> providers cloud. Detalhes em [`DOCKER.md`](DOCKER.md).
 
 ---
 
