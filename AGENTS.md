@@ -36,7 +36,7 @@ load/unload manual — apontar o request para outro `model` faz o swap
 ## Arquitetura
 
 - **`llama-swap/config.yaml` é a FONTE DA VERDADE** dos parâmetros de cada
-  modelo (32 entries: 29 carregáveis = 25 stock + 2 Bonsai + 1 Xing + 1
+  modelo (33 entries: 30 carregáveis = 26 stock + 2 Bonsai + 1 Xing + 1
   Strata). `models/models.ini` é HISTÓRICO desativado — nada o lê.
   **Convenção de contexto** (VRAM validada por carga real, display idle):
   entry SEM sufixo = **64k** (floor); `_XXk` = contexto maior validado;
@@ -147,6 +147,7 @@ load/unload manual — apontar o request para outro `model` faz o swap
 | `Gemma4_12B_Agentic` | stock | 65536 | agentic fable5/tau2, denso 100% VRAM (7,4 GB); **~24 tok/s, prefill 8 ms/tok** — worker de workflows |
 | `Mellum2.1_12B_A2.5B` | stock | 65536 | JetBrains código thinking, MoE cabe inteiro (8,1 GB); **~90 tok/s** |
 | `LFM2.5_8B_A1B_Hermes` | stock | 65536 | Hermes agentic, MoE cabe inteiro (5,2 GB); **~129 tok/s** — smoke tests |
+| `LFM2.5_24B_A2B` | stock | 65536 | LiquidAI raciocínio puro agêntico, MoE 24B/2,45B (64 experts top-4); ncmoe 20 + `--load-mode none` + ub2048; **~45 tok/s, prefill ~1900 tok/s**; VRAM 9809 MiB; sampling temp 0.1 / top-k 50 / rep 1.05; sem MTP (draft DSpark não publicado) |
 | `Saluki27B_Qwen3.8_32k` | stock | 32768 | Qwen3.8-27B build 2-bit (Underdog/Kujira + head MTP), denso 100% VRAM (8,35 GB); best tool-calling (Underdog Bench 88/120, SWE-bench 30/50); **~31 tok/s, aceitação ~76%**; ctx máx 32K (64K estoura 12 GB) — entry abaixo do floor de 64k; ub1024: VRAM 11371 MiB, prefill ~429 tok/s (ub2048 não ajuda, VRAM 11823 apertado) |
 | `Qwen3.8_35B_Distill` | stock | 65536 | Qwen3.8-35B-A3B-Distill Q4_K_M (empero-ai; GGUF no repo `-GGUF`, o sem sufixo só tem safetensors); arch qwen35moe idêntica ao Qwen3.6, MTP embutido (nextn=1); ncmoe 28 + `--load-mode none` + ub2048; **~35 tok/s, prefill ~900 tok/s, aceitação ~0,62**; VRAM 10839 MiB |
 | `MiniCPM-V_4.7_35B` | stock | 65536 | MiniCPM-V 4.7 35B-A3B multimodal Q4_K_M + mmproj f16 (openbmb `-gguf`); backbone Qwen3.6 (arch qwen35moe, 256 experts/8 ativos, GDN); **SEM MTP** (header declara nextn=1 mas sem tensors; draft DSpark testado e descartado: aceitação ~10%, decode 9,5 tok/s, buffer ~3,9 GB não cabe — GGUF do draft guardado em `models/MiniCPM-V-4.7-35B-A3B-DSpark/`); ncmoe 32 + `--load-mode none` + ub2048; requer llama.cpp ≥ PR #29416 (imagem stock atualizada p/ build 11561, fingerprint `b11561-e937b17a2`); **~32-35 tok/s, prefill ~1040 tok/s**; VRAM 8991 MiB; visão validada |
@@ -167,8 +168,8 @@ load/unload manual — apontar o request para outro `model` faz o swap
 
 Relevância para servir (uso agêntico/opencode): **alta** = Gemma4_12B_Agentic,
 Qwen3.6_35B_Code/General, Qwen3.8_35B_Distill, Saluki27B, bonsai-27b,
-MiniCPM-V_4.7_35B, Gemma4_12B; **média** =
-LFM/Mellum, Xing, Ornith 35B, Hauhau, bonsai-pq2_0, It_*, Qwen3.8_27B_GSQ,
+MiniCPM-V_4.7_35B, Gemma4_12B, LFM2.5_24B_A2B; **média** =
+LFM2.5_8B/Mellum, Xing, Ornith 35B, Hauhau, bonsai-pq2_0, It_*, Qwen3.8_27B_GSQ,
 Strata (coder forte
 mas prefill ~8 tok/s).
 

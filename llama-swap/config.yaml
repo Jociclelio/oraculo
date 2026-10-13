@@ -345,6 +345,28 @@ models:
     ttl: 300
 
   # ---------------------------------------------------------------------
+  # LFM 2.5 24B-A2B (LiquidAI, Q4_K_M) — raciocínio puro (sempre pensa),
+  # MoE 24B/2,45B ativo (64 experts top-4, 40 camadas = 30 conv + 10 GQA),
+  # vocab 128k, ctx nativo 131072. Agêntico (post-train em OpenClaw/Hermes/
+  # Pi/OpenCode). Arquitetura `lfm2moe` no llama.cpp upstream.
+  # - Q4_K_M 14,5 GB não cabe inteiro na VRAM: --load-mode none + -ncmoe
+  #   (regra 2 — com mmap o decode desaba silenciosamente).
+  # - Sampling do README oficial: temp 0.1 / top_k 50 / repeat-penalty 1.05.
+  # - Sem MTP embutido (família LFM2.5 usa draft DSpark separado, ainda não
+  #   publicado para este modelo).
+  # ---------------------------------------------------------------------
+  LFM2.5_24B_A2B:
+    cmd: |
+      ${docker-stock}
+      -m /models/LFM2.5-24B-A2B-GGUF/LFM2.5-24B-A2B-Q4_K_M.gguf
+      --load-mode none
+      -c 65536 -ngl 99 -ncmoe 20
+      -b 4096 -ub 2048
+      --temp 0.1 --top-k 50 --repeat-penalty 1.05
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
   # Xing4.0 29B-A4B (Venastine-Research, Q4_K_M) — engine dedicada
   # llama.cpp-xing (fork shuxiaoqiong, PR ggml-org#29012 — NUNCA stock).
   # Arquitetura: MoE 29B/4B ativo (64 experts roteados + 1 shared, 40
