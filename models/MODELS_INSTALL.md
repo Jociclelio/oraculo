@@ -257,6 +257,59 @@ Modelos MoE (ex: Qwen 35B-A3B) usam `-ncmoe` para distribuir experts na CPU:
 
 ---
 
+## MiniCPM-V 4.7 35B-A3B (OpenBMB — multimodal MoE)
+
+Primeiro MoE multimodal da série MiniCPM-V. Backbone Qwen3.6-35B-A3B
+(arch `qwen35moe`: 41 camadas, 256 experts, 8 ativos, Gated DeltaNet +
+full attention a cada 4; ctx nativo 262144) + visor SigLIP2 (LLaVA-UHD v4).
+GGUF oficial: `openbmb/MiniCPM-V-4.7-35B-A3B-gguf`.
+
+```bash
+hf download openbmb/MiniCPM-V-4.7-35B-A3B-gguf \
+  MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf \
+  mmproj-model-f16.gguf \
+  --local-dir models/MiniCPM-V-4.7-35B-A3B-Q4_K_M
+```
+
+| Arquivo | Tamanho | Uso |
+|---------|---------|-----|
+| `MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf` | ~21,2 GB | entry `MiniCPM-V_4.7_35B` |
+| `mmproj-model-f16.gguf` | ~1,1 GB | visão (mmproj) |
+
+> ⚠️ **Requer llama.cpp ≥ PR ggml-org#29416** (merge 2026-10-10): suporte ao
+> visor `minicpmv4_7` + `rope.section_order zyxt`. A imagem stock local foi
+> atualizada para o build 11561 (`0.6.0-dev`, fingerprint `b11561-e937b17a2`)
+> — a anterior (build 11312, 01/10) não carregava o mmproj.
+
+> **SEM MTP**: o GGUF declara `nextn_predict_layers=1` mas não contém tensors
+> `nextn` (verificado no header; o safetensors de 70 GB também não tem —
+> a speculação oficial da série é draft **DSpark**, não MTP).
+
+### Draft DSpark (testado e DESCARTADO)
+
+O draft oficial (`openbmb/MiniCPM-V-4.7-35B-A3B-DSpark`, safetensors 778 MB)
+foi convertido para GGUF e testado em 2026-10-12:
+
+```bash
+# conversão (precisa de venv com transformers + sentencepiece):
+python3 -m venv --system-site-packages /tmp/conv-venv
+/tmp/conv-venv/bin/pip install transformers sentencepiece
+# tokenizer/config do target num subdiretório (--target-model-dir exige dir local):
+hf download openbmb/MiniCPM-V-4.7-35B-A3B tokenizer.json tokenizer_config.json \
+  chat_template.jinja config.json --local-dir models/MiniCPM-V-4.7-35B-A3B-DSpark/target
+/tmp/conv-venv/bin/python convert_hf_to_gguf.py \
+  models/MiniCPM-V-4.7-35B-A3B-DSpark --outtype q8_0 \
+  --target-model-dir models/MiniCPM-V-4.7-35B-A3B-DSpark/target
+```
+
+Resultado: aceitação ~10% e decode 9,5 tok/s (vs 32-35 sem draft); o compute
+buffer do draft (~3,9 GB — logits de vocab 248k × ubatch) também não cabe na
+VRAM junto do target (`-devd none`/`-ngld 0` abortam no scheduler). O GGUF do
+draft (413 MB) ficou em `models/MiniCPM-V-4.7-35B-A3B-DSpark/` para reteste
+futuro. A entry serve **sem** speculative decoding.
+
+---
+
 ## Modelos com MTP (Multi-Token Prediction)
 
 Para acelerar a geração, use um drafter na entry (ex.: `Gemma4_12B_MTP`):

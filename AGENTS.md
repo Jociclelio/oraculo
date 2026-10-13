@@ -149,12 +149,12 @@ load/unload manual — apontar o request para outro `model` faz o swap
 | `LFM2.5_8B_A1B_Hermes` | stock | 65536 | Hermes agentic, MoE cabe inteiro (5,2 GB); **~129 tok/s** — smoke tests |
 | `Saluki27B_Qwen3.8_32k` | stock | 32768 | Qwen3.8-27B build 2-bit (Underdog/Kujira + head MTP), denso 100% VRAM (8,35 GB); best tool-calling (Underdog Bench 88/120, SWE-bench 30/50); **~31 tok/s, aceitação ~76%**; ctx máx 32K (64K estoura 12 GB) — entry abaixo do floor de 64k; ub1024: VRAM 11371 MiB, prefill ~429 tok/s (ub2048 não ajuda, VRAM 11823 apertado) |
 | `Qwen3.8_35B_Distill` | stock | 65536 | Qwen3.8-35B-A3B-Distill Q4_K_M (empero-ai; GGUF no repo `-GGUF`, o sem sufixo só tem safetensors); arch qwen35moe idêntica ao Qwen3.6, MTP embutido (nextn=1); ncmoe 28 + `--load-mode none` + ub2048; **~35 tok/s, prefill ~900 tok/s, aceitação ~0,62**; VRAM 10839 MiB |
+| `MiniCPM-V_4.7_35B` | stock | 65536 | MiniCPM-V 4.7 35B-A3B multimodal Q4_K_M + mmproj f16 (openbmb `-gguf`); backbone Qwen3.6 (arch qwen35moe, 256 experts/8 ativos, GDN); **SEM MTP** (header declara nextn=1 mas sem tensors; draft DSpark testado e descartado: aceitação ~10%, decode 9,5 tok/s, buffer ~3,9 GB não cabe — GGUF do draft guardado em `models/MiniCPM-V-4.7-35B-A3B-DSpark/`); ncmoe 32 + `--load-mode none` + ub2048; requer llama.cpp ≥ PR #29416 (imagem stock atualizada p/ build 11561, fingerprint `b11561-e937b17a2`); **~32-35 tok/s, prefill ~1040 tok/s**; VRAM 8991 MiB; visão validada |
 | `Qwen3.8_27B_GSQ_IQ2_XS_32k` | stock | 32768 | Qwen3.8-27B GSQ-RCO IQ2_XS `-mtp` (ISTA; não-uniforme 2,50 bpw IQ1_M..Q6_K, híbrido qwen35 GDN); ctx máx 32K (KV híbrido ~32 KiB/tok; 64K estoura); **~31 tok/s, aceitação ~0,70**, prefill ~433 tok/s; VRAM 11539 MiB (apertado) |
 | `Qwen3.6_35B_General` | stock | 65536 | thinking + head MTP; ncmoe 32; ub2048; aceitação ~82-93% |
 | `Qwen3.6_35B_Code` | stock | 65536 | thinking + head MTP; ncmoe 28; **~27 tok/s, aceitação 93%** — MoE híbrido padrão; **ub2048: prefill ~890 tok/s (era ~400), VRAM ~11,5 GB** |
 | `Qwen3.6_35B_It_General` / `_It_Reasoning` | stock | 65536 | Instruct (sem/temp thinking); ncmoe 32; ub2048 |
 | `Qwen3.6_35B_A3B_Hauhau_Aggressive` | stock | 65536 | Uncensored Aggressive, multimodal; ncmoe 32; ub2048 + `--load-mode none` (faltava — regra 2) |
-| `Ornith1.5_9B_MTP` / `_9B_DFlash` | stock | 65536 | aceitação baixa (~0,40-0,42) — candidatos a remoção |
 | `Ornith1.5_35B_MTP` | stock | 65536 | agêntico (APEX Compact), ncmoe 28 + `--load-mode none` (faltava — regra 2); ub2048: prefill ~990 tok/s, VRAM 9849 MiB, aceitação ~0,80 |
 | `bonsai-27b` | PrismML | 65536 | PTQ1_0 + mmproj (visão validada); 24,5 tok/s, VRAM 10657/12288 total |
 | `bonsai-27b-pq2_0` | PrismML | 65536 | PQ2_0, mais rápido em Ampere, sem visão |
@@ -163,15 +163,14 @@ load/unload manual — apontar o request para outro `model` faz o swap
 | **Variantes _XXk** | | | |
 | `Gemma4_12B_128k` / `_MTP_128k` / `_Hauhau_128k` / `_Agentic_128k` | stock | 131072 | Gemma 4 12B @ 128K validada: 9487 MiB c/ mmproj (MTP: dentro do máx 192K) |
 | `LFM2.5_8B_A1B_Hermes_128k` | stock | 131072 | 7063 MiB validado |
-| `Ornith1.5_9B_MTP_128k` | stock | 131072 | 9475 MiB validado |
 | `Qwen3.6_35B_General_96k` / `_Code_96k` / `_It_General_96k` / `_It_Reasoning_96k` / `_A3B_Hauhau_Aggressive_96k` | stock | 98304 | ub1024 (ub2048 não cabe c/ 96k); Code c/ ncmoe 28: 11577 MiB validado (apertado); demais ncmoe 32 — só com display idle |
 
 Relevância para servir (uso agêntico/opencode): **alta** = Gemma4_12B_Agentic,
 Qwen3.6_35B_Code/General, Qwen3.8_35B_Distill, Saluki27B, bonsai-27b,
-Gemma4_12B; **média** =
+MiniCPM-V_4.7_35B, Gemma4_12B; **média** =
 LFM/Mellum, Xing, Ornith 35B, Hauhau, bonsai-pq2_0, It_*, Qwen3.8_27B_GSQ,
 Strata (coder forte
-mas prefill ~8 tok/s); **baixa** = Ornith 9B (×2).
+mas prefill ~8 tok/s).
 
 ---
 

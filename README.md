@@ -98,7 +98,7 @@ Coloque os arquivos `.gguf` nos respectivos diretórios (guia completo em
 ```
 models/
 ├── Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/
-├── Ornith-1.5-9B-Q4_K_M/
+├── MiniCPM-V-4.7-35B-A3B-Q4_K_M/
 ├── Ornith-1.5-35B-A3B-Q4_K_M/
 ├── Qwen3.6-28B-REAP20-A3B-Q4_K_M/
 ├── Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/
@@ -305,7 +305,7 @@ Detalhes (modelos, workflows, mapeamento de nós): `DOCKER.md` e
 ## Modelos Disponíveis
 
 Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
-(17 entries: 15 stock + 2 Bonsai).
+(30 entries: 28 stock + 2 Bonsai).
 
 | Modelo | Contexto | Notas |
 |--------|----------|-------|
@@ -320,8 +320,7 @@ Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
 | Qwen3.6_35B_Code | 49152 | MoE (28 experts CPU) / head MTP / temp=0.6 / ~27 tok/s |
 | Qwen3.6_35B_It_General | 98304 | MoE (32 experts CPU) / head MTP / temp=0.7 |
 | Qwen3.6_35B_It_Reasoning | 98304 | MoE (32 experts CPU) / head MTP / temp=1.0 |
-| Ornith1.5_9B_MTP | 65536 | MTP speculative decoding / acceptance ~0.40 |
-| Ornith1.5_9B_DFlash | 65536 | DFlash speculative decoding / acceptance ~0.42 |
+| MiniCPM-V_4.7_35B | 65536 | **MiniCPM-V 4.7 35B-A3B** multimodal (OpenBMB; backbone Qwen3.6, arch qwen35moe) / ncmoe 32 + `--load-mode none` + ub2048 / sem MTP (draft DSpark descartado) / ~32-35 tok/s, prefill ~1040 tok/s / visão validada |
 | Ornith1.5_35B_MTP | 49152 | MoE (28 experts CPU) / MTP / acceptance ~0.80 |
 | Qwen3.6_35B_A3B_Hauhau_Aggressive | 98304 | MoE (32 experts CPU) / multimodal |
 | bonsai-27b | 65536 | **Bonsai 2 27B PTQ1_0** (primária) + mmproj Q8_0 (visão) — engine PrismML; prefill ≈ 540 tok/s, decode ≈ 24,5 tok/s, VRAM 9146 MiB (processo) |
