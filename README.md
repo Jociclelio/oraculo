@@ -252,8 +252,11 @@ providers atrás de um endpoint OpenAI-compatible único, com fallback
 automático: `http://localhost:20128/v1` (dashboard em
 `http://localhost:20128/dashboard`, senha = `INITIAL_PASSWORD` do `.env`).
 
-- **Free tiers**: OpenCode Free (sem auth, lista de modelos muda sem aviso) e Kiro (~50 créditos/mês).
-- **API-key**: OpenRouter, Groq, GLM, MiniMax etc. — conectar em *Dashboard → Providers*.
+- **Free tiers**: OpenCode Free (**bloqueado na origem** — `403 FreeTierError`
+  fora do cliente OpenCode) e Kiro (~50 créditos/mês, OAuth interativo).
+- **API-key**: OpenRouter, Gemini, Groq, NVIDIA NIM, GLM, MiniMax… — conectar
+  em *Dashboard → Providers*. Ativo: **Gemini** (key do pi, free tier,
+  validado e2e). Detalhes e estado dos providers: [`DOCKER.md`](DOCKER.md).
 - **Uso**: apontar o Open WebUI (Admin > Connections > OpenAI API) ou o opencode para `http://localhost:20128/v1` com a API key gerada no dashboard; modelos com prefixo do provider (ex.: `oc/...`, `kr/...`).
 
 > **Posicionamento**: conveniência, NÃO infraestrutura — os modelos "free"
@@ -317,6 +320,14 @@ Detalhes (modelos, workflows, mapeamento de nós): `DOCKER.md` e
 | `docker logs ls-<Modelo>` | Logs do container do modelo carregado no momento |
 | `docker logs open-webui` | Ver logs do open-webui |
 | `./manage.sh unload` | Descarregar modelos `ls-*` (libera VRAM p/ ComfyUI) |
+| `watch -n 2 ./bin/dashboard.sh` | Dashboard de terminal: modelo ativo, prefill/decode (último request), VRAM da GPU |
+
+O `bin/dashboard.sh` é one-shot (sem dependências além de `docker`,
+`nvidia-smi`, `awk`/`sed`): lê o container `ls-*` ativo, o contexto do
+entry direto do `config.yaml`, as últimas taxas medidas pelo llama-server
+(linhas `slot print_timing` do `docker logs`) e a VRAM total da GPU
+(inclui desktop/jogos — GPU compartilhada). Indica idle quando nada está
+carregado (ttl de 5 min). Também funciona sem `watch`, para consulta única.
 
 ---
 
