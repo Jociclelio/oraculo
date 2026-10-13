@@ -133,14 +133,18 @@ ocupada (jogo/ComfyUI).
 
 | Tier | Provider | Custo |
 |------|----------|-------|
-| Free | **OpenCode Free** | sem auth; lista de modelos muda sem aviso |
-| Free | **Kiro AI** | ~50 créditos/mês (Claude 4.5 + GLM-5 + MiniMax) |
-| API-key | OpenRouter, Groq, GLM, MiniMax, Kimi… | paga-se direto ao provider |
+| Free | **Gemini** (key do pi) | free tier — **ativo, validado e2e** (`gemini/gemini-3.x-*`) |
+| Free | OpenCode Free | **bloqueado na origem** (out/2026): opencode.ai responde `403 FreeTierError` fora do cliente OpenCode |
+| Free | Kiro AI | ~50 créditos/mês (OAuth interativo no dashboard) |
+| API-key | OpenRouter, Groq, NVIDIA NIM, GLM, MiniMax… | paga-se direto ao provider (NIM conectada, mas a key do pi **não tem acesso a chat** — só lista modelos) |
 
-**Uso no Open WebUI**: *Admin → Settings → Connections → OpenAI API* →
-adicionar `http://localhost:20128/v1` + a API key do dashboard. Os modelos
-aparecem com prefixo do provider (ex.: `oc/...`, `kr/...`) ao lado dos
-locais do llama-swap.
+**Uso no Open WebUI**: conexão **já registrada** no `webui.db` (índice 4 de
+`openai.api_base_urls`/`api_keys`, `prefix_id: 9r` — os modelos aparecem como
+`9r.gemini/...` ao lado dos locais do llama-swap). Foi gravada direto no banco
+(que tem precedência sobre env, regra 6) — para mudar, editar a conexão na UI
+ou em `openai.api_*` no `webui.db`. Também configurado no **opencode**
+(provider `router9` em `~/.config/opencode/opencode.json`) e no **pi**
+(provider `9router` em `~/.pi/agent/models.json`).
 
 **Segurança**: `INITIAL_PASSWORD` obrigatória no `.env` (o default do app é
 `123456`); bind `127.0.0.1` — nunca expor a porta para fora da máquina.
