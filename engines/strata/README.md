@@ -1,9 +1,12 @@
-# Strata (Qwen3.8-Flash-Next) — INSTALADA (2026-10-11), entry ativa no llama-swap
+# Strata (Qwen3.8-Flash-Next) — SEM PESOS (removidos 2026-10-14)
 
 Infraestrutura do **Strata** (engine oficial para o Qwen3.8-Flash-Next,
-https://github.com/Niko1221/Strata). Modelo **Coder IQ1_M instalado** em
-`/home/jocic/strata-data` (86 GB reais: 55 GB de pesos + 25 GB de pack de
-experts + 6,5 GB do draft MTP) e entry `Strata` **ativa** no llama-swap.
+https://github.com/Niko1221/Strata). Os pesos do modelo **Coder IQ1_M**
+(86 GB reais: 55 GB de pesos + 25 GB de pack de experts + 6,5 GB do draft
+MTP, que ficavam em `models/strata-data/`) foram **apagados em 2026-10-14**
+e a entry `Strata` saiu do `llama-swap/config.yaml`. Reativar = refazer o
+fluxo abaixo (os GGUFs originais são re-baixáveis do HF; o pack de experts
+é re-gerado pelo tooling do upstream).
 
 - `Dockerfile` — adaptado do Dockerfile oficial do upstream, com o código
   clonado em commit pinado (`61b3fb5dd3f1e8ec09cf7e4e05208bc6d3c46406`) e as
@@ -44,7 +47,7 @@ inferência.
 docker build -t strata ./strata
 
 # 2. Diretório de dados do modelo no NVMe:
-mkdir -p /home/jocic/strata-data
+mkdir -p models/strata-data
 
 # 3. Primeiro start — baixa o modelo (~58 GB na variante Coder IQ1_M,
 #    retomável se interrompido), prepara o pack e sobe a API em
@@ -52,7 +55,7 @@ mkdir -p /home/jocic/strata-data
 docker run --rm --gpus all \
   -p 127.0.0.1:8080:8080 \
   --ulimit memlock=-1 \
-  -v /home/jocic/strata-data:/data \
+  -v ./models/strata-data:/data \
   -e MODEL=IQ1_M -e FAMILY=coder -e CONTEXT=65536 \
   strata
 
@@ -65,7 +68,7 @@ docker run --rm --gpus all \
 
 O bloco `Strata:` no `llama-swap/config.yaml` está descomentado (com
 `MODEL=IQ1_M`, `FAMILY=coder`, `CONTEXT=65536` e o mount
-`/home/jocic/strata-data:/data`). O setup feito pelo primeiro start ficou
+`./models/strata-data:/data`). O setup feito pelo primeiro start ficou
 persistido no volume (`/data/config`, `/data/packs`, `/data/mtp`) — os
 próximos starts partem direto para a carga (~30 s com page cache quente;
 1-3 min a frio).

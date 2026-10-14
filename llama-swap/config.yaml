@@ -242,25 +242,11 @@ models:
     ttl: 300
 
   # ---------------------------------------------------------------------
-  # Strata (Qwen3.8-Flash-Next Coder IQ1_M) — INSTALADA 2026-10-11.
-  # Engine dedicada (github.com/Niko1221/Strata, commit pinado no Dockerfile
-  # de strata/). Modelo em /home/jocic/strata-data (NVMe; ~86 GB: 55 GB
-  # pesos IQ1_M + 25 GB pack de experts + 6,5 GB MTP draft). RAM ~30 GB
-  # travada (máquina tem 31) — NUNCA rodar junto de outro modelo; o swap do
-  # llama-swap (docker rm -f do anterior) é obrigatório. Carga 1-3 min
-  # (healthCheckTimeout 300 cobre). Env MODEL/FAMILY/CONTEXT lidas pelo
-  # docker-entrypoint.sh (setup já feito; restarts partem direto p/ o start).
+  # Strata REMOVIDA em 2026-10-14 (pesos 86G apagados do disco na limpeza
+  # do NVMe). A imagem da engine (strata:latest) e a infra de build
+  # (engines/strata/) ficam — reativável seguindo engines/strata/README.md
+  # (os pesos são re-gerados a partir dos GGUFs originais do HF).
   # ---------------------------------------------------------------------
-  Strata:
-    cmd: |
-      docker run --rm --name ls-${MODEL_ID} --gpus all
-      -p 127.0.0.1:${PORT}:8080
-      --ulimit memlock=-1
-      -v /home/jocic/strata-data:/data
-      -e MODEL=IQ1_M -e FAMILY=coder -e CONTEXT=65536
-      strata:latest
-    cmdStop: docker rm -f ls-${MODEL_ID}
-    ttl: 300
 
   # ---------------------------------------------------------------------
   # LFM 2.5 24B-A2B (LiquidAI, Q4_K_M) — raciocínio puro (sempre pensa),

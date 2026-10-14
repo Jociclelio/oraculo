@@ -29,14 +29,13 @@ Docker efêmero por modelo** (`docker run --rm`, nome `ls-<Modelo>`):
 - **Configuração por modelo**: entries em [`llama-swap/config.yaml`](llama-swap/config.yaml)
   (substitui o `models/models.ini`, agora histórico/desativado).
 
-Quatro engines por baixo:
+Três engines por baixo:
 
 | Engine | Imagem | Uso |
 |--------|--------|-----|
 | llama.cpp **stock** | `ghcr.io/ggml-org/llama.cpp:full-cuda` | todos os modelos clássicos (Gemma, Qwen, LFM, MiniCPM, Ornith) |
 | llama.cpp **fork PrismML** (dedicada) | `llama.cpp-prismml:latest` — build local em [`engines/llama.cpp-prismml/`](engines/llama.cpp-prismml/), commit pinado `84445367f` | GGUFs ternários **Bonsai 2 27B** — regra **nunca stock** (kernels ternários + Hadamard são exclusivos do fork) |
 | llama.cpp **fork Xing** (dedicada) | `llama.cpp-xing:latest` — build local em [`engines/llama.cpp-xing/`](engines/llama.cpp-xing/), commit pinado `8c379195a` | **Xing4.0 29B-A4B** — arquitetura `xing4_0` só no fork shuxiaoqiong (PR ggml-org#29012 não mergeado) |
-| **Strata** (Qwen3.8-Flash-Next) | `strata:latest` — build local em [`engines/strata/`](engines/strata/), commit pinado `61b3fb5dd` | **Qwen3.8-Flash-Next Coder IQ1_M** — instalado em `/home/jocic/strata-data` (NVMe); entry `Strata` ativa |
 
 > **Posicionamento: stack para 1 usuário por vez.** Todas as entries usam
 > `-np 1`; entradas paralelas (`np>1`) só como exceção pontual para modelos
@@ -155,7 +154,7 @@ oraculo/
 │   ├── comfyui/          #   caches hf/torch (re-baixáveis)
 │   └── searxng/          #   settings.yml (secret_key)
 ├── models/               # GGUFs (re-baixáveis — ver MODELS_INSTALL.md)
-├── engines/              # builds das engines dedicadas (prismml, xing, strata)
+├── engines/              # builds das engines dedicadas (prismml, xing; strata sem pesos)
 ├── llama-swap/           # config.yaml — fonte da verdade dos modelos
 ├── logs/  mcp-data/  comfyui/  bin/
 ├── manage.sh  docker-compose.yml  .env
@@ -376,7 +375,7 @@ carregado (ttl de 5 min). Também funciona sem `watch`, para consulta única.
 ## Modelos Disponíveis
 
 Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
-(19 entries: 16 stock + bonsai-27b + Xing + Strata).
+(18 entries: 16 stock + bonsai-27b + Xing).
 
 | Modelo | Contexto | Notas |
 |--------|----------|-------|
@@ -391,18 +390,16 @@ Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
 | Ornith1.5_35B_MTP | 65536 | Agêntico (APEX Compact); MoE 28 experts CPU; aceitação ~0,80 |
 | bonsai-27b | 65536 | **Bonsai 2 27B PTQ1_0** + mmproj Q8_0 (visão) — engine PrismML; **24,5 tok/s**, VRAM 10657/12288 |
 | Xing4.0_29B_A4B | 65536 | MoE 29B/4B + MLA + mHC — engine Xing (fork shuxiaoqiong); **~12,5 tok/s** |
-| Strata | 65536 | **Qwen3.8-Flash-Next Coder IQ1_M** (engine Strata); pesos+pack em `/home/jocic/strata-data` (NVMe); **~30 GB RAM travados** — nunca junto de outro modelo; carga 1-3 min; ~10 tok/s decode |
 | Variantes `_96k`/`_128k` | 98304/131072 | Mesmos GGUFs com contexto longo (ub1024); VRAM apertada — ver [`AGENTS.md`](AGENTS.md) |
 
 > **Variantes de contexto**: entry SEM sufixo = 64k (floor); `_XXk` =
 > contexto maior validado por carga real. Na RTX 3060 12 GB as `_96k` de MoE
 > híbrido ficam com margem de ~200 MB — podem OOM com jogos no desktop.
 
-> **Strata (Qwen3.8-Flash-Next)**: instalada em 2026-10-11 (variante Coder
-> IQ1_M — a única que cabe nos 32 GB da máquina). O swap do llama-swap é
-> obrigatório: ao pedir `Strata`, o modelo anterior é descarregado (libera
-> ~30 GB de RAM); ao pedir outro, o container do Strata é removido.
-> Detalhes: [`engines/strata/README.md`](engines/strata/README.md).
+> **Strata (removida 2026-10-14)**: os pesos (86G) foram apagados na
+> limpeza do NVMe e a entry saiu do config; a imagem da engine
+> (`strata:latest`) e a infra de build ([`engines/strata/`](engines/strata/))
+> ficam preservadas — reativável seguindo o README dela.
 
 ---
 
@@ -459,4 +456,4 @@ du -sh models/*/
 | [`DOCKER.md`](DOCKER.md) | Guia focado em Docker |
 | [`llama-swap/config.yaml`](llama-swap/config.yaml) | Entries/parâmetros dos modelos (fonte da verdade) |
 | [`models/MODELS_INSTALL.md`](models/MODELS_INSTALL.md) | Instalação de modelos (Bonsai via `hf download`, etc.) |
-| [`engines/strata/README.md`](engines/strata/README.md) | Engine/instalação Strata (Qwen3.8-Flash-Next) — instalada, entry ativa |
+| [`engines/strata/README.md`](engines/strata/README.md) | Engine Strata (Qwen3.8-Flash-Next) — infra preservada; pesos removidos 2026-10-14 |

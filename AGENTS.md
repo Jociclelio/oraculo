@@ -36,7 +36,7 @@ load/unload manual — apontar o request para outro `model` faz o swap
 ## Arquitetura
 
 - **`llama-swap/config.yaml` é a FONTE DA VERDADE** dos parâmetros de cada
-  modelo (19 entries: 16 stock + 1 Bonsai + 1 Xing + 1 Strata).
+  modelo (18 entries: 16 stock + 1 Bonsai + 1 Xing).
   `models/models.ini` é HISTÓRICO desativado — nada o lê.
   **Convenção de contexto** (VRAM validada por carga real, display idle):
   entry SEM sufixo = **64k** (floor); `_XXk` = contexto maior validado;
@@ -152,7 +152,6 @@ load/unload manual — apontar o request para outro `model` faz o swap
 | `Ornith1.5_35B_MTP` | stock | 65536 | agêntico (APEX Compact), ncmoe 28 + `--load-mode none` (faltava — regra 2); ub2048: prefill ~990 tok/s, VRAM 9849 MiB, aceitação ~0,80 |
 | `bonsai-27b` | PrismML | 65536 | PTQ1_0 + mmproj (visão validada); 24,5 tok/s, VRAM 10657/12288 total (PQ2_0 removida 2026-10-13) |
 | `Xing4.0_29B_A4B` | Xing | 65536 | MoE 29B/4B + MLA + mHC; `--load-mode none` + ncmoe 24; ub1024: prefill ~543 tok/s, VRAM 11177 MiB; ~12,5 tok/s |
-| `Strata` | Strata | 65536 | Qwen3.8-Flash-Next Coder IQ1_M (engine Niko1221/Strata); pesos+pack em `/home/jocic/strata-data` (~86 GB NVMe), **~30 GB RAM travados** — nunca junto de outro modelo (swap obrigatório); carga 1-3 min; **~10 tok/s decode, prefill ~8 tok/s** (gargalo), MTP aceite ~68% |
 | **Variantes _XXk** | | | |
 | `Gemma4_12B_128k` | stock | 131072 | Gemma 4 12B @ 128K validada: 9487 MiB c/ mmproj |
 | `Qwen3.6_35B_General_96k` / `_Code_96k` / `_It_General_96k` / `_It_Reasoning_96k` / `_A3B_Hauhau_Aggressive_96k` | stock | 98304 | ub1024 (ub2048 não cabe c/ 96k); Code c/ ncmoe 28: 11577 MiB validado (apertado); General/It_* ncmoe 32 — só com display idle; `_Hauhau_96k` ncmoe 28 (2026-10-14, teto 10 GB): **prefill ~750 tok/s (+5-8%), decode 33-40 (banda de contenção do desktop), VRAM ~10000-10044 MiB (margem ~200 MB — pode falhar a carga com pico no desktop; fallback: voltar a 32)** |
@@ -165,14 +164,16 @@ load/unload manual — apontar o request para outro `model` faz o swap
 > só o PTQ1_0, o menor) e Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced
 > (`Gemma4_12B_Hauhau`/`_Hauhau_128k` + drafter MTP: `Gemma4_12B_MTP`/`_MTP_128k`
 > — o draft morava no mesmo dir) e Mellum2.1-12B-A2.5B-Thinking
-> (`Mellum2.1_12B_A2.5B`). ~49,5 GB liberados no total.
+> (`Mellum2.1_12B_A2.5B`). ~49,5 GB liberados no total. **Strata**
+> (`Strata`, Qwen3.8-Flash-Next Coder IQ1_M) removida em 2026-10-14: pesos
+> 86G apagados do disco (worst prefill do zoológico, ~8 tok/s); imagem da
+> engine e infra de build preservadas — reativável via
+> `engines/strata/README.md`.
 
 Relevância para servir (uso agêntico/opencode): **alta** = Qwen3.6_35B_Code/General,
 Qwen3.8_35B_Distill, bonsai-27b,
 MiniCPM-V_4.7_35B, Gemma4_12B, LFM2.5_24B_A2B; **média** =
-Xing, Ornith 35B, It_*,
-Strata (coder forte
-mas prefill ~8 tok/s).
+Xing, Ornith 35B, It_*.
 
 ---
 
@@ -228,5 +229,6 @@ integrado ao Open WebUI). Detalhes: `DOCKER.md`.
   único entry (mesmo processo, zero swap) — não aplicada.
 - **YAML inválido**: `./manage.sh restart` morre na inicialização — o erro
   aparece no fim de `logs/llama-swap.log` (ex.: chave duplicada no entry).
-- **Storage**: `du -sh models/*/` — SSD 220 GB; GGUFs órfãos (sem entry no
+- **Storage**: `du -sh models/*/` — repo agora no **NVMe** (`/home/jocic/oraculo`,
+  migrado do SATA 220 GB em 2026-10-14); GGUFs órfãos (sem entry no
   config) são candidatos a remoção.
