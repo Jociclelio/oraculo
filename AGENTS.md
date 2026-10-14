@@ -36,8 +36,8 @@ load/unload manual — apontar o request para outro `model` faz o swap
 ## Arquitetura
 
 - **`llama-swap/config.yaml` é a FONTE DA VERDADE** dos parâmetros de cada
-  modelo (33 entries: 30 carregáveis = 26 stock + 2 Bonsai + 1 Xing + 1
-  Strata). `models/models.ini` é HISTÓRICO desativado — nada o lê.
+  modelo (19 entries: 16 stock + 1 Bonsai + 1 Xing + 1 Strata).
+  `models/models.ini` é HISTÓRICO desativado — nada o lê.
   **Convenção de contexto** (VRAM validada por carga real, display idle):
   entry SEM sufixo = **64k** (floor); `_XXk` = contexto maior validado;
   `_32k` = não alcança o floor. Com jogos no desktop (1,8+ GB VRAM) as
@@ -191,6 +191,14 @@ stdio→Streamable HTTP do `@modelcontextprotocol/server-memory`; grafo em
 `MEMORY_FILE_PATH` aponta para esse caminho) · `comfyui` (`:8188`,
 yanwk/comfyui-boot pinado; Qwen-Image 2.1 Turbo int8, geração + edição,
 integrado ao Open WebUI). Detalhes: `DOCKER.md`.
+
+> **Estado no repo (2026-10-14)**: os serviços do compose não usam mais
+> volumes nomeados do Docker — tudo em binds `./data/<serviço>/`
+> (gitignored): `data/open-webui/` (webui.db, uploads, RAG),
+> `data/open-terminal/`, `data/openwa/` (+ `.api-key` e sessions),
+> `data/9router/`, `data/comfyui/` (caches hf/torch), `data/searxng/`
+> (`settings.yml` com secret). O `webui.db` fica assim visível/backupável;
+> lembrar que o banco tem precedência sobre o env (regra 6).
 
 > Design: stack request-driven e **deliberadamente não-autônomo** — sem
 > agentes/workflows em background que possam requerer VRAM sem supervisão

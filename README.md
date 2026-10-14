@@ -29,12 +29,13 @@ Docker efêmero por modelo** (`docker run --rm`, nome `ls-<Modelo>`):
 - **Configuração por modelo**: entries em [`llama-swap/config.yaml`](llama-swap/config.yaml)
   (substitui o `models/models.ini`, agora histórico/desativado).
 
-Três engines por baixo:
+Quatro engines por baixo:
 
 | Engine | Imagem | Uso |
 |--------|--------|-----|
-| llama.cpp **stock** | `ghcr.io/ggml-org/llama.cpp:full-cuda` | todos os modelos clássicos (Gemma, Qwen, Ornith, PE) |
+| llama.cpp **stock** | `ghcr.io/ggml-org/llama.cpp:full-cuda` | todos os modelos clássicos (Gemma, Qwen, LFM, MiniCPM, Ornith) |
 | llama.cpp **fork PrismML** (dedicada) | `llama.cpp-prismml:latest` — build local em [`engines/llama.cpp-prismml/`](engines/llama.cpp-prismml/), commit pinado `84445367f` | GGUFs ternários **Bonsai 2 27B** — regra **nunca stock** (kernels ternários + Hadamard são exclusivos do fork) |
+| llama.cpp **fork Xing** (dedicada) | `llama.cpp-xing:latest` — build local em [`engines/llama.cpp-xing/`](engines/llama.cpp-xing/), commit pinado `8c379195a` | **Xing4.0 29B-A4B** — arquitetura `xing4_0` só no fork shuxiaoqiong (PR ggml-org#29012 não mergeado) |
 | **Strata** (Qwen3.8-Flash-Next) | `strata:latest` — build local em [`engines/strata/`](engines/strata/), commit pinado `61b3fb5dd` | **Qwen3.8-Flash-Next Coder IQ1_M** — instalado em `/home/jocic/strata-data` (NVMe); entry `Strata` ativa |
 
 > **Posicionamento: stack para 1 usuário por vez.** Todas as entries usam
@@ -94,17 +95,20 @@ docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu22.04 nvidia-smi
 ### 3. Baixar modelos
 
 Coloque os arquivos `.gguf` nos respectivos diretórios (guia completo em
-[`models/MODELS_INSTALL.md`](models/MODELS_INSTALL.md)):
+[`models/MODELS_INSTALL.md`](models/MODELS_INSTALL.md) — os dirs atuais são
+exatamente os referenciados pelas entries do `config.yaml`):
 
 ```
 models/
-├── MiniCPM-V-4.7-35B-A3B-Q4_K_M/
-├── Ornith-1.5-35B-A3B-Q4_K_M/
-├── Qwen3.6-28B-REAP20-A3B-Q4_K_M/
-├── Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/
-├── Ternary-Bonsai-2-27B-gguf/          # Bonsai 2 (PTQ1_0/mmproj)
-├── unsloth_Qwen3.6_35B_A3B/
-└── unsloth_Qwen3.6_35B_A3B_MTP/
+├── LFM2.5-24B-A2B-GGUF/
+├── MiniCPM-V-4.7-35B-A3B-Q4_K_M/          (+ mmproj f16)
+├── Ornith-1.5-35B-MTP-APEX-Compact/
+├── Qwen3.8-35B-A3B-Distill-Q4_K_M/
+├── Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/  (+ mmproj f16)
+├── Ternary-Bonsai-2-27B-gguf/             # Bonsai 2 (PTQ1_0/mmproj)
+├── unsloth_Qwen3.6_35B_A3B_MTP/           # usado por 8 entries Qwen3.6
+├── Xing4.0-29B-A4B-Q4_K_M/
+└── gemma-4-12B-it-qat-UD-Q4_K_XL/         (+ mmproj F32)
 ```
 
 ### 4. Instalar o llama-swap (binário)
@@ -133,6 +137,44 @@ curl http://localhost:8081/v1/models
 # Acessar Open WebUI
 # Abrir http://localhost:8080 no navegador
 ```
+
+---
+
+## Estrutura do repositório
+
+Tudo relacionado ao oraculo vive dentro da pasta do repo (sem dependência de
+volumes nomeados do Docker nem de pastas espalhadas no sistema):
+
+```
+oraculo/
+├── data/                 # ESTADO dos serviços (gitignored — backupar, não versionar)
+│   ├── open-webui/       #   webui.db (config/usuários/chats), uploads, RAG
+│   ├── open-terminal/    #   workspace do agente
+│   ├── openwa/           #   DB + sessões WhatsApp + .api-key
+│   ├── 9router/          #   providers/contas
+│   ├── comfyui/          #   caches hf/torch (re-baixáveis)
+│   └── searxng/          #   settings.yml (secret_key)
+├── models/               # GGUFs (re-baixáveis — ver MODELS_INSTALL.md)
+├── engines/              # builds das engines dedicadas (prismml, xing, strata)
+├── llama-swap/           # config.yaml — fonte da verdade dos modelos
+├── logs/  mcp-data/  comfyui/  bin/
+├── manage.sh  docker-compose.yml  .env
+└── AGENTS.md  README.md  DOCKER.md
+```
+
+**O que é insubstituível vs. re-baixável:**
+
+| Pasta | Conteúdo | Se perder |
+|-------|----------|-----------|
+| `data/` | estado real (banco, chats, sessões) | **insubstituível** — incluir no backup |
+| `models/` | GGUFs | re-baixável do Hugging Face |
+| `engines/` | infra de build | re-construível (`build.sh`/Dockerfile pinados) |
+| `logs/`, caches | runtime | dispensável |
+
+> **Gotcha do `webui.db`**: variáveis como `WEBSEARCH_ENGINE`,
+> `TERMINAL_SERVER_CONNECTIONS` e conexões MCP são persistidas no banco na
+> primeira inicialização — depois disso **o banco vence o env**. Mudanças de
+> integração = editar a UI admin ou o `data/open-webui/webui.db`, não o compose.
 
 ---
 
@@ -235,10 +277,11 @@ curl "http://localhost:8888/search?q=teste&format=json"
 
 ## OpenWa (WhatsApp)
 
-Gateway WhatsApp com MCP Streamable HTTP em `http://localhost:2785/mcp`. A API key é gerada na primeira inicialização:
+Gateway WhatsApp com MCP Streamable HTTP em `http://localhost:2785/mcp`. A API key é gerada na primeira inicialização e fica em `data/openwa/.api-key` (host) / `/app/data/.api-key` (container):
 
 ```bash
-docker exec openwa cat /app/data/.api-key
+cat data/openwa/.api-key
+# ou: docker exec openwa cat /app/data/.api-key
 ```
 
 Já conectado ao Open WebUI como **tool server MCP**. Para usar no opencode/pi, adicionar como MCP streamable-http com header `X-API-Key`.
@@ -333,21 +376,27 @@ carregado (ttl de 5 min). Também funciona sem `watch`, para consulta única.
 ## Modelos Disponíveis
 
 Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
-(30 entries: 28 stock + 2 Bonsai).
+(19 entries: 16 stock + bonsai-27b + Xing + Strata).
 
 | Modelo | Contexto | Notas |
 |--------|----------|-------|
-| Gemma4_12B | 49152 | Multimodal (texto) |
-| Qwen3.6_35B_General | 98304 | MoE (32 experts CPU) / head MTP (draft-mtp n=2) / aceitação ~82-93% |
-| Qwen3.6_35B_Code | 49152 | MoE (28 experts CPU) / head MTP / temp=0.6 / ~27 tok/s |
-| Qwen3.6_35B_It_General | 98304 | MoE (32 experts CPU) / head MTP / temp=0.7 |
-| Qwen3.6_35B_It_Reasoning | 98304 | MoE (32 experts CPU) / head MTP / temp=1.0 |
-| MiniCPM-V_4.7_35B | 65536 | **MiniCPM-V 4.7 35B-A3B** multimodal (OpenBMB; backbone Qwen3.6, arch qwen35moe) / ncmoe 32 + `--load-mode none` + ub2048 / sem MTP (draft DSpark descartado) / ~32-35 tok/s, prefill ~1040 tok/s / visão validada |
-| Ornith1.5_35B_MTP | 49152 | MoE (28 experts CPU) / MTP / acceptance ~0.80 |
-| Qwen3.6_35B_A3B_Hauhau_Aggressive | 98304 | MoE (32 experts CPU) / multimodal |
-| bonsai-27b | 65536 | **Bonsai 2 27B PTQ1_0** (primária) + mmproj Q8_0 (visão) — engine PrismML; prefill ≈ 540 tok/s, decode ≈ 24,5 tok/s, VRAM 9146 MiB (processo) |
-| Xing4.0_29B_A4B | 49152 | MoE 29B/4B (fork shuxiaoqiong 8c379195a) / `--load-mode none` + `-ncmoe 24` / ~12,5 tok/s |
-| Strata | 65536 | **Qwen3.8-Flash-Next Coder IQ1_M** (engine Strata) / pesos+pack em `/home/jocic/strata-data` (NVMe) / **~30 GB RAM travados** — nunca junto de outro modelo / carga 1-3 min / ~10 tok/s decode, prefill ~8 tok/s |
+| Gemma4_12B | 65536 | Multimodal (texto) QAT; variante `_128k` validada (9487 MiB) |
+| LFM2.5_24B_A2B | 65536 | LiquidAI MoE 24B/2,45B raciocínio agêntico; **~45 tok/s, prefill ~1900 tok/s**; temp 0.1/top-k 50/rep 1.05 |
+| Qwen3.8_35B_Distill | 65536 | Destilado Qwen3.8 na arch qwen35moe; MTP embutido; **~35 tok/s, aceitação ~0,62** |
+| MiniCPM-V_4.7_35B | 65536 | **MiniCPM-V 4.7 35B-A3B** multimodal (OpenBMB; backbone Qwen3.6); sem MTP; **~32-35 tok/s, prefill ~1040 tok/s**; visão validada |
+| Qwen3.6_35B_General | 65536 | MoE (32 experts CPU) / head MTP (draft-mtp n=2) / aceitação ~82-93% |
+| Qwen3.6_35B_Code | 65536 | MoE (28 experts CPU) / head MTP / temp=0.6 / **~27 tok/s, prefill ~890 tok/s** |
+| Qwen3.6_35B_It_General / _It_Reasoning | 65536 | Instruct (sem/temp thinking); MoE 32 experts CPU |
+| Qwen3.6_35B_A3B_Hauhau_Aggressive | 65536 | Uncensored Aggressive, multimodal; ncmoe 28 (teto 10 GB); **prefill ~1150 tok/s, decode ~39 tok/s** |
+| Ornith1.5_35B_MTP | 65536 | Agêntico (APEX Compact); MoE 28 experts CPU; aceitação ~0,80 |
+| bonsai-27b | 65536 | **Bonsai 2 27B PTQ1_0** + mmproj Q8_0 (visão) — engine PrismML; **24,5 tok/s**, VRAM 10657/12288 |
+| Xing4.0_29B_A4B | 65536 | MoE 29B/4B + MLA + mHC — engine Xing (fork shuxiaoqiong); **~12,5 tok/s** |
+| Strata | 65536 | **Qwen3.8-Flash-Next Coder IQ1_M** (engine Strata); pesos+pack em `/home/jocic/strata-data` (NVMe); **~30 GB RAM travados** — nunca junto de outro modelo; carga 1-3 min; ~10 tok/s decode |
+| Variantes `_96k`/`_128k` | 98304/131072 | Mesmos GGUFs com contexto longo (ub1024); VRAM apertada — ver [`AGENTS.md`](AGENTS.md) |
+
+> **Variantes de contexto**: entry SEM sufixo = 64k (floor); `_XXk` =
+> contexto maior validado por carga real. Na RTX 3060 12 GB as `_96k` de MoE
+> híbrido ficam com margem de ~200 MB — podem OOM com jogos no desktop.
 
 > **Strata (Qwen3.8-Flash-Next)**: instalada em 2026-10-11 (variante Coder
 > IQ1_M — a única que cabe nos 32 GB da máquina). O swap do llama-swap é
