@@ -21,7 +21,8 @@
 # Convenção de NOME/CONTEXTO (tuning 2026-10-10):
 #   - Toda entry SEM sufixo de contexto roda em 64k (-c 65536) — floor.
 #   - Variante com ctx maior: sufixo _XXk (ex.: Gemma4_12B_128k = 131072).
-#   - Modelo que não alcança 64k: sufixo _32k (ex.: Saluki27B_Qwen3.8_32k).
+#   - Modelo que não alcança 64k: sufixo _32k (nenhum entry _32k ativo
+#     após remoção de Saluki/GSQ em 2026-10-13).
 #   - VRAM validada por carga real (RTX 3060 12 GB, display idle ~900 MiB);
 #     com jogos/desktop pesado (1,8+ GB) entries de MoE híbrido podem OOM.
 
@@ -112,31 +113,6 @@ models:
     ttl: 300
 
   # ---------------------------------------------------------------------
-  # Gemma 4 12B IT com MTP speculative decoding -> ~100 tok/s em RTX 3060
-  # 12GB, 100% na GPU, zero CPU offload.
-  # Truque de VRAM: split do KV cache — q8_0 no target (herdado do macro),
-  # f16 no draft (-ctkd/-ctvd). Quantizar o cache do draft quebra a taxa de
-  # aceitação; f16 mantém ~70-85% de aceitação.
-  # (ATENÇÃO) ctx=262144 (256K, ideal do post X) falha OOM na RTX 3060 12GB
-  # porque Hyprland/Wayland ocupa ~880 MiB de VRAM; máximo validado nesta
-  # GPU+sw: 196608. Entry usa 64000.
-  # ---------------------------------------------------------------------
-  Gemma4_12B_MTP:
-    cmd: |
-      ${docker-stock}
-      -m /models/gemma-4-12B-it-qat-UD-Q4_K_XL/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf
-      --mmproj /models/gemma-4-12B-it-qat-UD-Q4_K_XL/mmproj-F32.gguf
-      --model-draft /models/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/mtp-gemma-4-12B-it.gguf
-      --spec-type draft-mtp --spec-draft-n-max 4
-      -ngl 99 --spec-draft-ngl 99
-      -ctkd f16 -ctvd f16
-      -c 65536 -b 4096 -ub 1280
-      --temp 1.0 --top-p 0.95 --top-k 64 --repeat-penalty 1.0
-      --cache-ram 0
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  # ---------------------------------------------------------------------
   # Qwen 3.6 35B-A3B Thinking General (Q4_K_M + head MTP embutido) — MoE
   # GGUF: variante -MTP (tensors nextn validados no header) — speculative
   # decoding self-draft via --spec-type draft-mtp (sem --model-draft).
@@ -219,22 +195,16 @@ models:
     ttl: 300
 
   # ---------------------------------------------------------------------
-  # Gemma 4 12B Uncensored Balanced (HauhauCS) — multimodal
-  # (texto, imagem, áudio)
-  # ---------------------------------------------------------------------
-  Gemma4_12B_Hauhau:
-    cmd: |
-      ${docker-stock}
-      -m /models/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
-      --mmproj /models/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/mmproj-Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf
-      -c 65536 -ngl 99
-      --temp 1.0 --top-p 0.95 --top-k 64
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  # ---------------------------------------------------------------------
   # Qwen 3.6 35B Uncensored Aggressive (HauhauCS) — multimodal,
-  # MoE (32 experts CPU)
+  # MoE (28 camadas na CPU). Otimizado 2026-10-14 p/ teto de 10 GB:
+  # -ncmoe 28 (era 32): prefill 9730 tok ~1060->~1150 tok/s (+9%);
+  # decode ~39 tok/s (CPU-bound, sem ganho mensurável dentro do teto).
+  # VRAM processo ~9770-9830 MiB (< 10 GiB); total c/ desktop ~10,5 GB.
+  # SEM spec decoding: o GGUF não contém tensors nextn/MTP (verificado no
+  # header) — --spec-type draft-mtp inaplicável; draft externo descartado
+  # (precedente DSpark: aceitação ~10%, mais lento). --moe-cache-mib
+  # testado (1024 MiB): decode 38,7->30,5 tok/s — rejeitado. -t 6 e -tb 6
+  # testados: sem ganho/piora — mantido -t 5 do macro.
   # ---------------------------------------------------------------------
   Qwen3.6_35B_A3B_Hauhau_Aggressive:
     cmd: |
@@ -242,13 +212,14 @@ models:
       -m /models/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
       --mmproj /models/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf
       --load-mode none
-      -c 65536 -ngl 99 -ncmoe 32
+      -c 65536 -ngl 99 -ncmoe 28
       -b 4096 -ub 2048
     cmdStop: ${docker-stop}
     ttl: 300
 
   # ---------------------------------------------------------------------
-  # Bonsai 2 27B (PrismML fork) — GGUFs ternários PTQ1_0/PQ2_0, movidos de
+  # Bonsai 2 27B (PrismML fork) — GGUF ternário PTQ1_0 (PQ2_0 removida em
+  # 2026-10-13; mantida a quantização menor), movidos de
   # /home/jocic/bonsai-llm (task 004). Engine: imagem local
   # llama.cpp-prismml:latest (commit pinado 84445367f) — NUNCA stock.
   # Sem temp/top-p/top-k: os defaults de sampling (thinking: temp 1.0,
@@ -266,17 +237,6 @@ models:
       ${docker-prismml}
       -m /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-PTQ1_0.gguf
       --mmproj /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf
-      -c 65536 -ngl 99
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  # Entry secundária — PQ2_0 (~6,8 GB, default mais rápido em Ampere).
-  # Mesmas diretrizes da primária; validada: ctx 65536 sem OOM, VRAM total
-  # observada 10250 MiB / 12288.
-  bonsai-27b-pq2_0:
-    cmd: |
-      ${docker-prismml}
-      -m /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-PQ2_0.gguf
       -c 65536 -ngl 99
     cmdStop: ${docker-stop}
     ttl: 300
@@ -300,48 +260,6 @@ models:
       -e MODEL=IQ1_M -e FAMILY=coder -e CONTEXT=65536
       strata:latest
     cmdStop: docker rm -f ls-${MODEL_ID}
-    ttl: 300
-
-  # ---------------------------------------------------------------------
-  # Gemma 4 12B Agentic (yuxinlu1, fable5/composer2.5/tau2) — denso 12B,
-  # 100% VRAM (7,4 GB Q4_K_M). Finetune agêntico: terminal, tool-use,
-  # tool-calling (tau2) — worker de workflows opencode. Sem flags MoE.
-  # ---------------------------------------------------------------------
-  Gemma4_12B_Agentic:
-    cmd: |
-      ${docker-stock}
-      -m /models/gemma-4-12B-agentic-fable5/gemma4-v2-Q4_K_M.gguf
-      -c 65536 -ngl 99
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  # ---------------------------------------------------------------------
-  # Mellum 2.1 12B-A2.5B Thinking (JetBrains) — MoE pequeno, cabe inteiro
-  # na VRAM (8,1 GB Q4_K_M, sem offload de CPU). Especialista em código
-  # com thinking. Arquitetura `mellum` no llama.cpp upstream.
-  # ---------------------------------------------------------------------
-  Mellum2.1_12B_A2.5B:
-    cmd: |
-      ${docker-stock}
-      -m /models/Mellum2.1-12B-A2.5B-Thinking/Mellum2.1-12B-A2.5B-Thinking-Q4_K_M.gguf
-      -c 65536 -ngl 99
-      -b 4096 -ub 512
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  # ---------------------------------------------------------------------
-  # LFM 2.5 8B-A1B Hermes Agentic Coder (DuoNeural) — MoE minúsculo,
-  # cabe inteiro na VRAM (5,2 GB Q4_K_M). Template Hermes agêntico —
-  # smoke tests baratos de workflow (decode dezenas de tok/s).
-  # Arquitetura `lfm2moe` no llama.cpp upstream.
-  # ---------------------------------------------------------------------
-  LFM2.5_8B_A1B_Hermes:
-    cmd: |
-      ${docker-stock}
-      -m /models/LFM2.5-8B-A1B-Hermes-Agentic-Coder/LFM2.5-8B-A1B-Hermes-Agentic-Coder-Abliterated-v3-Q4_K_M.gguf
-      -c 65536 -ngl 99
-      -b 4096 -ub 512
-    cmdStop: ${docker-stop}
     ttl: 300
 
   # ---------------------------------------------------------------------
@@ -390,28 +308,6 @@ models:
       -c 65536 -ngl 99 -ncmoe 24
       -b 4096 -ub 1024
       --temp 1.0 --top-p 0.95 --repeat-penalty 1.05
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  # ---------------------------------------------------------------------
-  # Underdog Saluki 27B (variante MTP da Kujira) — build 2-bit (IQ2-mix)
-  # do Qwen3.8-27B denso, ~54 GB -> 8,35 GB; cabe 100% na VRAM. Best-in-class
-  # em tool-calling/agents (Underdog Bench 88/120; SWE-bench 30/50 fixes);
-  # roda no llama.cpp stock (sem engine dedicada). Variante MTP: mesmos
-  # pesos + head nextn do Qwen3.8-27B -> draft-mtp self-draft (~66 tok/s
-  # na 3080 12GB; aceitação 60-96%).
-  # (ATENÇÃO) 12 GB: manter ctx 32768 — com 64K + q8_0 KV + MTP a VRAM
-  # estoura (medido na 3080 12GB pelo autor do repo).
-  # Sampling: temp 0.6 / top-p 0.95 (recomendação Qwen p/ thinking).
-  # ---------------------------------------------------------------------
-  Saluki27B_Qwen3.8_32k:
-    cmd: |
-      ${docker-stock}
-      -m /models/Underdog-Saluki-27B-1.0-MTP/Underdog-Saluki-27B-1.0-IQ2-mix-MTP.gguf
-      --spec-type draft-mtp --spec-draft-n-max 2
-      -c 32768 -ngl 99
-      -b 4096 -ub 1024
-      --temp 0.6 --top-p 0.95
     cmdStop: ${docker-stop}
     ttl: 300
 
@@ -472,27 +368,6 @@ models:
     cmdStop: ${docker-stop}
     ttl: 300
 
-  # ---------------------------------------------------------------------
-  # Qwen3.8-27B GSQ-RCO IQ2_XS (ISTA-DASLab) — quantização não-uniforme
-  # (GSQ+RCO, 2,50 bpw, mix IQ1_M..Q6_K) do Qwen3.8-27B híbrido (arch qwen35:
-  # 65 camadas, Gated DeltaNet + full attention a cada 4, 4 KV heads × 256;
-  # ctx nativo 262144). Variante -mtp (head nextn embutido → draft-mtp).
-  # 8,77 GB; denso o suficiente p/ 100% VRAM, mas KV híbrido ~32 KiB/tok em
-  # q8_0 → 64K estoura 12 GB (mesmo limite do Saluki) — entry _32k.
-  # IQ2_XS: AIME25 96,67 vs 100 do BF16 (GSQ-RCO supera UD-IQ2_S no mesmo
-  # tamanho). Sampling Qwen thinking: temp 0.6 / top-p 0.95.
-  # ---------------------------------------------------------------------
-  Qwen3.8_27B_GSQ_IQ2_XS_32k:
-    cmd: |
-      ${docker-stock}
-      -m /models/Qwen3.8-27B-GSQ-RCO-IQ2_XS/Qwen3.8-27B-GSQ-RCO-IQ2_XS-mtp.gguf
-      --spec-type draft-mtp --spec-draft-n-max 2
-      -c 32768 -ngl 99
-      -b 4096 -ub 1024
-      --temp 0.6 --top-p 0.95
-    cmdStop: ${docker-stop}
-    ttl: 300
-
   # =====================================================================
   # VARIANTES DE CONTEXTO LONGO (_XXk) — ver convenção no topo do arquivo.
   # ctx validado por carga real; variante _96k/_128k só existe onde couber
@@ -505,48 +380,6 @@ models:
       -m /models/gemma-4-12B-it-qat-UD-Q4_K_XL/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf
       --mmproj /models/gemma-4-12B-it-qat-UD-Q4_K_XL/mmproj-F32.gguf
       -c 131072 -ngl 99
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  Gemma4_12B_MTP_128k:
-    cmd: |
-      ${docker-stock}
-      -m /models/gemma-4-12B-it-qat-UD-Q4_K_XL/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf
-      --mmproj /models/gemma-4-12B-it-qat-UD-Q4_K_XL/mmproj-F32.gguf
-      --model-draft /models/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/mtp-gemma-4-12B-it.gguf
-      --spec-type draft-mtp --spec-draft-n-max 4
-      -ngl 99 --spec-draft-ngl 99
-      -ctkd f16 -ctvd f16
-      -c 131072 -b 4096 -ub 1280
-      --temp 1.0 --top-p 0.95 --top-k 64 --repeat-penalty 1.0
-      --cache-ram 0
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  Gemma4_12B_Hauhau_128k:
-    cmd: |
-      ${docker-stock}
-      -m /models/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-Q4_K_M.gguf
-      --mmproj /models/Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/mmproj-Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced-BF16.gguf
-      -c 131072 -ngl 99
-      --temp 1.0 --top-p 0.95 --top-k 64
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  Gemma4_12B_Agentic_128k:
-    cmd: |
-      ${docker-stock}
-      -m /models/gemma-4-12B-agentic-fable5/gemma4-v2-Q4_K_M.gguf
-      -c 131072 -ngl 99
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  LFM2.5_8B_A1B_Hermes_128k:
-    cmd: |
-      ${docker-stock}
-      -m /models/LFM2.5-8B-A1B-Hermes-Agentic-Coder/LFM2.5-8B-A1B-Hermes-Agentic-Coder-Abliterated-v3-Q4_K_M.gguf
-      -c 131072 -ngl 99
-      -b 4096 -ub 512
     cmdStop: ${docker-stop}
     ttl: 300
 
@@ -602,13 +435,21 @@ models:
     cmdStop: ${docker-stop}
     ttl: 300
 
+  # Variante 96k do uncensored: -ncmoe 28 (ajuste 2026-10-14, mesmo teto de
+  # 10 GB da entry base) — prefill ~750 tok/s (+5-8% vs 709 no 32), decode na
+  # banda 33-40 tok/s dominada por contenção de CPU do desktop (Firefox +
+  # ComfyUI vs 5 threads; fisicamente sem regressão: são -4 camadas na CPU).
+  # VRAM processo ~10000-10044 MiB: margem de ~200 MB até 10 GiB — pode falhar
+  # a carga com pico de VRAM no desktop (mesma classe de fragilidade do
+  # Code_96k); nesse caso, voltar para -ncmoe 32 (~8,2 GB).
+  # -ub 1024 (ub2048 não cabe c/ 96k).
   Qwen3.6_35B_A3B_Hauhau_Aggressive_96k:
     cmd: |
       ${docker-stock}
       -m /models/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
       --mmproj /models/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf
       --load-mode none
-      -c 98304 -ngl 99 -ncmoe 32
+      -c 98304 -ngl 99 -ncmoe 28
       -b 4096 -ub 1024
     cmdStop: ${docker-stop}
     ttl: 300

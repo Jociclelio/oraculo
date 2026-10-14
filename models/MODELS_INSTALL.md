@@ -23,7 +23,6 @@ models/
 │   └── modelo.gguf
 ├── Ternary-Bonsai-2-27B-gguf/          # Bonsai 2 (ver seção própria abaixo)
 │   ├── Ternary-Bonsai-2-27B-PTQ1_0.gguf
-│   ├── Ternary-Bonsai-2-27B-PQ2_0.gguf
 │   └── Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf
 ├── Xing4.0-29B-A4B-Q4_K_M/             # Xing4.0 (ver seção própria abaixo)
 │   └── Xing4.0-29B-A4B-Q4_K_M.gguf
@@ -119,21 +118,22 @@ no Hugging Face:
 ```bash
 hf download prism-ml/Ternary-Bonsai-2-27B-gguf \
   Ternary-Bonsai-2-27B-PTQ1_0.gguf \
-  Ternary-Bonsai-2-27B-PQ2_0.gguf \
   Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf \
   --local-dir models/Ternary-Bonsai-2-27B-gguf
 ```
 
 | Arquivo | Tamanho | Uso |
 |---------|---------|-----|
-| `Ternary-Bonsai-2-27B-PTQ1_0.gguf` | ~5,6 GB | entry primária `bonsai-27b` (+ mmproj, visão) |
-| `Ternary-Bonsai-2-27B-PQ2_0.gguf` | ~6,8 GB | entry secundária `bonsai-27b-pq2_0` (mais rápida em Ampere) |
-| `Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf` | ~601 MB | visão (mmproj da entry primária) |
+| `Ternary-Bonsai-2-27B-PTQ1_0.gguf` | ~5,6 GB | entry `bonsai-27b` (+ mmproj, visão) |
+| `Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf` | ~601 MB | visão (mmproj) |
+
+> A variante `PQ2_0` (~6,8 GB, entry `bonsai-27b-pq2_0`) foi removida em
+> 2026-10-13 — manteve-se só o PTQ1_0, a quantização menor.
 
 > ⚠️ **Regra dura — nunca engine stock**: GGUFs ternários PTQ1_0/PQ2_0 só
 > funcionam no fork **PrismML-Eng/llama.cpp** (kernels ternários + Hadamard).
 > A imagem stock recusa esses quantizados ou carrega como `Q2_0` legacy
-> gerando lixo. As entries `bonsai-27b`/`bonsai-27b-pq2_0` usam a imagem
+> gerando lixo. A entry `bonsai-27b` usa a imagem
 > local `llama.cpp-prismml:latest` (build em `engines/llama.cpp-prismml/`,
 > fork pinado no commit `84445367f`). Se a imagem não existir, construa:
 > `./engines/llama.cpp-prismml/build.sh`.

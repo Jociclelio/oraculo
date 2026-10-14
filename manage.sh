@@ -109,6 +109,25 @@ start_llama_swap() {
 do_stop() {
   stop_llama_swap
   compose_down
+  # Os containers de modelo (ls-*) não pertencem ao compose: sem esta
+  # limpeza eles sobrevivem ao restart como ÓRFÃOS (2026-10-14 — um Qwen de
+  # 9,8 GB ficou residente, o proxy novo não o rastreava e toda carga nova
+  # falhava com "upstream command exited prematurely" por falta de VRAM).
+  remove_model_containers
+}
+
+# Remove containers de modelo (ls-*) órfãos ou ativos. Silencioso quando
+# não há nenhum. Usado no stop (todo restart/stop) e como fallback no unload.
+remove_model_containers() {
+  local names
+  names=$(docker ps --format "{{.Names}}" | grep "^ls-" || true)
+  if [ -z "$names" ]; then
+    return 0
+  fi
+  echo "$names" | while read -r c; do
+    echo "Removendo container de modelo órfão/ativo $c..."
+    docker rm -f "$c" >/dev/null
+  done
 }
 
 stop_llama_swap() {
@@ -149,6 +168,9 @@ stop_llama_swap() {
   fi
 
   rm -f "$PIDFILE"
+  # Também derruba containers de modelo: sem o proxy eles viram órfãos
+  # retendo VRAM (ver comentário em do_stop). Cobre `swap stop/restart`.
+  remove_model_containers
   echo "llama-swap parado."
 }
 
@@ -160,16 +182,11 @@ do_unload() {
     echo "llama-swap descarregou os modelos; VRAM liberada."
     return 0
   fi
-  local names
-  names=$(docker ps --format "{{.Names}}" | grep "^ls-" || true)
-  if [ -z "$names" ]; then
+  if [ -z "$(docker ps --format "{{.Names}}" | grep "^ls-" || true)" ]; then
     echo "Nenhum container de modelo (ls-*) em execução — VRAM já livre."
     return 0
   fi
-  echo "$names" | while read -r c; do
-    echo "Removendo $c..."
-    docker rm -f "$c" >/dev/null
-  done
+  remove_model_containers
   echo "Containers de modelo removidos; VRAM liberada."
 }
 
