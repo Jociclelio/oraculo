@@ -33,7 +33,7 @@ cp .env.example .env   # ou criar manualmente
 | `API_KEY_SECRET` | 9Router — segredo das API keys de endpoint (gerar com `openssl rand -hex 32`) |
 | `MACHINE_ID_SALT` | 9Router — salt do machine ID (gerar com `openssl rand -hex 32`) |
 
-> O SearXNG usa `searxng/settings.yml` (local, gitignored) — copiar de `searxng/settings.example.yml` e definir um `secret_key` aleatório.
+> O SearXNG usa `data/searxng/settings.yml` (local, gitignored) — copiar de `data/searxng/settings.example.yml` e definir um `secret_key` aleatório.
 
 ---
 
@@ -93,7 +93,7 @@ A conexão é registrada automaticamente via `TERMINAL_SERVER_CONNECTIONS` no en
 - **Imagem**: `searxng/searxng`
 - **Container**: `searxng`
 - **Porta**: `127.0.0.1:8888` (somente localhost)
-- **Config**: `./searxng/settings.yml → /etc/searxng/settings.yml`
+- **Config (bind)**: `./data/searxng/settings.yml → /etc/searxng/settings.yml`
 
 Metabuscador privado (agrega Google, Bing, DuckDuckGo etc. sem rastreamento). O Open WebUI o usa como motor de busca web nativo via `WEBSEARCH_ENGINE=searxng`. O `settings.yml` habilita `formats: [html, json]` — **o JSON é obrigatório** para a integração.
 
@@ -554,8 +554,9 @@ oraculo/
 ├── engines/llama.cpp-prismml/# engine Docker dedicada do fork PrismML (Bonsai)
 ├── engines/strata/           # infra Strata (Dockerfile + README; modelo não baixado)
 │
-├── searxng/
-│   └── settings.yml          # Config do SearXNG (formats json p/ Open WebUI)
+├── data/                     # Estado dos serviços (gitignored): open-webui/,
+│   ├── open-terminal/, openwa/, 9router/, comfyui/ (caches),
+│   └── searxng/              # settings.yml do SearXNG (formats json p/ Open WebUI)
 │
 ├── docker-compose.yml        # Serviços auxiliares (sem llama-cpp)
 ├── manage.sh                 # Script de gerenciamento do llama-swap
@@ -649,7 +650,7 @@ docker logs open-webui
 curl "http://localhost:8888/search?q=teste&format=json"
 
 # Se der 403, conferir se settings.yml tem formats: [html, json]
-cat searxng/settings.yml
+cat data/searxng/settings.yml
 ```
 
 ### Open Terminal não conecta

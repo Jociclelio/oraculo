@@ -46,7 +46,7 @@ services:
   # searxng — Metabuscador (busca web para o Open WebUI)
   # =========================================================
   # Porta: http://localhost:8888 (somente localhost)
-  # Formato JSON habilitado em ./searxng/settings.yml
+  # JSON habilitado em ./data/searxng/settings.yml
   # =========================================================
   searxng:
     image: searxng/searxng
@@ -55,7 +55,7 @@ services:
     ports:
       - "127.0.0.1:8888:8080"
     volumes:
-      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+      - ./data/searxng/settings.yml:/etc/searxng/settings.yml:ro
 
   # =========================================================
   # comfyui — Geração/edição de imagens (Qwen-Image 2.1 Turbo)

@@ -93,7 +93,7 @@ load/unload manual — apontar o request para outro `model` faz o swap
     no `webui.db` na primeira inicialização — **o banco tem precedência sobre
     o env** depois disso (registrar MCP = escrever na chave
     `tool_server.connections` do banco, não no compose). SearXNG precisa de
-    `formats: [html, json]` no `searxng/settings.yml`.
+    `formats: [html, json]` no `data/searxng/settings.yml`.
  7. **Prefill de MoE com experts na CPU é dominado por streaming de pesos —
     `-ub 2048` dobra o prefill.** Medido 2026-10-11 (Qwen3.6_35B_Code, prompt
     5,6k tok, display idle): ub512→400 tok/s; ub1024→594; ub2048→865-909
