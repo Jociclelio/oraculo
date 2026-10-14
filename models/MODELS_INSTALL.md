@@ -188,9 +188,9 @@ hf download Venastine-Research/Xing4.0-29B-A4B-GGUF \
 
 O modelo **Strata não foi baixado** (~58 GB na variante Coder IQ1_M; decisão
 de escopo do plano). A infraestrutura está pronta em
-[`../strata/`](../strata/) (Dockerfile pinado + `README.md` com os passos de
+[`../engines/strata/`](../engines/strata/) (Dockerfile pinado + `README.md` com os passos de
 instalação futura) e a entry `Strata:` permanece **comentada** no
-`llama-swap/config.yaml`. Para ativar: seguir `strata/README.md` e
+`llama-swap/config.yaml`. Para ativar: seguir `engines/strata/README.md` e
 descomentar a entry.
 
 ---

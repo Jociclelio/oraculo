@@ -16,7 +16,10 @@ services:
       # Conexão pré-configurada com o open-terminal (Admin > Integrations)
       - TERMINAL_SERVER_CONNECTIONS=[{"id":"oraculo-terminal","url":"http://localhost:8000","key":"${OPEN_TERMINAL_API_KEY}","name":"Oraculo Terminal","auth_type":"bearer","config":{"access_grants":[]}}]
     volumes:
-      - open-webui-data:/app/backend/data
+      # Estado do serviço no repo (data/open-webui) — migração dos volumes
+      # nomeados (2026-10-14): webui.db visível/backapeável, sem precedência
+      # oculta do banco sobre o env.
+      - ./data/open-webui:/app/backend/data
     depends_on:
       - searxng
 
@@ -37,7 +40,7 @@ services:
     environment:
       - OPEN_TERMINAL_API_KEY=${OPEN_TERMINAL_API_KEY}
     volumes:
-      - open-terminal-data:/home/user
+      - ./data/open-terminal:/home/user
 
   # =========================================================
   # searxng — Metabuscador (busca web para o Open WebUI)
@@ -83,8 +86,8 @@ services:
       - ./comfyui/output:/root/ComfyUI/output
       - ./comfyui/user:/root/ComfyUI/user
       - ./comfyui/user-scripts:/root/user-scripts
-      - comfyui-hf-cache:/root/.cache/huggingface
-      - comfyui-torch-cache:/root/.cache/torch
+      - ./data/comfyui/hf-cache:/root/.cache/huggingface
+      - ./data/comfyui/torch-cache:/root/.cache/torch
 
   # =========================================================
   # mcp-playwright — Playwright MCP como tool server do Open WebUI
@@ -174,7 +177,7 @@ services:
       - MACHINE_ID_SALT=${MACHINE_ID_SALT}
       - ENABLE_REQUEST_LOGS=false
     volumes:
-      - 9router-data:/app/data
+      - ./data/9router:/app/data
 
   # =========================================================
   # openwa-docker-proxy — Proxy seguro para Docker socket
@@ -231,8 +234,8 @@ services:
       - DOCKER_HOST=tcp://openwa-docker-proxy:2375
       - DATABASE_TYPE=sqlite
     volumes:
-      - openwa-data:/app/data
-      - openwa-sessions:/app/data/sessions
+      - ./data/openwa:/app/data
+      - ./data/openwa/sessions:/app/data/sessions
     depends_on:
       - openwa-docker-proxy
 
@@ -245,12 +248,3 @@ networks:
   # Rede externa — openwa e outros containers precisam se comunicar
   openwa-network:
     name: openwa-network
-
-volumes:
-  comfyui-hf-cache:
-  comfyui-torch-cache:
-  open-webui-data:
-  open-terminal-data:
-  openwa-data:
-  openwa-sessions:
-  9router-data:

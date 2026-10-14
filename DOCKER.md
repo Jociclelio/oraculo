@@ -51,7 +51,7 @@ cp .env.example .env   # ou criar manualmente
 - **Imagem**: `ghcr.io/open-webui/open-webui:main`
 - **Container**: `open-webui`
 - **Porta**: `8080` (rede host)
-- **Volume**: `open-webui-data → /app/backend/data`
+- **Estado (bind)**: `./data/open-webui → /app/backend/data` (webui.db, uploads, RAG — no repo)
 - **Dependência**: `searxng` (o serving llama-swap não é serviço do compose)
 - **Rede**: `host`
 
@@ -73,7 +73,7 @@ Interface web para interagir com os modelos. Configurada para conectar ao proxy 
 - **Imagem**: `ghcr.io/open-webui/open-terminal`
 - **Container**: `open-terminal`
 - **Porta**: `127.0.0.1:8000` (somente localhost)
-- **Volume**: `open-terminal-data → /home/user` (workspace persistente do agente)
+- **Estado (bind)**: `./data/open-terminal → /home/user` (workspace persistente do agente)
 
 Transforma o Open WebUI em um *agent harness*: o modelo pode executar comandos, criar/editar arquivos, rodar código e iniciar servidores dentro do container (isolado do host).
 
@@ -84,7 +84,7 @@ A conexão é registrada automaticamente via `TERMINAL_SERVER_CONNECTIONS` no en
 1. No chat, selecionar o terminal pelo ícone de nuvem (☁) no input
 2. Se precisar recriar manualmente: URL `http://localhost:8000`, API Key = valor de `OPEN_TERMINAL_API_KEY`, Auth Type `Bearer`
 
-> ⚠️ Essas variáveis são `ConfigVar`: o valor persistido no banco (volume) tem precedência sobre o env após a primeira inicialização. Para mudar a conexão, use a UI admin ou edite `terminal_server.connections` no `webui.db`.
+> ⚠️ Essas variáveis são `ConfigVar`: o valor persistido no banco (`data/open-webui/webui.db`) tem precedência sobre o env após a primeira inicialização. Para mudar a conexão, use a UI admin ou edite `terminal_server.connections` no `webui.db`.
 
 > O modelo precisa ter **Function Calling = Native** (padrão desde v0.10.0) em *Workspace → Models*.
 
@@ -109,8 +109,8 @@ curl "http://localhost:8888/search?q=teste&format=json"
 - **Container**: `openwa`
 - **Porta**: `127.0.0.1:2785`
 - **MCP Streamable HTTP**: `POST http://localhost:2785/mcp`
-- **Auth**: header `X-API-Key` ou `Authorization: Bearer <key>` — a key é gerada na primeira inicialização e salva em `openwa-data/.api-key`
-- **Volumes**: `openwa-data → /app/data`, `openwa-sessions → /app/data/sessions`
+- **Auth**: header `X-API-Key` ou `Authorization: Bearer <key>` — a key é gerada na primeira inicialização e salva em `data/openwa/.api-key`
+- **Estado (bind)**: `./data/openwa → /app/data`, `./data/openwa/sessions → /app/data/sessions`
 
 Gateway WhatsApp com MCP habilitado. Sessões não iniciam automaticamente (`AUTO_START_SESSIONS=false`).
 
@@ -121,7 +121,7 @@ Gateway WhatsApp com MCP habilitado. Sessões não iniciam automaticamente (`AUT
 - **Porta**: `127.0.0.1:20128` (somente localhost)
 - **Dashboard**: `http://localhost:20128/dashboard` (login = `INITIAL_PASSWORD`)
 - **API OpenAI-compatible**: `http://localhost:20128/v1` (API key gerada no dashboard)
-- **Volume**: `9router-data → /app/data` (SQLite: contas, providers, quotas)
+- **Estado (bind)**: `./data/9router → /app/data` (SQLite: contas, providers, quotas)
 
 Proxy local (MIT) que agrega 40+ providers de LLM atrás de um endpoint
 único, com fallback automático (Subscription → Cheap → Free). No oraculo é
@@ -259,7 +259,7 @@ GGUF em Ampere — decisão validada: os GGUFs de difusão foram removidos
 
 **Volumes**: `./models/comfyui → /root/ComfyUI/models`;
 `./comfyui/{custom_nodes,input,output,user}` → idem no container; caches de
-HF/torch em volumes nomeados (`comfyui-hf-cache`, `comfyui-torch-cache`).
+HF/torch em binds no repo (`./data/comfyui/hf-cache`, `./data/comfyui/torch-cache`).
 
 - `./comfyui/user-scripts` → `/root/user-scripts`: `pre-start.sh` (sourced
   pelo entrypoint) sobe o gpu-shim; log em `comfyui/user/gpu-shim.log`.
@@ -390,7 +390,7 @@ ls-<Modelo>`) — **só 1 modelo carregado por vez**, descarregado também após
   `docker-stock`), imagem local do fork PrismML `llama.cpp-prismml:latest`
   para os Bonsai (build em `engines/llama.cpp-prismml/`, commit pinado
   `84445367f` — **nunca stock** para Bonsai) e Strata (entry comentada,
-  infra em `strata/`).
+  infra em `engines/strata/`).
 - **Monte**: os containers de modelo montam `./models:/models` (mesmo monte
   do antigo serviço); o `models.ini` não é mais montado em lugar nenhum —
   os parâmetros vivem em `llama-swap/config.yaml`.
@@ -539,6 +539,8 @@ Para adicionar outros backends de API, ir em **Settings → Connections → Open
 
 ```
 oraculo/
+├── data/                     # Estado dos serviços (gitignored): open-webui/,
+│   ├── open-terminal/, openwa/, 9router/, comfyui/ (caches)
 ├── models/                   # Modelos GGUF (montados nos containers efêmeros)
 │   ├── .../
 │   ├── models.ini            # HISTÓRICO (desativado) — parâmetros migraram p/ config.yaml
@@ -550,7 +552,7 @@ oraculo/
 ├── bin/llama-swap            # binário (gitignored)
 ├── logs/                     # llama-swap.log + pidfile (gitignored)
 ├── engines/llama.cpp-prismml/# engine Docker dedicada do fork PrismML (Bonsai)
-├── strata/                   # infra Strata (Dockerfile + README; modelo não baixado)
+├── engines/strata/           # infra Strata (Dockerfile + README; modelo não baixado)
 │
 ├── searxng/
 │   └── settings.yml          # Config do SearXNG (formats json p/ Open WebUI)

@@ -183,7 +183,7 @@ mas prefill ~8 tok/s).
 `open-terminal` (execução agêntica `:8000`, requer modelo com Function
 Calling = Native) · `searxng` (`:8888`, JSON habilitado) · `openwa` +
 `openwa-docker-proxy` (WhatsApp/MCP `:2785/mcp`, key em
-`openwa-data/.api-key`; o proxy é o único container com acesso ao Docker
+`data/openwa/.api-key`; o proxy é o único container com acesso ao Docker
 socket) · `mcp-playwright` (`:8931/mcp`, `mcr.microsoft.com/playwright/mcp`
 pinado, headless) · `mcp-memory` (`:8932/mcp`, supergateway faz a ponte
 stdio→Streamable HTTP do `@modelcontextprotocol/server-memory`; grafo em

@@ -35,7 +35,7 @@ Três engines por baixo:
 |--------|--------|-----|
 | llama.cpp **stock** | `ghcr.io/ggml-org/llama.cpp:full-cuda` | todos os modelos clássicos (Gemma, Qwen, Ornith, PE) |
 | llama.cpp **fork PrismML** (dedicada) | `llama.cpp-prismml:latest` — build local em [`engines/llama.cpp-prismml/`](engines/llama.cpp-prismml/), commit pinado `84445367f` | GGUFs ternários **Bonsai 2 27B** — regra **nunca stock** (kernels ternários + Hadamard são exclusivos do fork) |
-| **Strata** (Qwen3.8-Flash-Next) | `strata:latest` — build local em [`strata/`](strata/), commit pinado `61b3fb5dd` | **Qwen3.8-Flash-Next Coder IQ1_M** — instalado em `/home/jocic/strata-data` (NVMe); entry `Strata` ativa |
+| **Strata** (Qwen3.8-Flash-Next) | `strata:latest` — build local em [`engines/strata/`](engines/strata/), commit pinado `61b3fb5dd` | **Qwen3.8-Flash-Next Coder IQ1_M** — instalado em `/home/jocic/strata-data` (NVMe); entry `Strata` ativa |
 
 > **Posicionamento: stack para 1 usuário por vez.** Todas as entries usam
 > `-np 1`; entradas paralelas (`np>1`) só como exceção pontual para modelos
@@ -353,7 +353,7 @@ Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
 > IQ1_M — a única que cabe nos 32 GB da máquina). O swap do llama-swap é
 > obrigatório: ao pedir `Strata`, o modelo anterior é descarregado (libera
 > ~30 GB de RAM); ao pedir outro, o container do Strata é removido.
-> Detalhes: [`strata/README.md`](strata/README.md).
+> Detalhes: [`engines/strata/README.md`](engines/strata/README.md).
 
 ---
 
@@ -410,4 +410,4 @@ du -sh models/*/
 | [`DOCKER.md`](DOCKER.md) | Guia focado em Docker |
 | [`llama-swap/config.yaml`](llama-swap/config.yaml) | Entries/parâmetros dos modelos (fonte da verdade) |
 | [`models/MODELS_INSTALL.md`](models/MODELS_INSTALL.md) | Instalação de modelos (Bonsai via `hf download`, etc.) |
-| [`strata/README.md`](strata/README.md) | Engine/instalação Strata (Qwen3.8-Flash-Next) — instalada, entry ativa |
+| [`engines/strata/README.md`](engines/strata/README.md) | Engine/instalação Strata (Qwen3.8-Flash-Next) — instalada, entry ativa |
