@@ -1,0 +1,38 @@
+0.00.084.956 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.085.288 W srv  llama_server: -----------------
+0.00.085.290 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.085.290 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.085.290 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.085.290 W srv  llama_server: -----------------
+0.00.086.480 I srv    load_model: loading model '/models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-PTQ1_0.gguf'
+0.00.740.989 W common_fit_params: failed to fit params to free device memory: n_gpu_layers already set by user to 99, abort
+0.05.358.496 I cmn          init: llama threadpool init, n_threads = 5
+0.05.565.813 W load_hparams: Qwen-VL models require at minimum 1024 image tokens to function correctly on grounding tasks
+0.05.565.815 W load_hparams: if you encounter problems with accuracy, try adding --image-min-tokens 1024
+0.05.565.815 W load_hparams: more info: https://github.com/ggml-org/llama.cpp/issues/16842
+
+0.06.013.482 I srv    load_model: loaded multimodal model, '/models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf'
+0.06.013.485 W srv    load_model: cache_reuse is not supported by multimodal, it will be disabled
+0.06.102.147 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 131072, kv_unified = 'false'
+0.06.107.235 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.06.107.248 I srv  llama_server: model loaded
+0.06.107.250 I srv  llama_server: listening on http://0.0.0.0:8080
+0.06.107.251 W srv  llama_server: NOTICE: server default port will be changed to :9931 in a future release
+0.06.107.252 W srv  llama_server:         ref: https://github.com/ggml-org/llama.cpp/pull/26508
+0.08.401.367 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.08.401.392 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.08.816.590 I slot print_timing: id  0 | task 0 | prompt eval time =     279.86 ms /     7 tokens (   39.98 ms per token,    25.01 tokens per second)
+0.08.816.593 I slot print_timing: id  0 | task 0 |        eval time =     135.33 ms /     4 tokens (   45.11 ms per token,    22.17 tokens per second)
+0.08.816.594 I slot print_timing: id  0 | task 0 |       total time =     415.18 ms /    11 tokens
+0.08.816.594 I slot print_timing: id  0 | task 0 |    graphs reused =          3
+0.08.816.607 I slot      release: id  0 | task 0 | stop processing: n_tokens = 10, truncated = 0
+0.08.921.404 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 113150330367
+0.09.022.355 I slot launch_slot_: id  0 | task 6 | processing task, is_child = 0
+4.36.025.539 I slot print_timing: id  0 | task 6 | prompt processing, n_tokens =   4096, progress = 0.41, t = 267.00 s / 15.34 tokens per second
+15.09.005.904 W srv          stop: cancel task, id_task = 6
+16.57.247.602 I slot      release: id  0 | task 6 | stop processing: n_tokens = 7997, truncated = 0
+16.57.247.608 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 114158761363
+16.57.371.303 I slot launch_slot_: id  0 | task 10 | processing task, is_child = 0
+21.24.642.398 I slot print_timing: id  0 | task 10 | prompt processing, n_tokens =   4096, progress = 0.20, t = 267.27 s / 15.33 tokens per second
+24.46.074.756 W srv          stop: cancel task, id_task = 10
+34.36.349.663 I srv    operator(): operator(): cleaning up before exit...
