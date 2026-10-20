@@ -35,6 +35,14 @@ models/
 ├── Ternary-Bonsai-2-27B-gguf/          # Bonsai 2 (ver seção própria abaixo)
 │   ├── Ternary-Bonsai-2-27B-PTQ1_0.gguf
 │   └── Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf
+├── Ternary-Bonsai-2-9B-gguf/           # Bonsai 2 9B (engine PrismML)
+│   ├── Ternary-Bonsai-2-9B-PTQ1_0.gguf
+│   └── Ternary-Bonsai-2-9B-mmproj-Q8_0.gguf
+├── Ternary-Bonsai-2-9B-Uncensored-LoRA/ # adapter AtomicChat (3,2 MB, rank-1)
+│   └── Ternary-Bonsai-2-9B-Uncensored-LoRA.gguf
+├── MiMo-V2.6-Distill-Qwen-9B-GGUF/     # Xiaomi MiMo (arch qwen35 denso)
+│   ├── MiMo-V2.6-Distill-Qwen-9B-Q4_K_M.gguf
+│   └── mmproj-MiMo-V2.6-Distill-Qwen-9B-f16.gguf
 ├── Ternary-Bonsai-2-27B-Heretic/       # finetune uncensored (engine PrismML)
 │   ├── Ternary-Bonsai-2-27B-Uncensored-Heretic-PTQ1_0.gguf
 │   └── mmproj-Q8_0.gguf
@@ -145,7 +153,48 @@ hf download prism-ml/Ternary-Bonsai-2-27B-gguf \
 > A variante `PQ2_0` (~6,8 GB, entry `bonsai-27b-pq2_0`) foi removida em
 > 2026-10-13 — manteve-se só o PTQ1_0, a quantização menor.
 
+### Bonsai 2 9B (variante edge — engine PrismML, entry `bonsai-9b`)
 
+Instalado em 2026-10-20 (origem `prism-ml/Ternary-Bonsai-2-9B-gguf`):
+
+```bash
+hf download prism-ml/Ternary-Bonsai-2-9B-gguf \
+  Ternary-Bonsai-2-9B-PTQ1_0.gguf \
+  Ternary-Bonsai-2-9B-mmproj-Q8_0.gguf \
+  --local-dir models/Ternary-Bonsai-2-9B-gguf
+```
+
+| Arquivo | Tamanho | Uso |
+|---------|---------|-----|
+| `Ternary-Bonsai-2-9B-PTQ1_0.gguf` | ~2,0 GB | entry `bonsai-9b` (+ mmproj, visão) |
+| `Ternary-Bonsai-2-9B-mmproj-Q8_0.gguf` | ~0,6 GB | visão (mmproj) |
+
+Mesma engine PrismML pinada e MESMAS limitações do irmão 27B: o prefill
+**degrada com o contexto** (73 tok/s @2,6k → 23 @4k) e o decode idem
+(~56 tok/s curto → ~20 @2,6k → ~8 @4k) — usar < 4k tokens. Medido:
+VRAM 5354 MiB @128k; visão validada. O repo HF publica também drafts
+`DFlash2-Q8_0` (1,6 GB) e `PQ2_0-MTP-Q8_0` (2,7 GB) — não baixados.
+
+### Bonsai 2 9B Uncensored (AtomicChat — LoRA, entry `bonsai-9b-uncensored`)
+
+Adapter LoRA **rank-1 de 3,2 MB** (não é checkpoint) que remove a direção
+de recusa no grafo de computo, com o pack base PTQ1_0 byte-idêntico —
+nada é re-quantizado. Origem: `AtomicChat/Ternary-Bonsai-2-9B-Uncensored-LoRA-GGUF`
+(recusas 100% → 0% em scale 1; custo ~4,3 pontos de MMLU; leak residual
+~1e-4). O entry reutiliza os MESMOS GGUFs do `bonsai-9b` + `--lora-scaled`:
+
+```bash
+hf download AtomicChat/Ternary-Bonsai-2-9B-Uncensored-LoRA-GGUF \
+  Ternary-Bonsai-2-9B-Uncensored-LoRA.gguf \
+  --local-dir models/Ternary-Bonsai-2-9B-Uncensored-LoRA
+```
+
+> Requer o fork PrismML (stock nem abre o pack ternário). LoRA medido pelo
+> autor no fork `prism-b10777`; aqui validado no pin `84445367f`
+> (aplicação confirmada por logprobs distintos vs base — 2026-10-20).
+> MESMAS limitações de contexto do `bonsai-9b` (< 4k tokens). Atenção: o
+> modelo é thinking e consome muitos tokens de raciocínio (~900 para uma
+> pergunta simples) — orçar `max_tokens` generoso ou a resposta vem vazia.
 
 > ⚠️ **Regra dura — nunca engine stock**: GGUFs ternários PTQ1_0/PQ2_0 só
 > funcionam no fork **PrismML-Eng/llama.cpp** (kernels ternários + Hadamard).
@@ -398,6 +447,35 @@ Para acelerar a geração, use um drafter na entry (ex.: `Gemma4_12B_MTP`):
 
 ---
 
+## MiMo-V2.6 Distill Qwen 9B (XiaomiMiMo — denso, multimodal, reasoning)
+
+Distill do MiMo-V2.6 em base Qwen3.5-9B (arch `qwen35`, DENSA — sem
+`-ncmoe`/`--load-mode none`), multimodal (image-text-to-text), ctx nativo
+262144, reasoning com `reasoning_content` separado. Origem dos safetensors:
+`XiaomiMiMo/MiMo-V2.6-Distill-Qwen-9B` (BF16 ~18,8 GB — não usar direto).
+GGUF instalado: bartowski (o oficial `ggml-org/...-GGUF` só publica Q8_0
+9,5 GB, que não cabe com o floor 128k na RTX 3060):
+
+```bash
+hf download bartowski/MiMo-V2.6-Distill-Qwen-9B-GGUF \
+  MiMo-V2.6-Distill-Qwen-9B-Q4_K_M.gguf \
+  mmproj-MiMo-V2.6-Distill-Qwen-9B-f16.gguf \
+  --local-dir models/MiMo-V2.6-Distill-Qwen-9B-GGUF
+```
+
+| Arquivo | Tamanho | Uso |
+|---------|---------|-----|
+| `MiMo-V2.6-Distill-Qwen-9B-Q4_K_M.gguf` | ~5,5 GB | entry `MiMo2.6_9B` |
+| `mmproj-MiMo-V2.6-Distill-Qwen-9B-f16.gguf` | ~0,9 GB | visão (mmproj) |
+
+> **SEM MTP**: header do GGUF sem tensors `nextn` (verificado; 0 vs 4 no
+> Ornith 1.5 9B). Drafts comunitários (`VitreousCut/...-MTP-GGUF`) existem
+> mas não instalados — precedente DSpark: aceitação baixa.
+
+> Sampling do `generation_config.json` oficial: temp 0.6 / top-p 0.95 /
+> top-k 20. Medido (2026-10-20, RTX 3060 12 GB, display idle): **decode
+> ~47-51 tok/s, prefill ~1800 tok/s @2,6k**; VRAM 9510 MiB @128k; visão
+> validada.
 
 ---
 

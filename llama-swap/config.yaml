@@ -286,6 +286,26 @@ models:
     ttl: 1800
 
   # ---------------------------------------------------------------------
+  # MiMo-V2.6 Distill Qwen 9B (XiaomiMiMo — distill do MiMo-V2.6 em base
+  # Qwen3.5; arch qwen35, DENSA, sem -ncmoe). Multimodal (image-text-to-
+  # text), ctx nativo 262144. GGUF bartowski Q4_K_M + mmproj f16 (o
+  # oficial ggml-org só publica Q8_0 9,5 GB — não cabe com o floor 128k).
+  # SEM MTP: header sem tensors nextn (verificado; diferente do Ornith 9B).
+  # Sampling do generation_config oficial: temp 0.6 / top-p 0.95 / top-k 20.
+  # ---------------------------------------------------------------------
+  MiMo2.6_9B:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/MiMo-V2.6-Distill-Qwen-9B-GGUF/MiMo-V2.6-Distill-Qwen-9B-Q4_K_M.gguf
+      --mmproj /models/MiMo-V2.6-Distill-Qwen-9B-GGUF/mmproj-MiMo-V2.6-Distill-Qwen-9B-f16.gguf
+      -c 131072 -ngl 99
+      -b 4096
+      --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
+      --presence-penalty 0.0 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
   # NVIDIA Nemotron 3.5 Bolt 74B-A9B (24GB, IQ2-XXS QAD) — MoE híbrido
   # Mamba-2 + LatentMoE (arch nemotron_h_moe: 88 blocos = 8 attention
   # [KV heads 2] + 40 SSM + 40 MoE [496 experts totais, 9 ativos]).
@@ -372,6 +392,42 @@ models:
       ${docker-prismml}
       -m /models/Ternary-Bonsai-2-27B-Heretic/Ternary-Bonsai-2-27B-Uncensored-Heretic-PTQ1_0.gguf
       --mmproj /models/Ternary-Bonsai-2-27B-Heretic/mmproj-Q8_0.gguf
+      -c 131072 -ngl 99
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Bonsai 2 9B (variante edge da família, denso — instalado 2026-10-20,
+  # origem prism-ml/Ternary-Bonsai-2-9B-gguf). MESMA engine PrismML pinada
+  # (regra dura: PTQ1_0 só roda no fork — a stock/pdcache recusa o formato
+  # ternário). Sampling vive nos metadados do GGUF. SEM MTP/DFlash (drafts
+  # DFlash2-Q8_0 e PQ2_0-MTP-Q8_0 existem no repo HF, não baixados).
+  # ---------------------------------------------------------------------
+  bonsai-9b:
+    cmd: |
+      ${docker-prismml}
+      -m /models/Ternary-Bonsai-2-9B-gguf/Ternary-Bonsai-2-9B-PTQ1_0.gguf
+      --mmproj /models/Ternary-Bonsai-2-9B-gguf/Ternary-Bonsai-2-9B-mmproj-Q8_0.gguf
+      -c 131072 -ngl 99
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Bonsai 2 9B Uncensored (AtomicChat) — LoRA rank-1 de 3,2 MB que remove
+  # a direção de recusa NO GRAFO de computo (base PTQ1_0 byte-idêntico,
+  # nada re-quantizado). Mesma engine PrismML pinada do irmão (o stock nem
+  # abre o pack ternário). --lora-scaled 1: recusas 100% → 0% (custo ~4,3
+  # MMLU; scale 0 desligaria o adapter no mesmo processo). MESMAS
+  # limitações de contexto do bonsai-9b (prefill/decode degradam — usar
+  # < 4k tokens). LoRA medido pelo autor no fork prism-b10777; aqui roda
+  # no pin 84445367f (validado em carga 2026-10-20).
+  # ---------------------------------------------------------------------
+  bonsai-9b-uncensored:
+    cmd: |
+      ${docker-prismml}
+      -m /models/Ternary-Bonsai-2-9B-gguf/Ternary-Bonsai-2-9B-PTQ1_0.gguf
+      --mmproj /models/Ternary-Bonsai-2-9B-gguf/Ternary-Bonsai-2-9B-mmproj-Q8_0.gguf
+      --lora-scaled /models/Ternary-Bonsai-2-9B-Uncensored-LoRA/Ternary-Bonsai-2-9B-Uncensored-LoRA.gguf:1
       -c 131072 -ngl 99
     cmdStop: ${docker-stop}
     ttl: 300
