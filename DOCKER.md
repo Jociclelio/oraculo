@@ -374,13 +374,19 @@ liberação é bidirecional e automática, sem job em background:
 - **LLM → DiT**: o ComfyUI escuta em `127.0.0.1:8189` atrás do **gpu-shim**
   (`comfyui/user-scripts/gpu-shim.py`, sobe via `pre-start.sh` na porta
   canônica 8188). O shim repassa HTTP e WebSocket e, no caminho de geração
-  (Open WebUI/API — requests sem `Origin` da UI nativa), avalia a VRAM
-  livre via `nvidia-smi`: se < 8 GiB, chama `GET :8081/unload` do
-  llama-swap (síncrono, ~0,5 s) e espera a VRAM estabilizar/aparecer antes
-  de repassar. O teardown do processo do LLM pode levar dezenas de
-  segundos — o shim aguenta isso (teto 45 s, encerra cedo se estável).
-  O polling da UI nativa do ComfyUI **nunca** descarrega o LLM (gate por
-  `Origin: …:8188`).
+  (Open WebUI/API sem `Origin` da UI; **desde 2026-10-20 também o POST
+  /prompt da própria UI nativa no navegador** — antes o gate por `Origin`
+  excluía a UI inteira e gerar pelo navegador com o LLM carregado falhava),
+  avalia a VRAM livre via `nvidia-smi`: se < 8 GiB, chama
+  `GET :8081/unload` do llama-swap (síncrono, ~0,5 s) e espera a VRAM
+  estabilizar/aparecer antes de repassar. O teardown do processo do LLM
+  pode levar dezenas de segundos — o shim aguenta isso (teto 45 s, encerra
+  cedo se estável). O polling da UI nativa (GET) **nunca** descarrega.
+  O shim também reescreve a porta do `Origin` (8188→8189) ao repassar —
+  o middleware `origin_only` do ComfyUI rejeita com 403 quando
+  `Host != Origin` em loopback (Host chega como :8189).
+  NUNCA chamar o :8189 diretamente de clientes externos — bypassa o shim
+  (a liberação de VRAM não roda) e o Origin mismatch dá 403 no POST.
 - Sem modelo LLM carregado, o shim não faz nada (VRAM livre > 8 GiB). Com
   jogos no desktop (ex.: CS2 ~2,2 GB), a geração ainda cabe (medido).
 - `./manage.sh unload` usa o mesmo endpoint `GET /unload` para liberação

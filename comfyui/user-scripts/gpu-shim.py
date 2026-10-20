@@ -13,8 +13,10 @@ pede ao llama-swap GET /unload — síncrono (~0,5 s) — e aguarda a VRAM
 aparecer. Regras para não virar um job autônomo:
 
 - Tráfego da UI NATIVA (Origin :8188 — o frontend faz polling contínuo)
-  NUNCA dispara unload; só o caminho de geração (Open WebUI/API, sem Origin
-  de UI) pode.
+  em GET NUNCA dispara unload; disparam o caminho de geração (Open
+  WebUI/API, sem Origin de UI) e, desde 2026-10-20, também o POST /prompt
+  da própria UI nativa (gerar pelo navegador com o LLM carregado antes
+  dava OOM).
 - Mesmo no caminho de geração, o unload só ocorre se a VRAM realmente não
   bastar — sem modelo carregado, nenhum efeito colateral.
 - Sem job em background: quando o LLM for necessário de novo, o llama-swap
@@ -30,6 +32,7 @@ import time
 from aiohttp import ClientSession, ClientTimeout, WSMsgType, web
 
 UPSTREAM = "http://127.0.0.1:8189"
+UPSTREAM_PORT = "8189"
 LLAMA_SWAP_UNLOAD = "http://127.0.0.1:8081/unload"
 LISTEN_HOST, LISTEN_PORT = "127.0.0.1", 8188
 UI_ORIGIN_PORT = "8188"          # Origin da UI nativa do ComfyUI
@@ -76,14 +79,23 @@ def cached_free_mib():
 
 
 def is_generation_traffic(request: web.Request) -> bool:
-    """True se o request vem do caminho de geração (Open WebUI/API).
+    """True se o request vem do caminho de geração (Open WebUI/API/UI nativa).
 
     O frontend da UI nativa manda Origin: http://<host>:8188 em tudo
-    (inclusive o polling /api/jobs) — esse tráfego nunca descarrega. O
-    backend do Open WebUI (aiohttp) não manda Origin.
+    (inclusive o polling /api/jobs) — tráfego GET com essa Origin nunca
+    descarrega. MAS o envio real de geração da UI nativa é um POST /prompt:
+    desde 2026-10-20 ele TAMBÉM dispara o unload (antes a UI nativa ficava
+    de fora inteira e gerar pelo navegador com o LLM carregado dava OOM).
+    O backend do Open WebUI (aiohttp) não manda Origin.
     """
     origin = request.headers.get("Origin", "")
-    return not (origin and origin.rsplit(":", 1)[-1] == UI_ORIGIN_PORT)
+    native = origin and origin.rsplit(":", 1)[-1] == UI_ORIGIN_PORT
+    if not native:
+        return True
+    # UI nativa: só o envio de geração (POST /prompt[/api/prompt]) descarrega;
+    # polling/status/websocket (GET) nunca.
+    return request.method == "POST" and request.rel_url.path in (
+        "/prompt", "/api/prompt")
 
 
 async def ensure_vram(request: web.Request):
@@ -142,6 +154,20 @@ def clean_headers(headers):
     return {k: v for k, v in headers.items() if k.lower() not in HOP_BY_HOP}
 
 
+def rewrite_origin(headers):
+    """Alinha a porta do Origin com a do upstream (8189).
+
+    O aiohttp client reescreve o Host para o do upstream, e o middleware
+    origin_only do ComfyUI devolve 403 quando Host != Origin em loopback —
+    sem isso, o POST /prompt da UI nativa no navegador (Origin :8188) é
+    sempre rejeitado.
+    """
+    o = headers.get("Origin")
+    if o and o.endswith(f":{UI_ORIGIN_PORT}"):
+        headers["Origin"] = o[: -len(UI_ORIGIN_PORT)] + UPSTREAM_PORT
+    return headers
+
+
 def upstream_url(request: web.Request) -> str:
     """Caminho cru (percent-preserved).
 
@@ -156,11 +182,12 @@ def upstream_url(request: web.Request) -> str:
 async def proxy_http(request: web.Request):
     await ensure_vram(request)
     body = await request.read()
+    headers = rewrite_origin(clean_headers(request.headers))
     async with session.request(
         request.method,
         upstream_url(request),
         data=body,
-        headers=clean_headers(request.headers),
+        headers=headers,
     ) as resp:
         payload = await resp.read()
         return web.Response(status=resp.status, body=payload,

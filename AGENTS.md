@@ -118,7 +118,8 @@ load/unload manual — apontar o request para outro `model` faz o swap
     de contexto + cuBLAS/cuDNN; `POST /free` com `free_memory:true` NÃO
     derruba esse piso — medido 2026-10-19; só matar o processo zeraria, ao
     custo de restart do torch ~10-20 s). No caminho de geração
-    (Open WebUI/API; polling da UI nativa nunca descarrega), o gpu-shim
+    (Open WebUI/API e, desde 2026-10-20, o POST /prompt da UI nativa no
+    navegador; polling GET da UI nunca descarrega), o gpu-shim
     (`comfyui/user-scripts/gpu-shim.py`, rodando dentro do container via
     pre-start.sh) avalia a VRAM livre e, se < 8 GiB, faz `POST /free` no
     ComfyUI (flush do caching allocator/fragmentação) e chama
