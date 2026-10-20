@@ -96,6 +96,17 @@ async def ensure_vram(request: web.Request):
         free = gpu_free_mib()
         if free is None or free >= FREE_THRESHOLD_MIB:
             return
+        # flusha o caching allocator do PyTorch do ComfyUI (POST /free) —
+        # devolve blocos CUDA retidos em idle/fragmentação para o driver.
+        # O piso do runtime (~200-300 MiB de contexto CUDA + cuBLAS/cuDNN)
+        # não é liberável sem matar o processo (custo: restart do torch).
+        try:
+            async with session.post(UPSTREAM + "/free", json={
+                    "unload_models": True, "free_memory": True}) as r:
+                log.info("VRAM livre %s MiB < %s; flush do ComfyUI /free: %s",
+                         free, FREE_THRESHOLD_MIB, r.status)
+        except Exception as e:
+            log.warning("/free indisponível (%s); seguindo", e)
         try:
             async with session.get(LLAMA_SWAP_UNLOAD, timeout=ClientTimeout(total=60)) as r:
                 log.info("VRAM livre %s MiB < %s; unload llama-swap: %s %s",
