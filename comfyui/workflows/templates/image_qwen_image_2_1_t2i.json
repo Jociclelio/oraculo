@@ -318,7 +318,8 @@
     "vae_name": "qwen_image_2.1_vae_bf16.safetensors",
     "clip_name_1": "qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors",
     "device": "auto",
-    "dtype_1": "default"
+    "dtype_1": "default",
+    "control_after_generate": "randomize"
    }
   },
   {
@@ -1326,7 +1327,7 @@
       ],
       "widgets_values_named": {
        "seed": 0,
-       "control_after_generate": "fixed",
+       "control_after_generate": "randomize",
        "steps": 25,
        "cfg": 1,
        "sampler_name": "euler",

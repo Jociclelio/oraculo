@@ -326,6 +326,23 @@ Mapeamento de nós (`nodes`: `[{"type","node_ids","key"}]`; types: `model`,
 | steps/seed | → nó 7 (KSampler) | — |
 | image | — | `image` → nós **5 e 10** (LoadImage; upload automático) |
 
+> **Seed**: o mapeamento tem a entrada
+> `{"type":"seed","node_ids":["7"],"key":"seed"}` — o Open WebUI sorteia a
+> seed a cada chamada (`payload.seed if payload.seed else random.randint()`
+> em `utils/images/comfyui.py`; o `CreateImageForm` não expõe o campo).
+> Entre 2026-10-15 e 2026-10-20 a seed foi fixada em 42 (entrada removida do
+> mapeamento + valor gravado no nó 7 do `webui.db`) — revertido a pedido.
+>
+> **Gotcha da codificação dupla** (ao editar o `webui.db` com Python): o
+> valor de `*.comfyui.workflow` é um JSON **dentro** de JSON (o Open WebUI
+> faz `json.loads` na leitura e o campo `ComfyUIWorkflow.workflow` é `str`).
+> Gravar `json.dumps(json.dumps(w))` — se gravar o dict com uma codificação
+> só, toda tool call de imagem falha com `ValidationError: 1 validation
+> error for ComfyUIWorkflow` → `400: Something went wrong :/` no log do app.
+> Parar o `open-webui` antes de editar (a config é cacheada em memória e
+> reescrita em runtime; backup prévio recomendado). O banco tem precedência
+> sobre os arquivos em `comfyui/workflows/` (regra 6).
+
 **Múltiplas imagens na edição (10 slots)**: a tool `edit_image` do Open
 WebUI aceita lista (`image_urls`), o router faz upload de todas e o
 mapeamento distribui `image[i] → node_ids[i]` — `node_ids ["5","10".."18"]`
