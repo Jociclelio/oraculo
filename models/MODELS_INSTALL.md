@@ -169,11 +169,15 @@ hf download prism-ml/Ternary-Bonsai-2-9B-gguf \
 | `Ternary-Bonsai-2-9B-PTQ1_0.gguf` | ~2,0 GB | entry `bonsai-9b` (+ mmproj, visão) |
 | `Ternary-Bonsai-2-9B-mmproj-Q8_0.gguf` | ~0,6 GB | visão (mmproj) |
 
-Mesma engine PrismML pinada e MESMAS limitações do irmão 27B: o prefill
-**degrada com o contexto** (73 tok/s @2,6k → 23 @4k) e o decode idem
-(~56 tok/s curto → ~20 @2,6k → ~8 @4k) — usar < 4k tokens. Medido:
-VRAM 5354 MiB @128k; visão validada. O repo HF publica também drafts
-`DFlash2-Q8_0` (1,6 GB) e `PQ2_0-MTP-Q8_0` (2,7 GB) — não baixados.
+Mesma engine PrismML pinada do irmão 27B. **KV bf16 @192k (2026-10-20)**:
+no fork, o KV q5_1 dos macros NÃO tem caminho rápido de flash attention
+(issue PrismML #191) — degrada com o contexto (medido: decode 12,6 vs
+~71-78 tok/s @4k com f16/bf16; prefill 41 vs ~1600-1723). O ctx nativo
+256k NÃO cabe na RTX 3060 (OOM na carga); 224k carrega sem margem; o
+teto seguro é **192k** (VRAM ~10,6 GB). Com bf16 @192k: **decode ~71
+tok/s @4k (~48 @21k), prefill ~1600 tok/s**. Visão validada.
+O repo HF publica também drafts `DFlash2-Q8_0` (1,6 GB) e
+`PQ2_0-MTP-Q8_0` (2,7 GB) — não baixados.
 
 ### Bonsai 2 9B Uncensored (AtomicChat — LoRA, entry `bonsai-9b-uncensored`)
 
@@ -192,9 +196,9 @@ hf download AtomicChat/Ternary-Bonsai-2-9B-Uncensored-LoRA-GGUF \
 > Requer o fork PrismML (stock nem abre o pack ternário). LoRA medido pelo
 > autor no fork `prism-b10777`; aqui validado no pin `84445367f`
 > (aplicação confirmada por logprobs distintos vs base — 2026-10-20).
-> MESMAS limitações de contexto do `bonsai-9b` (< 4k tokens). Atenção: o
-> modelo é thinking e consome muitos tokens de raciocínio (~900 para uma
-> pergunta simples) — orçar `max_tokens` generoso ou a resposta vem vazia.
+> MESMO KV f16 do `bonsai-9b`. Atenção: o modelo é thinking e consome
+> muitos tokens de raciocínio (~900 para uma pergunta simples) — orçar
+> `max_tokens` generoso ou a resposta vem vazia.
 
 > ⚠️ **Regra dura — nunca engine stock**: GGUFs ternários PTQ1_0/PQ2_0 só
 > funcionam no fork **PrismML-Eng/llama.cpp** (kernels ternários + Hadamard).

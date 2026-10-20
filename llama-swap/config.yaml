@@ -75,6 +75,13 @@ macros:
     -ctk q5_1 -ctv q5_1
     --cache-reuse 256 --cache-ram 2048
 
+  # ATENÇÃO (2026-10-20): no fork PrismML o KV q5_1 NÃO tem caminho rápido de
+  # flash attention (issue PrismML #191; nosso build não define
+  # -DGGML_CUDA_FA_ALL_QUANTS=ON) — decode/prefill degradam com o contexto
+  # (medido no 9B @4k: 12,6 tok/s vs 77,9 com f16). As entries bonsai
+  # SOBRESCREVEM o KV: q4_0 nos 27B (rápido e menor que o q5_1 — mantém o
+  # floor 128k), f16 nos 9B (teto de performance; VRAM folgada).
+
   # Macro Xing4.0 — mesma receita do docker-prismml, mas com a imagem local
   # do fork shuxiaoqiong (engines/llama.cpp-xing/, commit pinado 8c379195a).
   # REGRA DURA: NUNCA usar a imagem stock para GGUFs Xing4.0 — o suporte à
@@ -376,6 +383,7 @@ models:
       -m /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-PTQ1_0.gguf
       --mmproj /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf
       -c 131072 -ngl 99
+      -ctk q4_0 -ctv q4_0
     cmdStop: ${docker-stop}
     ttl: 300
 
@@ -393,6 +401,7 @@ models:
       -m /models/Ternary-Bonsai-2-27B-Heretic/Ternary-Bonsai-2-27B-Uncensored-Heretic-PTQ1_0.gguf
       --mmproj /models/Ternary-Bonsai-2-27B-Heretic/mmproj-Q8_0.gguf
       -c 131072 -ngl 99
+      -ctk q4_0 -ctv q4_0
     cmdStop: ${docker-stop}
     ttl: 300
 
@@ -408,7 +417,8 @@ models:
       ${docker-prismml}
       -m /models/Ternary-Bonsai-2-9B-gguf/Ternary-Bonsai-2-9B-PTQ1_0.gguf
       --mmproj /models/Ternary-Bonsai-2-9B-gguf/Ternary-Bonsai-2-9B-mmproj-Q8_0.gguf
-      -c 131072 -ngl 99
+      -c 196608 -ngl 99
+      -ctk bf16 -ctv bf16
     cmdStop: ${docker-stop}
     ttl: 300
 
@@ -428,7 +438,8 @@ models:
       -m /models/Ternary-Bonsai-2-9B-gguf/Ternary-Bonsai-2-9B-PTQ1_0.gguf
       --mmproj /models/Ternary-Bonsai-2-9B-gguf/Ternary-Bonsai-2-9B-mmproj-Q8_0.gguf
       --lora-scaled /models/Ternary-Bonsai-2-9B-Uncensored-LoRA/Ternary-Bonsai-2-9B-Uncensored-LoRA.gguf:1
-      -c 131072 -ngl 99
+      -c 196608 -ngl 99
+      -ctk bf16 -ctv bf16
     cmdStop: ${docker-stop}
     ttl: 300
 

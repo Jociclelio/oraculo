@@ -224,6 +224,13 @@ load/unload manual — apontar o request para outro `model` faz o swap
     q8_0 (8,5), o que compensa os 2× tokens do 128k. Sempre que apertar
     VRAM, a alavanca é subir `-ncmoe` (mais experts na RAM, ~0,5 GB/camada
     no Qwen3.6), não voltar o KV para q8_0.
+    **EXCEÇÃO fork PrismML (2026-10-20)**: no fork, o KV q5_1 NÃO tem
+    caminho rápido de flash attention (issue PrismML #191; nosso build
+    não define `-DGGML_CUDA_FA_ALL_QUANTS=ON`) — degrada com o contexto
+    (medido no 9B @4k: decode 12,6 vs 77,9 tok/s com f16; prefill 41 vs
+    1723). As entries bonsai SOBRESCREVEM: q4_0 nos 27B (rápido E menor
+    que o q5_1 — mantém o floor 128k), bf16 nos 9B (teto de performance;
+    @192k — o nativo 256k não cabe e 224k fica sem margem).
 
 ---
 
@@ -249,10 +256,10 @@ ctx 64k anterior (decode não muda com o ctx; prefill por token idêntico).
 | `Ornith1.5_9B` | stock | 131072 | Ornith-1.5-9B Q4_K_M + mmproj BF16 (ornith-ai); variante edge DENSA da família (arch qwen35), raciocínio agêntico `<think/tool_call>`; head MTP embutida (nextn=1) → draft-mtp self-draft n=2; **decode ~48-52 tok/s, prefill ~1430-1580 tok/s, aceitação ~0,53-0,69**; VRAM 9862 MiB (2026-10-16) |
 | `Qwen3.5_9B_HauhauCS` | stock | 131072 | Qwen3.5-9B-Uncensored-HauhauCS-Aggressive Q4_K_M + mmproj BF16; denso (arch qwen35, no lugar da Ornith1.5_9B_Uncensored removida 2026-10-19); **SEM MTP** (header sem nextn); **decode ~52 tok/s, prefill 21k ~1671 tok/s**; VRAM 9088 MiB; visão carregada (2026-10-19) |
 | `MiMo2.6_9B` | stock | 131072 | MiMo-V2.6-Distill-Qwen-9B (XiaomiMiMo, distill em base Qwen3.5; arch qwen35, denso) Q4_K_M bartowski + mmproj f16 (ggml-org oficial só Q8_0 9,5 GB — não cabe com floor 128k); reasoning separado; **SEM MTP** (header sem nextn); **decode ~47-51 tok/s, prefill ~1800 tok/s @2,6k**; VRAM 9510 MiB; visão validada; sampling temp 0.6 / top-p 0.95 / top-k 20 (generation_config oficial) (2026-10-20) |
-| `bonsai-27b` | PrismML | 131072 | PTQ1_0 + mmproj (visão validada); **decode 24,5 tok/s @ 64k; VRAM 10725 MiB** (PQ2_0 removida 2026-10-13). ATENÇÃO prefill: degrada com o contexto — ~26 tok/s @2k → ~9 tok/s @6k (medido 2026-10-19); contexto longo impraticável, usar < 4k tokens (limitação da engine PrismML, não do GGUF) |
-| `bonsai-27b-heretic` | PrismML | 131072 | finetune Uncensored "Heretic" (OS-Software) do Bonsai 2 acima; PTQ1_0 + mmproj Q8_0, mesma engine pinada e MESMAS limitações: **decode ~13 tok/s; prefill ~3,8 tok/s @2k** (ainda mais lento que o irmão — contexto longo impraticável); VRAM 10528 MiB; sem pdcache/sleep (patch só no master ggml-org) (2026-10-19) |
-| `bonsai-9b` | PrismML | 131072 | Bonsai 2 9B (variante edge, denso); PTQ1_0 + mmproj Q8_0, mesma engine PrismML pinada; **decode ~56 tok/s curto mas degrada com o contexto (~20 @2,6k, ~8 @4k); prefill 73 tok/s @2,6k → 23 @4k** — contexto longo impraticável como o irmão 27B, usar < 4k tokens; VRAM 5354 MiB; visão validada; SEM MTP/DFlash (drafts no repo HF não baixados) (2026-10-20) |
-| `bonsai-9b-uncensored` | PrismML | 131072 | Bonsai 2 9B + LoRA uncensored AtomicChat (rank-1, 3,2 MB, `--lora-scaled :1` — remove direção de recusa no grafo; base byte-idêntico; custo ~4,3 MMLU); MESMOS GGUFs/engine/limitações do `bonsai-9b` (< 4k tokens); aplicação validada por logprobs distintos vs base; modelo thinking consome muitos tokens de raciocínio (~900 p/ pergunta simples) (2026-10-20) |
+| `bonsai-27b` | PrismML | 131072 | PTQ1_0 + mmproj (visão validada); **KV q4_0 (2026-10-20)** — o q5_1 dos macros NÃO tem caminho rápido de FA no fork PrismML (issue PrismML #191; build sem `-DGGML_CUDA_FA_ALL_QUANTS=ON`): degrada 30-40× (decode 12,6→78 tok/s @4k no 9B com f16). Com q4_0: **decode ~23 tok/s, prefill ~480 tok/s estável @21k+**; VRAM 10700 MiB |
+| `bonsai-27b-heretic` | PrismML | 131072 | finetune Uncensored "Heretic" (OS-Software) do Bonsai 2 acima; PTQ1_0 + mmproj Q8_0, mesma engine pinada e MESMO fix de KV q4_0: **decode ~23 tok/s, prefill ~464 tok/s @4k**; VRAM 10590 MiB; sem pdcache/sleep (patch só no master ggml-org) (2026-10-20) |
+| `bonsai-9b` | PrismML | 196608 | Bonsai 2 9B (variante edge, denso); PTQ1_0 + mmproj Q8_0, mesma engine PrismML pinada; **KV bf16 @192k (2026-10-20 — q5_1 lento no fork, issue PrismML #191; f256k nativo não cabe, 224k só com ~480 MiB de folga)**: decode ~71 tok/s @4k (~48 @21k), prefill ~1600 tok/s; VRAM 10532 MiB; visão validada; SEM MTP/DFlash (drafts no repo HF não baixados) |
+| `bonsai-9b-uncensored` | PrismML | 196608 | Bonsai 2 9B + LoRA uncensored AtomicChat (rank-1, 3,2 MB, `--lora-scaled :1` — remove direção de recusa no grafo; base byte-idêntico; custo ~4,3 MMLU); MESMOS GGUFs/engine/KV bf16 @192k do `bonsai-9b`; VRAM 10672 MiB; aplicação validada por logprobs distintos vs base; modelo thinking consome muitos tokens de raciocínio (~900 p/ pergunta simples) (2026-10-20) |
 | `Xing4.0_29B_A4B` | Xing | 131072 | MoE 29B/4B + MLA + mHC; `--load-mode none` + ncmoe 27; ub1024; **KV q5_1/q5_1 (regra 10)**; ~12,5 tok/s @ 64k; VRAM 10850 MiB |
 
 > **Removidos em 2026-10-13** (liberação de disco, GGUFs apagados + entries
