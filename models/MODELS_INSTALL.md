@@ -15,8 +15,19 @@ referência do serviço `llama-cpp` removido).
 models/
 ├── models.ini                # HISTÓRICO (desativado) — parâmetros migraram p/ llama-swap/config.yaml
 ├── MODELS_INSTALL.md         # Este arquivo
+├── MiniCPM-V-4.7-1B-Q4_K_M/
+│   ├── MiniCPM-V-4_7-1B-Q4_K_M.gguf
+│   └── mmproj-model-f16.gguf
 ├── Ornith-1.5-9B-Q4_K_M/
-│   └── Ornith-1.5-9B-Q4_K_M.gguf
+│   ├── Ornith-1.5-9B-Q4_K_M.gguf
+│   └── mmproj-Ornith-1.5-9B-BF16.gguf
+├── Qwen3.5-9B-Uncensored-HauhauCS/
+│   ├── Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
+│   └── mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf
+├── LFM2.5-24B-A2B-GGUF/
+│   └── LFM2.5-24B-A2B-Q4_K_M.gguf
+├── LFM2.5-24B-A2B-IQ2_M/                # unsloth UD (variante 100% GPU)
+│   └── LFM2.5-24B-A2B-UD-IQ2_M.gguf
 ├── Ornith-1.5-35B-A3B-Q4_K_M/
 │   └── Ornith-1.5-35B-A3B-Q4_K_M.gguf
 ├── Gemma4-12B-QAT-Uncensored-HauhauCS-Balanced/
@@ -24,6 +35,9 @@ models/
 ├── Ternary-Bonsai-2-27B-gguf/          # Bonsai 2 (ver seção própria abaixo)
 │   ├── Ternary-Bonsai-2-27B-PTQ1_0.gguf
 │   └── Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf
+├── Ternary-Bonsai-2-27B-Heretic/       # finetune uncensored (engine PrismML)
+│   ├── Ternary-Bonsai-2-27B-Uncensored-Heretic-PTQ1_0.gguf
+│   └── mmproj-Q8_0.gguf
 ├── Xing4.0-29B-A4B-Q4_K_M/             # Xing4.0 (ver seção própria abaixo)
 │   └── Xing4.0-29B-A4B-Q4_K_M.gguf
 ├── comfyui/                            # Difusão (ver seção "Modelos de Difusão")
@@ -83,8 +97,9 @@ usando uma das macros — `docker-stock` (llama.cpp oficial),
 (fork shuxiaoqiong, obrigatório para Xing4.0).
 
 **Convenção de contexto no nome da entry** (validar VRAM por carga real):
-entry sem sufixo = 64k (floor, `-c 65536`); contexto maior = sufixo `_XXk`
-(ex.: `Gemma4_12B_128k` = `-c 131072`); abaixo do floor = sufixo `_32k`
+entry sem sufixo = 128k (floor, `-c 131072`; o KV quantizado
+`-ctk q5_1 -ctv iq4_nl` dos macros é o que viabiliza isso). Modelo que não
+alcança 128k = sufixo `_XXk` com o maior contexto validado
 (ex.: `Saluki27B_Qwen3.8_32k`).
 
 ```yaml
@@ -129,6 +144,8 @@ hf download prism-ml/Ternary-Bonsai-2-27B-gguf \
 
 > A variante `PQ2_0` (~6,8 GB, entry `bonsai-27b-pq2_0`) foi removida em
 > 2026-10-13 — manteve-se só o PTQ1_0, a quantização menor.
+
+
 
 > ⚠️ **Regra dura — nunca engine stock**: GGUFs ternários PTQ1_0/PQ2_0 só
 > funcionam no fork **PrismML-Eng/llama.cpp** (kernels ternários + Hadamard).
@@ -310,6 +327,63 @@ futuro. A entry serve **sem** speculative decoding.
 
 ---
 
+## MiniCPM-V 4.7 1B (OpenBMB — multimodal denso)
+
+Variante edge da série MiniCPM-V 4.7: **denso** (arch `qwen35`, sem experts
+— sem `-ncmoe`/`--load-mode none`), mesmo visor LLaVA-UHD v4 da 35B, ctx
+nativo 262144. Origem: `openbmb/MiniCPM-V-4.7-1B-gguf`:
+
+```bash
+hf download openbmb/MiniCPM-V-4.7-1B-gguf \
+  MiniCPM-V-4_7-1B-Q4_K_M.gguf \
+  mmproj-model-f16.gguf \
+  --local-dir models/MiniCPM-V-4.7-1B-Q4_K_M
+```
+
+| Arquivo | Tamanho | Uso |
+|---------|---------|-----|
+| `MiniCPM-V-4_7-1B-Q4_K_M.gguf` | ~0,9 GB | entry `MiniCPM-V_4.7_1B` |
+| `mmproj-model-f16.gguf` | ~0,8 GB | visão (mmproj; existe variante `-4x` com compressão mista 4x/16x de tokens visuais, não instalada) |
+
+> **SEM MTP na entry**: o repo publica o draft DSpark
+> (`dspark-MiniCPM-V-4_7-1B-F16.gguf`) mas não o instalamos — precedente da
+> 35B: aceitação ~10% (mais lento que sem draft).
+
+> Medido (2026-10-16, RTX 3060 12 GB, display idle; bench prefill/decode):
+> **decode ~200 tok/s, prefill ~8000-8500 tok/s** (4k-16k); visão validada;
+> modelo reasoning (`reasoning_content` separado). VRAM total com o Ornith
+> 9B na sequência de testes: ambos < 10 GB.
+
+---
+
+## Ornith-1.5-9B (ornith-ai — denso, raciocínio agêntico)
+
+Variante edge da família Ornith-1.5 (a 35B-A3B é MoE; a 9B é **densa**,
+arch `qwen35`, sem `-ncmoe`/`--load-mode none`). Raciocínio com
+`<think/tool_call>` (template Qwen3), ctx nativo 262144, head MTP embutida
+(`nextn=1`, validado no header) → `--spec-type draft-mtp` self-draft (regra
+5, sem `--model-draft`). Origem: `ornith-ai/Ornith-1.5-9B-GGUF`:
+
+```bash
+hf download ornith-ai/Ornith-1.5-9B-GGUF \
+  Ornith-1.5-9B-Q4_K_M.gguf \
+  mmproj-Ornith-1.5-9B-BF16.gguf \
+  --local-dir models/Ornith-1.5-9B-Q4_K_M
+```
+
+| Arquivo | Tamanho | Uso |
+|---------|---------|-----|
+| `Ornith-1.5-9B-Q4_K_M.gguf` | ~5,5 GB | entry `Ornith1.5_9B` |
+| `mmproj-Ornith-1.5-9B-BF16.gguf` | ~0,8 GB | visão (mmproj) |
+
+> Sampling do model card — **general**: temp 1.0 / top-p 0.95 / top-k 20 /
+> min-p 0.0 / presence-penalty 1.5 / rep 1.0; **coding**: temp 0.6 /
+> presence 0.0. Medido (2026-10-16, bench prefill/decode): **decode
+> ~48-52 tok/s, prefill ~1430-1580 tok/s** (4k-16k), aceitação draft
+> ~0,53-0,69, VRAM 9862 MiB @ 128k.
+
+---
+
 ## Modelos com MTP (Multi-Token Prediction)
 
 Para acelerar a geração, use um drafter na entry (ex.: `Gemma4_12B_MTP`):
@@ -321,6 +395,9 @@ Para acelerar a geração, use um drafter na entry (ex.: `Gemma4_12B_MTP`):
 ```
 
 (No Bonsai 2 o drafter MTP **não foi baixado** — ver seção Bonsai.)
+
+---
+
 
 ---
 

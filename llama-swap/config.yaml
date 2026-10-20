@@ -18,11 +18,11 @@
 #   sleep-idle-seconds = 300 -> ttl: 300 (campo YAML do llama-swap)
 #   alias = <nome> -> campo `aliases` da entry do llama-swap
 #
-# Convenção de NOME/CONTEXTO (tuning 2026-10-10):
-#   - Toda entry SEM sufixo de contexto roda em 64k (-c 65536) — floor.
-#   - Variante com ctx maior: sufixo _XXk (ex.: Gemma4_12B_128k = 131072).
-#   - Modelo que não alcança 64k: sufixo _32k (nenhum entry _32k ativo
-#     após remoção de Saluki/GSQ em 2026-10-13).
+# Convenção de NOME/CONTEXTO (tuning 2026-10-15):
+#   - Toda entry SEM sufixo de contexto roda em 128k (-c 131072) — floor,
+#     viabilizado pelo KV quantizado (-ctk q5_1 -ctv q5_1, requer -fa on;
+#     tipos K/V DIFERENTES são proibidos — ver regra 10).
+#   - Modelo que não alcança 128k: sufixo _XXk com o maior contexto validado.
 #   - VRAM validada por carga real (RTX 3060 12 GB, display idle ~900 MiB);
 #     com jogos/desktop pesado (1,8+ GB) entries de MoE híbrido podem OOM.
 
@@ -42,7 +42,7 @@ macros:
   # - Porta interna fixa 8080; ${PORT} (macro do llama-swap) publica só no
   #   loopback do host — o proxy padrão http://localhost:${PORT} roteia para cá.
   # - Flags globais herdadas da seção [*] do models.ini:
-  #   cache-type-k/v = q8_0 -> -ctk/-ctv; cache-reuse = 256 -> --cache-reuse;
+  #   cache-type-k/v = q5_1/q5_1 (tipo ÚNICO — ver regra 10) -> -ctk/-ctv; cache-reuse = 256 -> --cache-reuse;
   #   parallel = 1 -> -np 1; flash-attn = on -> -fa on; jinja = 1 -> --jinja;
   #   threads = 5 -> -t 5; cache-ram = 2048 -> --cache-ram.
   "docker-stock": >
@@ -53,7 +53,7 @@ macros:
     ghcr.io/ggml-org/llama.cpp:full-cuda
     --host 0.0.0.0 --port 8080
     -fa on --jinja -np 1 -t 5
-    -ctk q8_0 -ctv q8_0
+    -ctk q5_1 -ctv q5_1
     --cache-reuse 256 --cache-ram 2048
 
   # Macro Bonsai/PrismML — mesma receita do docker-stock, mas com a imagem
@@ -72,7 +72,7 @@ macros:
     llama.cpp-prismml:latest
     --host 0.0.0.0 --port 8080
     -fa on --jinja -np 1 -t 5
-    -ctk q8_0 -ctv q8_0
+    -ctk q5_1 -ctv q5_1
     --cache-reuse 256 --cache-ram 2048
 
   # Macro Xing4.0 — mesma receita do docker-prismml, mas com a imagem local
@@ -89,8 +89,49 @@ macros:
     llama.cpp-xing:latest
     --host 0.0.0.0 --port 8080
     -fa on --jinja -np 1 -t 5
-    -ctk q8_0 -ctv q8_0
+    -ctk q5_1 -ctv q5_1
     --cache-reuse 256 --cache-ram 2048
+
+  # Macro pdcache — mesma receita do docker-stock, mas com a imagem local
+  # llama.cpp-pdcache (engines/llama.cpp-pdcache/: master ggml-org pinado no
+  # MESMO commit da imagem stock + patch de prompt disk cache portado do fork
+  # qqkzlm/llama-cpp-prompt-disk-cache). Resolve a regra 9: snapshots
+  # COMPLETOS `.centry` (tokens + estado de sequência, com guard de
+  # fingerprint do modelo + ctx + FA + tipos KV + build) escritos
+  # atomicamente em disco quando o slot termina e restaurados automaticamente
+  # no próximo request após o (re)start — sobrevive ao `docker rm -f` do
+  # llama-swap (unload do gpu-shim, swap, ttl) sem nenhuma orquestração. O
+  # bug ggml-org/llama.cpp#28194 (/slots sem checkpoints em híbridos/SWA) fica
+  # contornado: este caminho não usa /slots.
+  # - Cache em bind mount ./data/llama-pdcache (persistente, gitignored).
+  #   O guard torna o diretório compartilhável entre entries/modelos —
+  #   entradas incompatíveis são ignoradas com segurança.
+  # - Budget 40 GiB (NVMe tinha 391 GiB livres em 2026-10-17).
+  # - --checkpoint-min-step 2048: checkpoints em RAM a cada ~2k tokens de
+  #   prompt (turno agêntico típico) — o default 8192 é grosso demais; são
+  #   eles que vão para o snapshot em disco.
+  # - --ctx-checkpoints 16: limita a RAM dos checkpoints em memória
+  #   (os GGUFs MoE com --load-mode none já fixam ~22 GB de pesos na RAM;
+  #   default 32 pode pressionar swap em prompts longos).
+  # - Mesma base do stock: todos os modelos servidos com docker-stock são
+  #   elegíveis a este macro (a base `prism` do fork original NÃO serve —
+  #   prefill de MoE na CPU 20x mais lento, ver regra 9).
+  "docker-pdcache": >
+    docker run --rm --name ls-${MODEL_ID} --gpus all
+    --entrypoint /usr/local/bin/llama-server
+    -p 127.0.0.1:${PORT}:8080
+    -v ./models:/models
+    -v ./data/llama-pdcache:/kvcache
+    llama.cpp-pdcache:latest
+    --host 0.0.0.0 --port 8080
+    -fa on --jinja -np 1 -t 5
+    -ctk q5_1 -ctv q5_1
+    --cache-reuse 256 --cache-ram 1024
+    --sleep-idle-seconds 180
+    --slot-save-path /kvcache
+    --prompt-cache-disk-budget 40
+    --checkpoint-min-step 2048
+    --ctx-checkpoints 16
 
   # Stop do container: rm -f é determinístico e imediato (SIGKILL ao
   # processo do container -> VRAM liberada na hora; --rm remove o container).
@@ -105,12 +146,12 @@ models:
   # ---------------------------------------------------------------------
   Gemma4_12B:
     cmd: |
-      ${docker-stock}
+      ${docker-pdcache}
       -m /models/gemma-4-12B-it-qat-UD-Q4_K_XL/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf
       --mmproj /models/gemma-4-12B-it-qat-UD-Q4_K_XL/mmproj-F32.gguf
-      -c 65536 -ngl 99
+      -c 131072 -ngl 99
     cmdStop: ${docker-stop}
-    ttl: 300
+    ttl: 1800
 
   # ---------------------------------------------------------------------
   # Qwen 3.6 35B-A3B Thinking General (Q4_K_M + head MTP embutido) — MoE
@@ -119,64 +160,73 @@ models:
   # ---------------------------------------------------------------------
   Qwen3.6_35B_General:
     cmd: |
-      ${docker-stock}
+      ${docker-pdcache}
       -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
+      --mmproj /models/unsloth_Qwen3.6_35B_A3B_MTP/mmproj-F16.gguf
       --load-mode none
       --spec-type draft-mtp --spec-draft-n-max 2
-      -c 65536 -ngl 99 -ncmoe 32
+      -c 131072 -ngl 99 -ncmoe 33
       -b 4096 -ub 2048
       --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
       --presence-penalty 1.5 --repeat-penalty 1.0
     cmdStop: ${docker-stop}
-    ttl: 300
+    ttl: 1800
 
   # ---------------------------------------------------------------------
   # Qwen 3.6 35B-A3B Thinking Code (Q4_K_M + head MTP) — temp 0.6, sem penalty
   # ---------------------------------------------------------------------
   Qwen3.6_35B_Code:
     cmd: |
-      ${docker-stock}
+      ${docker-pdcache}
       -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
+      --mmproj /models/unsloth_Qwen3.6_35B_A3B_MTP/mmproj-F16.gguf
       --load-mode none
       --spec-type draft-mtp --spec-draft-n-max 2
-      -c 65536 -ngl 99 -ncmoe 28
-      -b 4096 -ub 2048
+      -c 131072 -ngl 99 -ncmoe 31
+      -b 4096 -ub 1024
       --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
       --presence-penalty 0.0 --repeat-penalty 1.0
     cmdStop: ${docker-stop}
-    ttl: 300
+    ttl: 1800
+    # VALIDADA em 2026-10-18 (prompt 21k, qwen35moe/GDN): unload (docker rm -f)
+    # + re-request → cache_n 21213/21217 (99,98%), prompt_n 4, prefill ~0,5 s
+    # (era 33 s); snapshot .centry 638 MiB (escrita 730 ms, leitura 765 ms,
+    # restore p/ GPU 48 ms). Rollout do macro para todas as entries stock no
+    # mesmo dia — ver regra 9.
 
   # ---------------------------------------------------------------------
   # Qwen 3.6 35B-A3B Instruct General (Q4_K_M + head MTP)
   # ---------------------------------------------------------------------
   Qwen3.6_35B_It_General:
     cmd: |
-      ${docker-stock}
+      ${docker-pdcache}
       -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
+      --mmproj /models/unsloth_Qwen3.6_35B_A3B_MTP/mmproj-F16.gguf
       --load-mode none
       --spec-type draft-mtp --spec-draft-n-max 2
-      -c 65536 -ngl 99 -ncmoe 32
+      -c 131072 -ngl 99 -ncmoe 33
       -b 4096 -ub 2048
       --temp 0.7 --top-p 0.8 --top-k 20 --min-p 0.0
       --presence-penalty 1.5 --repeat-penalty 1.0
     cmdStop: ${docker-stop}
-    ttl: 300
+    ttl: 1800
 
   # ---------------------------------------------------------------------
   # Qwen 3.6 35B-A3B Instruct Reasoning (Q4_K_M + head MTP)
   # ---------------------------------------------------------------------
   Qwen3.6_35B_It_Reasoning:
     cmd: |
-      ${docker-stock}
+      ${docker-pdcache}
       -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
+      --mmproj /models/unsloth_Qwen3.6_35B_A3B_MTP/mmproj-F16.gguf
       --load-mode none
       --spec-type draft-mtp --spec-draft-n-max 2
-      -c 65536 -ngl 99 -ncmoe 32
+      -c 131072 -ngl 99 -ncmoe 33
       -b 4096 -ub 2048
       --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
       --presence-penalty 1.5 --repeat-penalty 1.0
     cmdStop: ${docker-stop}
-    ttl: 300
+    ttl: 1800
 
   # ---------------------------------------------------------------------
   # Ornith 1.5 35B-A3B MTP (APEX Compact, mudler) — acceptance ~0.80,
@@ -184,15 +234,83 @@ models:
   # ---------------------------------------------------------------------
   Ornith1.5_35B_MTP:
     cmd: |
-      ${docker-stock}
+      ${docker-pdcache}
       -m /models/Ornith-1.5-35B-MTP-APEX-Compact/Ornith-1.5-35B-A3B-APEX-MTP-Compact.gguf
+      --mmproj /models/Ornith-1.5-35B-MTP-APEX-Compact/mmproj.gguf
       --load-mode none
       --spec-type draft-mtp --spec-draft-n-max 1
-      -c 65536 -ngl 99 -ncmoe 28
+      -c 131072 -ngl 99 -ncmoe 29
       -b 4096 -ub 2048
       --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
     cmdStop: ${docker-stop}
-    ttl: 300
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
+  # Ornith 1.5 9B (ornith-ai) — variante edge DENSA da família (arch
+  # qwen35, sem experts), raciocínio agêntico com <think/tool_call>.
+  # Ctx nativo 262144. Head MTP embutida (nextn=1, validado no header) →
+  # draft-mtp self-draft (regra 5), sem --model-draft.
+  # Sampling do model card (general): temp 1.0 / top-p 0.95 / top-k 20 /
+  # presence 1.5 (coding: temp 0.6 / presence 0.0).
+  # ---------------------------------------------------------------------
+  Ornith1.5_9B:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/Ornith-1.5-9B-Q4_K_M/Ornith-1.5-9B-Q4_K_M.gguf
+      --mmproj /models/Ornith-1.5-9B-Q4_K_M/mmproj-Ornith-1.5-9B-BF16.gguf
+      --spec-type draft-mtp --spec-draft-n-max 2
+      -c 131072 -ngl 99
+      -b 4096
+      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
+      --presence-penalty 1.5 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
+  # Qwen 3.5 9B Uncensored HauhauCS-Aggressive — variante uncensored da
+  # família Qwen3.5 9B (arch qwen35, DENSA, sem -ncmoe; no lugar da
+  # Ornith1.5_9B_Uncensored, removida 2026-10-19). mmproj BF16 incluso
+  # (visor da família). SEM MTP: header sem tensors/keys nextn (verificado
+  # no GGUF — diferente do Ornith 9B da ornith-ai, que tinha head embutida).
+  # ---------------------------------------------------------------------
+  Qwen3.5_9B_HauhauCS:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/Qwen3.5-9B-Uncensored-HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
+      --mmproj /models/Qwen3.5-9B-Uncensored-HauhauCS/mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf
+      -c 131072 -ngl 99
+      -b 4096
+      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
+      --presence-penalty 0.0 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
+  # NVIDIA Nemotron 3.5 Bolt 74B-A9B (24GB, IQ2-XXS QAD) — MoE híbrido
+  # Mamba-2 + LatentMoE (arch nemotron_h_moe: 88 blocos = 8 attention
+  # [KV heads 2] + 40 SSM + 40 MoE [496 experts totais, 9 ativos]).
+  # VLM: mmproj C-RADIO v4-H (1,7 GB). Ctx nativo 262144.
+  # Requer llama.cpp >= PR ggml-org#30520 (merge 2026-10-15) — imagem
+  # stock atualizada p/ build 11681 (0.7.0-dev 5e03a1ff).
+  # Experts IQ2: 431 MiB/camada; -ncmoe 32 deixa ~7 GiB de pesos na GPU.
+  # MoE híbrido: --load-mode none (regra 2). DFlash drafter LiLiCorr
+  # (1 GB, draft separado → -ctkd/-ctvd f16, regra 5).
+  # Sampling do model card: temp 1.0 / top-p 0.95.
+  # ---------------------------------------------------------------------
+  Nemotron3.5_Bolt_74B:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/Nemotron3.5-Bolt-74B-A9B-24GB/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB.gguf
+      --mmproj /models/Nemotron3.5-Bolt-74B-A9B-24GB/mmproj-NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB.gguf
+      --model-draft /models/Nemotron3.5-Bolt-74B-A9B-24GB/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB-LiLiCorr.gguf
+      --spec-type draft-dflash --spec-draft-n-max 6
+      --load-mode none
+      -c 131072 -ngl 99 -ncmoe 32
+      -ngld 99 -ctkd f16 -ctvd f16
+      -b 4096 -ub 2048
+      --temp 1.0 --top-p 0.95
+    cmdStop: ${docker-stop}
+    ttl: 1800
 
   # ---------------------------------------------------------------------
   # Qwen 3.6 35B Uncensored Aggressive (HauhauCS) — multimodal,
@@ -208,14 +326,14 @@ models:
   # ---------------------------------------------------------------------
   Qwen3.6_35B_A3B_Hauhau_Aggressive:
     cmd: |
-      ${docker-stock}
+      ${docker-pdcache}
       -m /models/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
       --mmproj /models/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf
       --load-mode none
-      -c 65536 -ngl 99 -ncmoe 28
+      -c 131072 -ngl 99 -ncmoe 29
       -b 4096 -ub 2048
     cmdStop: ${docker-stop}
-    ttl: 300
+    ttl: 1800
 
   # ---------------------------------------------------------------------
   # Bonsai 2 27B (PrismML fork) — GGUF ternário PTQ1_0 (PQ2_0 removida em
@@ -228,16 +346,33 @@ models:
   # ---------------------------------------------------------------------
 
   # Entry primária — PTQ1_0 (~5,6 GB) + mmproj (visão).
-  # ctx 65536 validado na RTX 3060 12GB: carga OK, VRAM total observada
-  # 9967 MiB / 12288 (inclui ~805 MiB do display Hyprland/Wayland; mmproj
-  # carregado). Sem OOM — fallback de ctx (reduzir para 49152) não necessário;
-  # nota mantida para referência se a VRAM do display crescer.
+  # ctx 131072 validado na RTX 3060 12GB (2026-10-15, KV q5_1/iq4_nl):
+  # carga OK, VRAM total observada 10162 MiB / 12288 (inclui ~890 MiB do
+  # display Hyprland/Wayland; mmproj carregado). Sem OOM; denso, sem
+  # alavanca de -ncmoe — se a VRAM do display crescer, fallback de ctx.
   bonsai-27b:
     cmd: |
       ${docker-prismml}
       -m /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-PTQ1_0.gguf
       --mmproj /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf
-      -c 65536 -ngl 99
+      -c 131072 -ngl 99
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
+  # Bonsai 2 27B Uncensored "Heretic" (OS-Software) — finetune uncensored
+  # do Bonsai 2 acima, MESMA engine PrismML pinada (regra dura: PTQ1_0 só
+  # roda no fork — a stock/pdcache recusa o formato ternário). Sampling
+  # vive nos metadados do GGUF (como o irmão). SEM pdcache/sleep: o patch
+  # de KV em disco foi portado para o master ggml-org apenas (a base
+  # prism não o tem) — unload/re-ttl = re-prefill nesta entry.
+  # ---------------------------------------------------------------------
+  bonsai-27b-heretic:
+    cmd: |
+      ${docker-prismml}
+      -m /models/Ternary-Bonsai-2-27B-Heretic/Ternary-Bonsai-2-27B-Uncensored-Heretic-PTQ1_0.gguf
+      --mmproj /models/Ternary-Bonsai-2-27B-Heretic/mmproj-Q8_0.gguf
+      -c 131072 -ngl 99
     cmdStop: ${docker-stop}
     ttl: 300
 
@@ -261,14 +396,31 @@ models:
   # ---------------------------------------------------------------------
   LFM2.5_24B_A2B:
     cmd: |
-      ${docker-stock}
+      ${docker-pdcache}
       -m /models/LFM2.5-24B-A2B-GGUF/LFM2.5-24B-A2B-Q4_K_M.gguf
       --load-mode none
-      -c 65536 -ngl 99 -ncmoe 20
+      -c 131072 -ngl 99 -ncmoe 20
       -b 4096 -ub 2048
       --temp 0.1 --top-k 50 --repeat-penalty 1.05
     cmdStop: ${docker-stop}
-    ttl: 300
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
+  # LFM 2.5 24B-A2B IQ2_M (unsloth UD) — a MESMA entry acima em 100% GPU:
+  # IQ2_M (7,5 GB) cabe inteiro na VRAM, sem --load-mode none e sem
+  # -ncmoe (regra 2 não se aplica — não há experts na CPU). Sem MTP
+  # (DSpark não publicado). Sampling do README oficial: temp 0.1 / top-k
+  # 50 / repeat-penalty 1.05.
+  # ---------------------------------------------------------------------
+  LFM2.5_24B_A2B_IQ2_M:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/LFM2.5-24B-A2B-IQ2_M/LFM2.5-24B-A2B-UD-IQ2_M.gguf
+      -c 131072 -ngl 99
+      -b 4096 -ub 2048
+      --temp 0.1 --top-k 50 --repeat-penalty 1.05
+    cmdStop: ${docker-stop}
+    ttl: 1800
 
   # ---------------------------------------------------------------------
   # Xing4.0 29B-A4B (Venastine-Research, Q4_K_M) — engine dedicada
@@ -279,44 +431,24 @@ models:
   # - --load-mode none é OBRIGATÓRIO: com mmap + overrides de tensor p/ CPU
   #   (-ncmoe), o loader avisa e o desempenho desaba (1,2 tok/s medido);
   #   sem mmap: 12,7 tok/s (validado 2026-10-10).
-  # - MoE: -ncmoe 24/64 experts na CPU — VRAM 10570/12288 MiB com ctx 49152
-  #   (nº 28 testado: 11,1 tok/s; 24 dá +15% com folga de ~1,7 GB).
+  # - MoE: -ncmoe 27/64 experts na CPU (128k + KV q5_1 validado 2026-10-15).
   # - Sampling do README oficial: temp 1.0 / top_p 0.95 / repeat-penalty 1.05.
   # - MTP draft: arquivo Q4_K_M-MTP não existe no repo (só IQ3) — sem spec
   #   decoding; tensors nextn do GGUF são ignorados pelo loader.
   # - Modelo thinking: resposta vem em reasoning_content + content.
   # ---------------------------------------------------------------------
+  # - KV: o fork Xing NÃO aceita K/V com tipos diferentes (MLA: "model does
+  #   not support different K and V cache types") — mesmo corte do stock
+  #   (ver regra 10: tipo único q5_1/q5_1 nos macros serve aqui também).
+  #   Validado 128k: ncmoe 27 → 10689 MiB total; ncmoe 25 → 11501 (apertado).
   Xing4.0_29B_A4B:
     cmd: |
       ${docker-xing}
       -m /models/Xing4.0-29B-A4B-Q4_K_M/Xing4.0-29B-A4B-Q4_K_M.gguf
       --load-mode none
-      -c 65536 -ngl 99 -ncmoe 24
+      -c 131072 -ngl 99 -ncmoe 27
       -b 4096 -ub 1024
       --temp 1.0 --top-p 0.95 --repeat-penalty 1.05
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  # ---------------------------------------------------------------------
-  # Qwen3.8-35B-A3B Distill (empero-ai) — destilado dos frontier Qwen3.8 na
-  # arquitetura Qwen3.6-35B-A3B (qwen35moe: 41 camadas, 256 experts, 8 ativos,
-  # Gated DeltaNet + full attention a cada 4; ctx nativo 262144). GGUF oficial
-  # em empero-ai/Qwen3.8-35B-A3B-Distill-GGUF (o repo sem sufixo -GGUF só tem
-  # safetensors). Q4_K_M 21,7 GB com head MTP embutido (nextn_predict_layers=1
-  # — validado no header) → draft-mtp self-draft, mesma receita do Qwen3.6.
-  # MoE híbrido: --load-mode none + -ncmoe (regra 2) + -ub 2048 (regra 7).
-  # Sampling do model card: temp 0.6 / top-p 0.95 / top-k 20 (reasoning).
-  # ---------------------------------------------------------------------
-  Qwen3.8_35B_Distill:
-    cmd: |
-      ${docker-stock}
-      -m /models/Qwen3.8-35B-A3B-Distill-Q4_K_M/Qwen3.8-35B-A3B-Q4_K_M.gguf
-      --load-mode none
-      --spec-type draft-mtp --spec-draft-n-max 2
-      -c 65536 -ngl 99 -ncmoe 28
-      -b 4096 -ub 2048
-      --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
-      --presence-penalty 0.0 --repeat-penalty 1.0
     cmdStop: ${docker-stop}
     ttl: 300
 
@@ -343,103 +475,41 @@ models:
   # ---------------------------------------------------------------------
   MiniCPM-V_4.7_35B:
     cmd: |
-      ${docker-stock}
+      ${docker-pdcache}
       -m /models/MiniCPM-V-4.7-35B-A3B-Q4_K_M/MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf
       --mmproj /models/MiniCPM-V-4.7-35B-A3B-Q4_K_M/mmproj-model-f16.gguf
       --load-mode none
-      -c 65536 -ngl 99 -ncmoe 32
+      -c 131072 -ngl 99 -ncmoe 32
       -b 4096 -ub 2048
       --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
       --presence-penalty 0.0 --repeat-penalty 1.0
     cmdStop: ${docker-stop}
-    ttl: 300
+    ttl: 1800
 
-  # =====================================================================
-  # VARIANTES DE CONTEXTO LONGO (_XXk) — ver convenção no topo do arquivo.
-  # ctx validado por carga real; variante _96k/_128k só existe onde couber
-  # (VRAM medida com display idle; margem apertada em MoE híbrido).
-  # =====================================================================
-
-  Gemma4_12B_128k:
+  # ---------------------------------------------------------------------
+  # MiniCPM-V 4.7 1B (OpenBMB) — variante edge da série, DENSA (arch
+  # qwen35, sem experts → sem -ncmoe/--load-mode none), ctx nativo 262144.
+  # Mesmo visor LLaVA-UHD v4 da 35B (mesma imagem stock build 11561).
+  # DSpark draft disponível no repo (dspark-MiniCPM-V-4_7-1B-F16.gguf) mas
+  # NÃO instalado — precedente da 35B: aceitação ~10%.
+  # ---------------------------------------------------------------------
+  MiniCPM-V_4.7_1B:
     cmd: |
-      ${docker-stock}
-      -m /models/gemma-4-12B-it-qat-UD-Q4_K_XL/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf
-      --mmproj /models/gemma-4-12B-it-qat-UD-Q4_K_XL/mmproj-F32.gguf
+      ${docker-pdcache}
+      -m /models/MiniCPM-V-4.7-1B-Q4_K_M/MiniCPM-V-4_7-1B-Q4_K_M.gguf
+      --mmproj /models/MiniCPM-V-4.7-1B-Q4_K_M/mmproj-model-f16.gguf
       -c 131072 -ngl 99
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  Qwen3.6_35B_General_96k:
-    cmd: |
-      ${docker-stock}
-      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
-      --load-mode none
-      --spec-type draft-mtp --spec-draft-n-max 2
-      -c 98304 -ngl 99 -ncmoe 32
-      -b 4096 -ub 1024
+      -b 4096
       --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
-      --presence-penalty 1.5 --repeat-penalty 1.0
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  Qwen3.6_35B_Code_96k:
-    cmd: |
-      ${docker-stock}
-      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
-      --load-mode none
-      --spec-type draft-mtp --spec-draft-n-max 2
-      -c 98304 -ngl 99 -ncmoe 28
-      -b 4096 -ub 1024
-      --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
       --presence-penalty 0.0 --repeat-penalty 1.0
     cmdStop: ${docker-stop}
-    ttl: 300
+    ttl: 1800
 
-  Qwen3.6_35B_It_General_96k:
-    cmd: |
-      ${docker-stock}
-      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
-      --load-mode none
-      --spec-type draft-mtp --spec-draft-n-max 2
-      -c 98304 -ngl 99 -ncmoe 32
-      -b 4096 -ub 1024
-      --temp 0.7 --top-p 0.8 --top-k 20 --min-p 0.0
-      --presence-penalty 1.5 --repeat-penalty 1.0
-    cmdStop: ${docker-stop}
-    ttl: 300
 
-  Qwen3.6_35B_It_Reasoning_96k:
-    cmd: |
-      ${docker-stock}
-      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
-      --load-mode none
-      --spec-type draft-mtp --spec-draft-n-max 2
-      -c 98304 -ngl 99 -ncmoe 32
-      -b 4096 -ub 1024
-      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
-      --presence-penalty 1.5 --repeat-penalty 1.0
-    cmdStop: ${docker-stop}
-    ttl: 300
-
-  # Variante 96k do uncensored: -ncmoe 28 (ajuste 2026-10-14, mesmo teto de
-  # 10 GB da entry base) — prefill ~750 tok/s (+5-8% vs 709 no 32), decode na
-  # banda 33-40 tok/s dominada por contenção de CPU do desktop (Firefox +
-  # ComfyUI vs 5 threads; fisicamente sem regressão: são -4 camadas na CPU).
-  # VRAM processo ~10000-10044 MiB: margem de ~200 MB até 10 GiB — pode falhar
-  # a carga com pico de VRAM no desktop (mesma classe de fragilidade do
-  # Code_96k); nesse caso, voltar para -ncmoe 32 (~8,2 GB).
-  # -ub 1024 (ub2048 não cabe c/ 96k).
-  Qwen3.6_35B_A3B_Hauhau_Aggressive_96k:
-    cmd: |
-      ${docker-stock}
-      -m /models/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
-      --mmproj /models/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf
-      --load-mode none
-      -c 98304 -ngl 99 -ncmoe 28
-      -b 4096 -ub 1024
-    cmdStop: ${docker-stop}
-    ttl: 300
-
+  # Variantes de contexto longo (_96k/_128k) REMOVIDAS em 2026-10-15: o floor
+  # subiu para 128k em todas as entries base (KV quantizado q5_1/iq4_nl),
+  # tornando as variantes redundantes. Se algum modelo não couber em 128k,
+  # recriar a variante _XXk com o maior contexto validado (convenção no topo).
   # =====================================================================
   # Exemplo comentado — paralelismo np=2 (APENAS referência).
   # Posicionamento do plano é single-user; np>1 deve ser exceção pontual

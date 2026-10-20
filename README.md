@@ -41,9 +41,10 @@ Três engines por baixo:
 > `-np 1`; entradas paralelas (`np>1`) só como exceção pontual para modelos
 > pequenos (exemplo comentado no fim do `llama-swap/config.yaml`).
 
-> **Meta de performance**: prefill/decode razoável com **contexto ≥ 64k**
-> (128k quando a VRAM e o prefill permitirem). Medido no Bonsai PTQ1_0 @
-> ctx 65536 (mmproj carregado, RTX 3060 12 GB): prefill ≈ **540 tok/s**,
+> **Meta de performance**: prefill/decode razoável com **contexto ≥ 128k**
+> (padrão em todas as entries desde 2026-10-15, com KV quantizado
+> `-ctk q5_1 -ctv iq4_nl`). Medido no Bonsai PTQ1_0 @ ctx 65536
+> (mmproj carregado, RTX 3060 12 GB): prefill ≈ **540 tok/s**,
 > decode ≈ **24,5 tok/s**, VRAM **9146 MiB** no processo / **10657 MiB**
 > total na GPU — sem OOM.
 
@@ -100,9 +101,10 @@ exatamente os referenciados pelas entries do `config.yaml`):
 ```
 models/
 ├── LFM2.5-24B-A2B-GGUF/
-├── MiniCPM-V-4.7-35B-A3B-Q4_K_M/          (+ mmproj f16)
+├── MiniCPM-V-4.7-35B-A3B-Q4_K_M/
+├── MiniCPM-V-4.7-1B-Q4_K_M/                 (+ mmproj f16)
+├── Ornith-1.5-9B-Q4_K_M/                    (+ mmproj BF16)          (+ mmproj f16)
 ├── Ornith-1.5-35B-MTP-APEX-Compact/
-├── Qwen3.8-35B-A3B-Distill-Q4_K_M/
 ├── Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/  (+ mmproj f16)
 ├── Ternary-Bonsai-2-27B-gguf/             # Bonsai 2 (PTQ1_0/mmproj)
 ├── unsloth_Qwen3.6_35B_A3B_MTP/           # usado por 8 entries Qwen3.6
@@ -375,26 +377,29 @@ carregado (ttl de 5 min). Também funciona sem `watch`, para consulta única.
 ## Modelos Disponíveis
 
 Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
-(18 entries: 16 stock + bonsai-27b + Xing).
+(14 entries: 12 stock + bonsai-27b + Xing).
 
 | Modelo | Contexto | Notas |
 |--------|----------|-------|
-| Gemma4_12B | 65536 | Multimodal (texto) QAT; variante `_128k` validada (9487 MiB) |
-| LFM2.5_24B_A2B | 65536 | LiquidAI MoE 24B/2,45B raciocínio agêntico; **~45 tok/s, prefill ~1900 tok/s**; temp 0.1/top-k 50/rep 1.05 |
-| Qwen3.8_35B_Distill | 65536 | Destilado Qwen3.8 na arch qwen35moe; MTP embutido; **~35 tok/s, aceitação ~0,62** |
-| MiniCPM-V_4.7_35B | 65536 | **MiniCPM-V 4.7 35B-A3B** multimodal (OpenBMB; backbone Qwen3.6); sem MTP; **~32-35 tok/s, prefill ~1040 tok/s**; visão validada |
-| Qwen3.6_35B_General | 65536 | MoE (32 experts CPU) / head MTP (draft-mtp n=2) / aceitação ~82-93% |
-| Qwen3.6_35B_Code | 65536 | MoE (28 experts CPU) / head MTP / temp=0.6 / **~27 tok/s, prefill ~890 tok/s** |
-| Qwen3.6_35B_It_General / _It_Reasoning | 65536 | Instruct (sem/temp thinking); MoE 32 experts CPU |
-| Qwen3.6_35B_A3B_Hauhau_Aggressive | 65536 | Uncensored Aggressive, multimodal; ncmoe 28 (teto 10 GB); **prefill ~1150 tok/s, decode ~39 tok/s** |
-| Ornith1.5_35B_MTP | 65536 | Agêntico (APEX Compact); MoE 28 experts CPU; aceitação ~0,80 |
-| bonsai-27b | 65536 | **Bonsai 2 27B PTQ1_0** + mmproj Q8_0 (visão) — engine PrismML; **24,5 tok/s**, VRAM 10657/12288 |
-| Xing4.0_29B_A4B | 65536 | MoE 29B/4B + MLA + mHC — engine Xing (fork shuxiaoqiong); **~12,5 tok/s** |
-| Variantes `_96k`/`_128k` | 98304/131072 | Mesmos GGUFs com contexto longo (ub1024); VRAM apertada — ver [`AGENTS.md`](AGENTS.md) |
+| Gemma4_12B | 131072 | Multimodal (visão + áudio nativo) QAT |
+| LFM2.5_24B_A2B | 131072 | LiquidAI MoE 24B/2,45B raciocínio agêntico; ncmoe 20; **~45 tok/s, prefill ~1900 tok/s**; temp 0.1/top-k 50/rep 1.05 |
+| MiniCPM-V_4.7_35B | 131072 | **MiniCPM-V 4.7 35B-A3B** multimodal (OpenBMB; backbone Qwen3.6); sem MTP; ncmoe 32; **~32-35 tok/s, prefill ~1040 tok/s**; visão validada |
+| MiniCPM-V_4.7_1B | 131072 | **MiniCPM-V 4.7 1B** multimodal (OpenBMB); variante edge densa; **decode ~200 tok/s, prefill ~8,5k tok/s**; visão validada |
+| Ornith1.5_9B | 131072 | **Ornith-1.5-9B** (ornith-ai) denso, raciocínio agêntico; MTP self-draft n=2; **decode ~50 tok/s, prefill ~1,5k tok/s, aceitação ~0,53-0,69** |
+| Qwen3.6_35B_General | 131072 | MoE (32 experts CPU) / head MTP (draft-mtp n=2) / aceitação ~82-93% |
+| Qwen3.6_35B_Code | 131072 | MoE (29 experts CPU) / head MTP / temp=0.6 / **~27 tok/s, prefill ~890 tok/s** |
+| Qwen3.6_35B_It_General / _It_Reasoning | 131072 | Instruct (sem/temp thinking); MoE 32 experts CPU |
+| Qwen3.6_35B_A3B_Hauhau_Aggressive | 131072 | Uncensored Aggressive, multimodal; ncmoe 29; **prefill ~1150 tok/s, decode ~39 tok/s** |
+| Ornith1.5_35B_MTP | 131072 | Agêntico (APEX Compact); MoE 28 experts CPU; aceitação ~0,80 |
+| bonsai-27b | 131072 | **Bonsai 2 27B PTQ1_0** + mmproj Q8_0 (visão) — engine PrismML; **24,5 tok/s** @ 64k |
+| Xing4.0_29B_A4B | 131072 | MoE 29B/4B + MLA + mHC — engine Xing (fork shuxiaoqiong); ncmoe 27; **~12,5 tok/s** @ 64k |
 
-> **Variantes de contexto**: entry SEM sufixo = 64k (floor); `_XXk` =
-> contexto maior validado por carga real. Na RTX 3060 12 GB as `_96k` de MoE
-> híbrido ficam com margem de ~200 MB — podem OOM com jogos no desktop.
+> **Contexto e KV**: entry SEM sufixo = **128k** (floor, `-c 131072`),
+> viabilizado pelo KV cache quantizado `-ctk q5_1 -ctv q5_1` (tipo ÚNICO —
+> K/V misto quebra os híbridos GDN, ver AGENTS.md regra 10) + `-fa on` em
+> todas as entries. Modelo que não alcança 128k =
+> sufixo `_XXk` com o maior contexto validado por carga real. Ver
+> [`AGENTS.md`](AGENTS.md) (regra 10).
 
 > **Strata (removida 2026-10-14)**: os pesos (86G) foram apagados na
 > limpeza do NVMe e a entry saiu do config; a imagem da engine
