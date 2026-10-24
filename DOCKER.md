@@ -234,8 +234,19 @@ PY
 
 ### comfyui — Geração/edição de imagens (Qwen-Image 2.1 Turbo)
 
-- **Imagem**: `yanwk/comfyui-boot:cu126-slim-20261005` (pinada; ComfyUI
-  v0.38.2 + ComfyUI-Manager, CUDA 12.6 / Python 3.12)
+- **Imagem**: `yanwk/comfyui-boot:cu126-slim-20261019` (pinada; ComfyUI
+  v0.42.1 + ComfyUI-Manager, CUDA 12.6 / Python 3.12; suporte nativo FLUX.3
+  Klein — `Flux3LayoutPrompt`, `ReferenceMultiLatent`, `CreateBoundingBoxes`,
+  `CLIPLoader` tipo `flux3` — todos built-in do core ≥ v0.41.0)
+- **ATENÇÃO `/root` em volume anônimo**: o ComfyUI persiste num volume
+  anônimo Docker montado em `/root` (reattach automático no recreate do
+  container). O entrypoint SÓ copia o bundle da imagem para `/root/ComfyUI`
+  se `main.py` não existir — atualizar a tag da imagem NÃO atualiza o core
+  enquanto o código velho sobreviver no volume. Para atualizar: parar o
+  container, apagar dentro do volume TUDO em `/root/ComfyUI` EXCETO os
+  bind mounts (`custom_nodes`, `input`, `output`, `user`, `models` — apagar
+  dentro deles destrói dados do host), e subir de novo (feito em 2026-10-23
+  para v0.38.2→v0.42.1).
 - **Container**: `comfyui` (`network_mode: host`) — UI/API em
   `http://localhost:8188` via gpu-shim; ComfyUI em `127.0.0.1:8189`
 - **`gpus: all`** (o daemon já tem runtime nvidia default; ver `comando.txt`)

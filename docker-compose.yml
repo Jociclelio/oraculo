@@ -70,7 +70,7 @@ services:
   # Rede host: o gpu-shim (8188) precisa alcançar o llama-swap (:8081) no
   # host p/ unload prévio de VRAM, e o ComfyUI escuta só em 127.0.0.1:8189.
   comfyui:
-    image: yanwk/comfyui-boot:cu126-slim-20261005
+    image: yanwk/comfyui-boot:cu126-slim-20261019
     container_name: comfyui
     restart: unless-stopped
     network_mode: host
