@@ -18,6 +18,8 @@ data/searxng/settings.yml
 # llama-swap (binário local e logs de runtime)
 bin/*
 !bin/dashboard.sh
+!bin/hermes-gate.sh
+!bin/hermes-gate.service
 logs/
 
 # grafo de conhecimento compartilhado (opencode <-> Open WebUI)

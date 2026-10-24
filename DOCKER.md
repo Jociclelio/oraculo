@@ -37,14 +37,15 @@ cp .env.example .env   # ou criar manualmente
 
 ---
 
-## Serviços (9 — sem `llama-cpp`)
+## Serviços (10 — sem `llama-cpp`)
 
 > **Mudança de arquitetura (task 006 do plano llama-swap-multi-engine)**: o
 > serviço `llama-cpp` e o mount do `models.ini` foram **removidos** do
 > compose. O serving passou a ser o **llama-swap, processo de host** (seção
 > abaixo). `docker compose config --services` → `open-webui`,
 > `open-terminal`, `searxng`, `comfyui`, `mcp-playwright`, `mcp-memory`,
-> `9router`, `openwa`, `openwa-docker-proxy`.
+> `9router`, `openwa`, `openwa-docker-proxy` — e `hermes` (profile
+> `hermes`, fora do `up -d` default; ver seção própria abaixo).
 
 ### open-webui — Interface Web
 
@@ -197,6 +198,75 @@ seja, um único grafo compartilhado entre os dois clientes.
 > único; monte o **diretório**. (2) rodando como root o arquivo ficava
 > `root:root` e o opencode (uid 1000) não conseguia escrever — daí o
 > `user: "1000:1000"` com cache do npm em diretório do próprio usuário.
+
+### hermes — Hermes Agent (porteiro `hermes-gate`)
+
+Agente autônomo pessoal (Nous Research, MIT) — **exceção controlada** ao
+design não-autônomo: só roda quando o PC não está em uso, pois divide a
+mesma 3060 com o desktop/jogos.
+
+**Serviço `hermes` no compose (profile `hermes`, fora do `manage.sh start`)**:
+imagem `nousresearch/hermes-agent` pinada em `v0.22.2`, `command: gateway
+run` (Telegram/Discord/Slack/WhatsApp/Signal), estado persistente em
+`data/hermes/` (`HERMES_HOME=/opt/data`; memória, skills, sessões e
+`config.yaml` sobrevivem a stop/start). `restart: no` de propósito — quem
+acorda/pará o container é o porteiro, nada revive sem passar por ele.
+`network_mode: host` pelo mesmo motivo dos demais containers que falam com
+o llama-swap: o proxy escuta só em `127.0.0.1` (gateway API do Hermes em
+`8642`, loopback).
+
+**Porteiro `bin/hermes-gate.sh` (systemd --user, unit em
+`bin/hermes-gate.service`)** — decide o estado do container a cada 20 s:
+
+- **ACORDA**: tela bloqueada (`hyprlock` rodando) por 3 checagens
+  consecutivas (~60 s) **e** nenhum jogo na GPU;
+- **DORME**: tela destravada (stop imediato, SIGTERM + 10 s de graça — o
+  estado persiste em `data/hermes/`) **ou** processo GPU fora da allowlist
+  do oráculo usando ≥ 1,5 GiB (jogo rodando com a sessão travada);
+- ao fechar **por jogo**, pede `GET :8081/unload` ao llama-swap para
+  devolver a VRAM (mesmo endpoint do gpu-shim); o próximo request recarrega;
+- log em `logs/hermes-gate.log`.
+
+Instalação do porteiro (uma vez):
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp bin/hermes-gate.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now hermes-gate
+```
+
+Setup único do Hermes (wizard interativo; escolher "Custom endpoint" com
+`http://localhost:8081/v1`, sem API key, e o nome da entry —
+ex.: `LFM2.5_24B_A2B_IQ2_M`; o Hermes exige ≥ 64k de contexto, floor do
+oraculo é 128k). Alternativa sem TTY (usada nesta instalação):
+
+```bash
+mkdir -p data/hermes
+docker compose --profile hermes run --rm hermes setup   # wizard completo (TTY)
+# ou, ponta a ponta sem wizard:
+docker compose --profile hermes run --rm hermes config set model.provider custom
+docker compose --profile hermes run --rm hermes config set model.base_url http://localhost:8081/v1
+docker compose --profile hermes run --rm hermes config set model.default LFM2.5_24B_A2B_IQ2_M
+```
+
+Depois do setup, configurar os canais de mensagem (`hermes gateway setup`
+dentro do wizard ou `docker exec -it hermes hermes gateway setup`). O
+container também serve de TUI interativa:
+
+```bash
+docker compose --profile hermes run --rm hermes        # TUI (usa o mesmo estado)
+docker logs -f hermes                                  # log do gateway
+```
+
+Modelo padrão sugerido: `LFM2.5_24B_A2B_IQ2_M` (~100 tok/s decode curto,
+100% GPU, agêntico). Trocar a entry é uma linha em
+`data/hermes/config.yaml` (`model.default`). Quando o Hermes chama o
+llama-swap com o modelo dormindo, o wake + resposta leva ~31 s (regra 9 do
+AGENTS.md); em modelos com page cache quente, ~2-4 s.
+
+`./manage.sh stop` também para o hermes explicitamente (o `compose down`
+não alcança serviços de profile).
 
 ### Conexões MCP do Open WebUI (`tool_server.connections`)
 

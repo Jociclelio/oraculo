@@ -154,6 +154,7 @@ oraculo/
 │   ├── openwa/           #   DB + sessões WhatsApp + .api-key
 │   ├── 9router/          #   providers/contas
 │   ├── comfyui/          #   caches hf/torch (re-baixáveis)
+│   ├── hermes/           #   HERMES_HOME (memória, skills, sessões, config.yaml)
 │   └── searxng/          #   settings.yml (secret_key)
 ├── models/               # GGUFs (re-baixáveis — ver MODELS_INSTALL.md)
 ├── engines/              # builds das engines dedicadas (prismml, xing; strata sem pesos)
@@ -185,7 +186,7 @@ oraculo/
 
 O Oráculo roda na **mesma GPU que a máquina de uso pessoal** (RTX 3060 12GB, que já divide VRAM com o display/Wayland). Por isso, o design é deliberadamente **request-driven, não autônomo**:
 
-- **Nenhum agente roda sozinho em background** — não há Hermes, n8n nem workflows agendados que possam carregar um modelo e requerer VRAM quando a placa está ocupada com outra atividade (jogo, render, etc.)
+- **Nenhum agente roda sozinho em background enquanto o PC está em uso** — o design continua request-driven. A **única exceção** é o Hermes Agent (Nous Research), container `hermes` sob o porteiro `bin/hermes-gate.sh`: ele **só acorda com a tela bloqueada** (hyprlock) e sem jogo na GPU, e **para imediatamente** quando o humano volta — mesmo estado "jogo rodando → VRAM livre" que o gpu-shim e o sleep de 180 s do llama-swap já garantem no resto do stack (detalhes em `DOCKER.md` → seção hermes)
 - **O humano está sempre no loop**: modelos só carregam quando há requisição e são **descarregados após 5 min de ociosidade** (`ttl: 300` no llama-swap), devolvendo a VRAM
 - Sistemas de automação (n8n) foram testados e removidos do stack por esse motivo
 

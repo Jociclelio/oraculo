@@ -239,6 +239,38 @@ services:
     depends_on:
       - openwa-docker-proxy
 
+  # =========================================================
+  # hermes — Hermes Agent (Nous Research) sob o porteiro hermes-gate
+  # =========================================================
+  # AGENTE AUTÔNOMO — fica FORA do `./manage.sh start` (profile
+  # "hermes" não é default). Quem decide acordar é o bin/hermes-gate.sh
+  # (systemd --user): só roda com a TELA BLOQUEADA e sem jogo ocupando
+  # a GPU; stop imediato quando o humano volta. restart "no" de
+  # propósito — nada revive o Hermes sem passagem pelo gate.
+  # Modelo: llama-swap via localhost:8081 (config.yaml em data/hermes/,
+  # provider custom). network_mode host pelo mesmo motivo dos demais
+  # containers que falam com o proxy: o llama-swap escuta só em
+  # 127.0.0.1 (gateway API do Hermes em 8642, loopback).
+  # Setup único (wizard interativo):
+  #   mkdir -p data/hermes
+  #   docker compose --profile hermes run --rm hermes setup
+  # Docs: DOCKER.md → "hermes — Hermes Agent (porteiro)".
+  # =========================================================
+  hermes:
+    image: nousresearch/hermes-agent:v0.22.2
+    container_name: hermes
+    restart: no
+    profiles: ["hermes"]
+    command: gateway run
+    network_mode: host
+    environment:
+      # remapeia o usuário do container p/ o host (dono do bind mount)
+      - HERMES_UID=1000
+      - HERMES_GID=1000
+    stop_grace_period: 10s
+    volumes:
+      - ./data/hermes:/opt/data
+
 networks:
   # Rede interna — apenas openwa e openwa-docker-proxy (sem acesso externo)
   openwa-internal:

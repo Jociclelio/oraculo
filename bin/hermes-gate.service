@@ -1,0 +1,11 @@
+[Unit]
+Description=Porteiro do Hermes Agent (oraculo) — só acorda com a tela bloqueada
+Documentation=file:%h/oraculo/DOCKER.md
+
+[Service]
+ExecStart=%h/oraculo/bin/hermes-gate.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

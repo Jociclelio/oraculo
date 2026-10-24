@@ -40,10 +40,16 @@ compose_up() {
 compose_down() {
   if ! compose_any_up; then
     echo "Serviços auxiliares já estão parados."
-    return 0
+  else
+    echo "Parando serviços auxiliares (docker compose down)..."
+    docker compose down
   fi
-  echo "Parando serviços auxiliares (docker compose down)..."
-  docker compose down
+  # hermes fica fora do compose default (profile "hermes", gerenciado pelo
+  # hermes-gate): down não o alcança — parar explicitamente no "tudo off"
+  if [ "$(docker inspect -f '{{.State.Running}}' hermes 2>/dev/null)" = "true" ]; then
+    echo "Parando hermes (gerenciado pelo hermes-gate)..."
+    docker compose --profile hermes stop hermes
+  fi
 }
 
 do_start() {
