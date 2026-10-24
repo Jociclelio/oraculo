@@ -483,7 +483,78 @@ hf download bartowski/MiMo-V2.6-Distill-Qwen-9B-GGUF \
 
 ---
 
-## Verificação
+## Recursive Flint 40B-A2.5B (RecursiveSI — MoE agêntico de código, texto puro)
+
+MoE 39,8B total / ~2,5B ativos (49 camadas = 2 densas + 47 MoE; 256 experts
+top-6 + 1 shared; 35 camadas SWA janela 513 + 14 full-attention — só estas
+guardam KV completo, ~28 KiB/tok em f16, o que deixa o floor 128k leve com
+KV q5_1). Vocab 150144, ctx nativo 262144, reasoning + tool calls
+multi-turno. **Texto apenas — sem mmproj; SEM MTP/draft** (não publica head
+nextn). Requer llama.cpp ≥ PR ggml-org#30928 (merge 2026-10-21, arch
+`flint`): imagem stock atualizada para o build 11804 (`c7fc50941`) e engine
+pdcache reconstruída no MESMO commit (pin acompanhado em
+`engines/llama.cpp-pdcache/`).
+
+GGUF oficial do ggml-org (23,4 GB — mesmo padrão MoE híbrido do Qwen3.6 35B):
+
+```bash
+hf download ggml-org/Flint-GGUF Flint-Q4_K_M.gguf --local-dir models/Flint-GGUF
+```
+
+| Arquivo | Tamanho | Uso |
+|---------|---------|-----|
+| `Flint-Q4_K_M.gguf` | ~23,4 GB | entry `Flint_40B_A2.5B` |
+
+Entry com `docker-pdcache` + `--load-mode none` + `-ncmoe 38` (de 47 camadas
+MoE; regra 2) + `-ub 2048` (regra 7). Sampling do model card: temp 1.0 /
+top-p 0.95 / top-k 20. Orçar `max_tokens` generoso — modelo reasoning
+(recomendação oficial: até ~32k tokens de saída em problemas difíceis).
+Nota do PR: workaround de scaling das ativações de experts custa 10-30% de
+desempenho (a otimizar upstream). **Validado em 2026-10-22** (RTX 3060 12
+GB, display idle, fingerprint `b1-c7fc509`): **decode ~42 tok/s curto /
+~38 @1,7k, prefill ~850 tok/s @1,7k; VRAM 9583 MiB @128k** (~2,7 GB de
+folga). `-ncmoe 36` testado: decode idêntico dentro do ruído com +830 MiB
+de VRAM — mantido 38. Carga fria a partir do NVMe: ~30 s.
+
+---
+
+## Flint 40B-A2.5B Uncensored (Heretic — decensurado, texto puro)
+
+Mesmo Recursive Flint de cima, decensurado pelo **electroglyph** via Heretic
+(abliterated: recusas 98/100 → 5/100 no teste do autor). GGUF Q4_K_M
+convertido pelo Octopusman388 a partir dos safetensors BF16 (mesma arch
+`flint`, requer llama.cpp ≥ PR ggml-org#30928 — já atendido pela imagem em
+uso). Origem: `Octopusman388/flint-uncensored-GGUF`:
+
+```bash
+hf download Octopusman388/flint-uncensored-GGUF \
+  flint-uncensored-Q4_K_M.gguf \
+  --local-dir models/Flint-Uncensored-GGUF
+```
+
+| Arquivo | Tamanho | Uso |
+|---------|---------|-----|
+| `flint-uncensored-Q4_K_M.gguf` | ~24,2 GB (22,5 GiB) | entry `Flint_40B_A2.5B_Uncensored` |
+
+Entry **idêntica à do Flint base** (mesma receita: `docker-pdcache` +
+`--load-mode none` + `-ncmoe 38` + `-ub 2048`, sampling temp 1.0 /
+top-p 0.95 / top-k 20) com um acréscimo obrigatório:
+
+> ⚠️ **Known issue do autor — reasoning descontrolado ("looping")**: em
+> prompts sensíveis o modelo pode divagar no raciocínio por 10k+ caracteres
+> sem responder (estocástico; NÃO é loop de tokens nem problema de
+> template/EOS). Mitigação validada pelo autor (4/4 runs): limitar o thinking
+> com `--reasoning-budget 4096 --reasoning-budget-message "I have thought
+> enough. I will now answer directly."` — incluída na entry. O budget limita
+> o drift, não o elimina; presence-penalty NÃO ajuda.
+
+> Validado aqui em 2026-10-24 (RTX 3060 12 GB, display idle): **decode
+> ~37 tok/s, VRAM pico 9874 MiB @128k** (~2,4 GB de folga) — paridade com o
+> Flint base. Modelo reasoning: consome muitos tokens de raciocínio (700
+> tokens de max_tokens foram inteiros no reasoning em pergunta simples) —
+> orçar `max_tokens` generoso.
+
+---
 
 Após instalar + entry + `./manage.sh restart`, verifique:
 

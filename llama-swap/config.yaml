@@ -554,6 +554,59 @@ models:
     ttl: 1800
 
   # ---------------------------------------------------------------------
+  # Recursive Flint 40B-A2.5B (RecursiveSI) — MoE agêntico de código,
+  # TEXTO apenas (sem mmproj, sem MTP/draft). Arquitetura `flint`: 49
+  # camadas (2 densas + 47 MoE), 256 experts top-6 + 1 shared (sigmoid),
+  # 35 camadas SWA (janela 513, RoPE) + 14 full-attention (sem pos.
+  # encoding; só elas guardam KV completo — ~28 KiB/tok em f16, o KV
+  # quantizado q5_1 deixa o floor 128k leve). Attention sinks aprendidos,
+  # GQA 32q/4kv, vocab 150144. Ctx nativo 262144.
+  # Requer llama.cpp >= PR ggml-org#30928 (merge 2026-10-21) — imagem
+  # stock atualizada p/ build 11804 (c7fc50941) + engine pdcache
+  # reconstruída no MESMO commit (pin acompanhado).
+  # - GGUF oficial ggml-org/Flint-GGUF Q4_K_M (23,4 GB). MoE híbrido:
+  #   --load-mode none + -ncmoe 38/47 (regra 2); NOTA do PR: workaround
+  #   de scaling de ativações custa 10-30% de performance (upstream).
+  # - SEM MTP/draft (o Flint não publica head nextn — spec inaplicável).
+  # - Sampling do model card: temp 1.0 / top-p 0.95 / top-k 20. Orçar
+  #   max_tokens generoso: modelo reasoning (usa ~32k em problemas difíceis).
+  # ---------------------------------------------------------------------
+  Flint_40B_A2.5B:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/Flint-GGUF/Flint-Q4_K_M.gguf
+      --load-mode none
+      -c 131072 -ngl 99 -ncmoe 38
+      -b 4096 -ub 2048
+      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
+  # Flint 40B-A2.5B Uncensored (Heretic) — mesmo Flint de cima, decensurado
+  # pelo electroglyph (abliterated: recusas 98/100 -> 5/100; custo de
+  # benchmark não divulgado; GGUF do Octopusman388, Q4_K_M 22,5 GiB).
+  # Mesma arch `flint`/receita da entry base (ncmoe 38, ub 2048, sampling
+  # do model card). TEXTO apenas, SEM MTP/draft.
+  # - KNOWN ISSUE do autor: reasoning descontrolado ("looping") em prompts
+  #   sensíveis — rambling de 10k+ chars sem resposta; NÃO é repetição de
+  #   token nem problema de template. Mitigação validada pelo autor:
+  #   --reasoning-budget 4096 + mensagem de fechamento (limita o drift,
+  #   não o elimina). Presença-penalty NÃO ajuda.
+  # ---------------------------------------------------------------------
+  Flint_40B_A2.5B_Uncensored:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/Flint-Uncensored-GGUF/flint-uncensored-Q4_K_M.gguf
+      --load-mode none
+      -c 131072 -ngl 99 -ncmoe 38
+      -b 4096 -ub 2048
+      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
+      --reasoning-budget 4096 --reasoning-budget-message "I have thought enough. I will now answer directly."
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
   # MiniCPM-V 4.7 1B (OpenBMB) — variante edge da série, DENSA (arch
   # qwen35, sem experts → sem -ncmoe/--load-mode none), ctx nativo 262144.
   # Mesmo visor LLaVA-UHD v4 da 35B (mesma imagem stock build 11561).

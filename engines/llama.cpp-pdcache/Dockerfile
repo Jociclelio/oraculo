@@ -23,14 +23,15 @@
 # prompt_disk_save; hunks de prefix-only descartados — modo desabilitado).
 #
 # Fonte: https://github.com/ggml-org/llama.cpp, commit PINADO = o MESMO commit
-# da imagem stock ghcr.io/ggml-org/llama.cpp:full-cuda em uso (build 11681).
+# da imagem stock ghcr.io/ggml-org/llama.cpp:full-cuda em uso (build 11804).
 # LIMITAÇÃO: nenhuma esperada — mesma base do stock, mesmos modelos servidos.
 FROM nvidia/cuda:13.4.2-devel-ubuntu24.04
 
 ARG STOCK_REPO="https://github.com/ggml-org/llama.cpp"
 # Commit PINADO — igual ao da imagem stock em uso:
-#   version: 0.7.0-dev (build 11681, commit 5e03a1ff4)
-ARG STOCK_COMMIT="5e03a1ff450cae37a774684de55d14fb48b1f90b"
+#   version: 0.7.0-dev (build 11804, commit c7fc50941; traz a arch flint,
+#   PR ggml-org#30928 — Recursive Flint)
+ARG STOCK_COMMIT="c7fc5094179bf8a9c73c18593db714f8da41a402"
 # Alvo: RTX 3060 (Ampere) — mesma arquitetura do build nativo de referência.
 ARG CUDA_ARCH="86"
 
