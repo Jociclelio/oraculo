@@ -384,7 +384,7 @@ Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
 |--------|----------|-------|
 | Gemma4_12B | 131072 | Multimodal (visão + áudio nativo) QAT |
 | LFM2.5_24B_A2B | 131072 | LiquidAI MoE 24B/2,45B raciocínio agêntico; ncmoe 20; **~45 tok/s, prefill ~1900 tok/s**; temp 0.1/top-k 50/rep 1.05 |
-| MiniCPM-V_4.7_35B | 131072 | **MiniCPM-V 4.7 35B-A3B** multimodal (OpenBMB; backbone Qwen3.6); sem MTP; ncmoe 32; **~32-35 tok/s, prefill ~1040 tok/s**; visão validada |
+| MiniCPM-V_4.7_35B | 131072 | **MiniCPM-V 4.7 35B-A3B** multimodal (OpenBMB; backbone Qwen3.6); sem MTP; ncmoe 32 + ub 4096; **~32-35 tok/s, prefill ~1600 tok/s**; visão validada |
 | MiniCPM-V_4.7_1B | 131072 | **MiniCPM-V 4.7 1B** multimodal (OpenBMB); variante edge densa; **decode ~200 tok/s, prefill ~8,5k tok/s**; visão validada |
 | Ornith1.5_9B | 131072 | **Ornith-1.5-9B** (ornith-ai) denso, raciocínio agêntico; MTP self-draft n=2; **decode ~50 tok/s, prefill ~1,5k tok/s, aceitação ~0,53-0,69** |
 | Qwen3.6_35B_General | 131072 | MoE (32 experts CPU) / head MTP (draft-mtp n=2) / aceitação ~82-93% |

@@ -37,6 +37,7 @@ GGUF[Ornith1.5_35B_MTP]="Ornith-1.5-35B-MTP-APEX-Compact/Ornith-1.5-35B-A3B-APEX
 GGUF[LFM2.5_24B_A2B]="LFM2.5-24B-A2B-GGUF/LFM2.5-24B-A2B-Q4_K_M.gguf"
 GGUF[Qwen3.8_35B_Distill]="Qwen3.8-35B-A3B-Distill-Q4_K_M/Qwen3.8-35B-A3B-Q4_K_M.gguf"
 GGUF[MiniCPM-V_4.7_35B]="MiniCPM-V-4.7-35B-A3B-Q4_K_M/MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf"
+GGUF[Flint_40B_A2.5B]="Flint-GGUF/Flint-Q4_K_M.gguf"
 GGUF[bonsai-27b]="Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-PTQ1_0.gguf"
 GGUF[Xing4.0_29B_A4B]="Xing4.0-29B-A4B-Q4_K_M/Xing4.0-29B-A4B-Q4_K_M.gguf"
 
@@ -48,6 +49,7 @@ MOE[Ornith1.5_35B_MTP]=1;   NCMOE[Ornith1.5_35B_MTP]=29
 MOE[LFM2.5_24B_A2B]=1;      NCMOE[LFM2.5_24B_A2B]=20
 MOE[Qwen3.8_35B_Distill]=1; NCMOE[Qwen3.8_35B_Distill]=31
 MOE[MiniCPM-V_4.7_35B]=1;   NCMOE[MiniCPM-V_4.7_35B]=32
+MOE[Flint_40B_A2.5B]=1;     NCMOE[Flint_40B_A2.5B]=38
 MOE[Xing4.0_29B_A4B]=1;     NCMOE[Xing4.0_29B_A4B]=27
 IMG[bonsai-27b]=prismml
 IMG[Xing4.0_29B_A4B]=xing
@@ -218,6 +220,13 @@ pp3d() { # $1=entry
 }
 
 # ---------------------------------------------------------------------------
+# Main. BENCH_LIB=1 source benchmarks/bench.sh — uso como biblioteca de
+# metadados/funções (calibrate.sh): define tudo e retorna sem executar.
+# ---------------------------------------------------------------------------
+if [ "${BENCH_LIB:-0}" = 1 ]; then
+  return 0 2>/dev/null || exit 0
+fi
+
 MAIN_SERIES=(sweep pp3d)
 sel=${1:-}; shift || true
 [ -n "$sel" ] || { echo "uso: $0 <entry|all> [série...]"; exit 1; }

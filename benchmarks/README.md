@@ -60,6 +60,45 @@ desta build (11561) mede decode ~6× abaixo do serving nos híbridos GDN
 {256,512,1024,2048}` (ub ≤ batch), 2 repetições. Prefill no llama-bench é
 confiável (validado contra o serving); decode não (ver acima).
 
+## Calibração de batch/ubatch — `calibrate.sh`
+
+Varre a grade `batch × ubatch` medindo **prefill e2e** (llama-server na
+receita de serving da entry, prompt real ~8k tokens, `n_predict=1`) e elege
+o ótimo dentro do teto de VRAM. Complementa o `pp3d` (medição e2e real,
+poda por VRAM, sugere/aplica o resultado no `config.yaml`).
+
+```bash
+./benchmarks/calibrate.sh <entry>              # varre a grade e reporta
+./benchmarks/calibrate.sh <entry> --apply      # aplica o vencedor no config
+DRY=1 ./benchmarks/calibrate.sh <entry>        # só imprime comandos
+
+# grade default: b ∈ {1024,2048,4096,8192} × ub ∈ {512,1024,2048,4096}
+CAL_B="2048 4096 8192" CAL_UB="1024 2048 4096" ./benchmarks/calibrate.sh <entry>
+```
+
+**Regras de método** (as mesmas descobertas de 2026-10-26):
+
+- **Medir com a receita COMPLETA de serving** — o draft MTP consome compute
+  buffer: sem ele, `ub 4096` carrega no Qwen3.6 35B (1585 tok/s); com ele,
+  a carga aborta (FAIL). Passar os flags do draft em `CAL_EXTRA_FLAGS`.
+- **VRAM de pico** amostrada a cada 2 s; acima de `CAL_VRAM_CEIL` (default
+  11700 MiB) o combo é marcado `OVER` e nunca eleito.
+- Reps com **prompts de seeds diferentes** — prompt repetido aciona o prompt
+  cache de RAM e falseia a 2ª medição.
+- Cada combo é um container novo; modelo que falha a carga = `FAIL` (não é
+  elegível), request que falha = `FAIL` também (flake não vira "0 tok/s OK").
+- Resultado: `results/<entry>__calib.csv`; ~40-70 s por combo.
+
+**Leis de comportamento medidas (RTX 3060 12 GB, gpu-unlock ativo):**
+
+- O **ubatch domina** o prefill de MoE (amortiza a re-leitura de pesos de
+  experts da RAM — regra 7); o batch é irrelevante acima de ~4096 (b4096 vs
+  b8192 no mesmo ub = ruído).
+- Valores absolutos dependem do **boot** (gpu-unlock BF16 ~+50% vs stock) e
+  da build do llama.cpp — comparar apenas medições do mesmo boot/build.
+- Sem draft MTP, `ub 4096` cabe e é o vencedor; com draft, `ub 2048` é o
+  teto (ub4096 aborta a carga).
+
 ## Limitações conhecidas
 
 - **`-d` (n_depth) do llama-bench** é patológico nesta build (churn de CUDA

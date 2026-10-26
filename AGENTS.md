@@ -116,16 +116,28 @@ load/unload manual — apontar o request para outro `model` faz o swap
     `tool_server.connections` do banco, não no compose). SearXNG precisa de
     `formats: [html, json]` no `data/searxng/settings.yml`.
  7. **Prefill de MoE com experts na CPU é dominado por streaming de pesos —
-    `-ub 2048` dobra o prefill.** Medido 2026-10-11 (Qwen3.6_35B_Code, prompt
-    5,6k tok, display idle): ub512→400 tok/s; ub1024→594; ub2048→865-909
-    (VRAM +~650 MiB → 11,4-11,5 GB); ub4096 NÃO cabe (compute buffer estoura;
-    `common_fit_params ... abort` com `-ngl 99`). Decode inalterado (~26-28
-    tok/s, aceitação MTP idêntica). `-b 8192` não ajuda (820 < 908). Aplicado:
-    `-ub 2048` nas entries Qwen3.6 128k + Ornith1.5_35B; `-ub 1024`
-    no Xing (folga de VRAM). Motivo: com `-ncmoe`, cada
-    ubatch relê os pesos dos experts na RAM; ubatch maior amortiza o custo.
+    ubatch maior amortiza a re-leitura de experts; o batch é irrelevante.**
+    Medido 2026-10-11 (Qwen3.6_35B_Code, prompt 5,6k tok, display idle):
+    ub512→400 tok/s; ub1024→594; ub2048→865-909; ub4096 abortava a carga.
+    Motivo: com `-ncmoe`, cada ubatch relê os pesos dos experts na RAM.
     Nota: KV do Qwen3.6 é pequeno (só 10/41 camadas têm KV; 2 heads × 256 →
     ~10,6 KiB/tok em q8_0) — o gargalo é FFN de experts, não attention.
+    **Calibração automática 2026-10-26** (`benchmarks/calibrate.sh`, prompt
+    8k e2e, build 11804, gpu-unlock ATIVO — números absolutos ~+50% vs
+    2026-10-11): o ubatch domina e o batch não (b4096 vs b8192 no mesmo ub
+    = ruído; `-b 8192` continua sem ajudar). Sem draft: ub1024→~1016-1065,
+    ub2048→~1281-1385, ub4096→~1300-1627 (Flint 1305, MiniCPM 1627, Qwen
+    sem draft 1585). COM draft MTP (Qwen Code): ub2048→1288 OK na imagem
+    stock (11849 MiB) mas **estoura na receita completa de serving**
+    (pdcache/sleep/checkpoints): `cublasGemmEx internal operation failed`
+    no 1º request, reproduzível — a receita completa tem ~350-400 MiB a
+    mais de pegada. **Lições**: (a) calibrar SEMPRE com `CAL_EXTRA_FLAGS`
+    da receita real e validar o vencedor com carga no llama-swap antes de
+    aplicar; (b) sem draft MTP, `ub 4096` cabe e vence. Aplicado
+    2026-10-26: `ub 4096` em Flint_40B (prefill ~1097→1300, VRAM serving
+    10567 MiB) e MiniCPM-V_4.7_35B (~1383→1619, VRAM 10359 MiB);
+    Qwen3.6_35B_Code MANTÉM `ub 1024` (ub2048 + draft não cabe nesta
+    build); Xing segue `ub 1024` (folga de VRAM).
  8. **Geração de imagem (ComfyUI) e inferência de LLM dividem a mesma VRAM —
     liberação bidirecional automática.** O ComfyUI
     (yanwk/comfyui-boot, porta 8188 via gpu-shim; núcleo em 127.0.0.1:8189)
@@ -263,7 +275,7 @@ ctx 64k anterior (decode não muda com o ctx; prefill por token idêntico).
 | `Gemma4_12B` | stock | 131072 | Gemma 4 12B IT QAT; multimodal (visão + **áudio nativo** — mmproj único com os dois encoders, `clip.has_audio_encoder=true`); VRAM 9259 MiB |
 | `LFM2.5_24B_A2B` | stock | 131072 | LiquidAI raciocínio puro agêntico, MoE 24B/2,45B (64 experts top-4); ncmoe 20 + `--load-mode none` + ub2048; **~45 tok/s, prefill ~1900 tok/s**; VRAM 10516 MiB; sampling temp 0.1 / top-k 50 / rep 1.05; sem MTP (draft DSpark não publicado) |
 | `LFM2.5_24B_A2B_IQ2_M` | stock | 131072 | unsloth UD IQ2_M (7,5 GB) — a mesma LFM2.5 em **100% GPU** (sem `--load-mode none`/`-ncmoe`); **decode ~76-103 tok/s curto / 26 tok/s @130k, prefill 21k ~3589 tok/s / 130k ~2172 tok/s**; 128k validado de ponta a ponta (VRAM 9940 MiB @130k, ~2,3 GB de folga); sem MTP; sampling temp 0.1 / top-k 50 / rep 1.05 (2026-10-19) |
-| `MiniCPM-V_4.7_35B` | stock | 131072 | MiniCPM-V 4.7 35B-A3B multimodal Q4_K_M + mmproj f16 (openbmb `-gguf`); backbone Qwen3.6 (arch qwen35moe, 256 experts/8 ativos, GDN); **SEM MTP** (header declara nextn=1 mas sem tensors; draft DSpark testado e descartado: aceitação ~10%, decode 9,5 tok/s, buffer ~3,9 GB não cabe — GGUF do draft guardado em `models/MiniCPM-V-4.7-35B-A3B-DSpark/`); ncmoe 32 + `--load-mode none` + ub2048; requer llama.cpp ≥ PR #29416 (imagem stock atualizada p/ build 11561, fingerprint `b11561-e937b17a2`); **~32-35 tok/s, prefill ~1040 tok/s**; VRAM 9488 MiB; visão validada |
+| `MiniCPM-V_4.7_35B` | stock | 131072 | MiniCPM-V 4.7 35B-A3B multimodal Q4_K_M + mmproj f16 (openbmb `-gguf`); backbone Qwen3.6 (arch qwen35moe, 256 experts/8 ativos, GDN); **SEM MTP** (header declara nextn=1 mas sem tensors; draft DSpark testado e descartado: aceitação ~10%, decode 9,5 tok/s, buffer ~3,9 GB não cabe — GGUF do draft guardado em `models/MiniCPM-V-4.7-35B-A3B-DSpark/`); ncmoe 32 + `--load-mode none` + **ub 4096** (calibração 2026-10-26: prefill ~1383→1619 tok/s; VRAM serving 10359 MiB); requer llama.cpp ≥ PR #29416 (imagem stock atualizada p/ build 11561, fingerprint `b11561-e937b17a2`); **~32-35 tok/s, prefill ~1040→~1600 tok/s**; visão validada |
 | `MiniCPM-V_4.7_1B` | stock | 131072 | MiniCPM-V 4.7 1B multimodal Q4_K_M + mmproj f16 (openbmb `-gguf`); variante edge DENSA da série (arch qwen35, sem experts); mesmo visor LLaVA-UHD v4 da 35B; SEM MTP (draft DSpark disponível no repo mas não instalado — precedente da 35B: aceitação ~10%); **decode ~200 tok/s, prefill ~8000-8500 tok/s**; visão validada (2026-10-16) |
 | `Qwen3.6_35B_General` | stock | 131072 | thinking + head MTP; ncmoe 33; ub2048; aceitação ~82-93%; VRAM 11172 MiB (c/ mmproj) |
 | `Qwen3.6_35B_Code` | stock | 131072 | thinking + head MTP; ncmoe 31; **~27 tok/s, aceitação 93%** — MoE híbrido padrão; ub1024: prefill ~750 tok/s; VRAM 11426 MiB (c/ mmproj, a mais apertada) |
@@ -273,7 +285,7 @@ ctx 64k anterior (decode não muda com o ctx; prefill por token idêntico).
 | `Ornith1.5_9B` | stock | 131072 | Ornith-1.5-9B Q4_K_M + mmproj BF16 (ornith-ai); variante edge DENSA da família (arch qwen35), raciocínio agêntico `<think/tool_call>`; head MTP embutida (nextn=1) → draft-mtp self-draft n=2; **decode ~48-52 tok/s, prefill ~1430-1580 tok/s, aceitação ~0,53-0,69**; VRAM 9862 MiB (2026-10-16) |
 | `Qwen3.5_9B_HauhauCS` | stock | 131072 | Qwen3.5-9B-Uncensored-HauhauCS-Aggressive Q4_K_M + mmproj BF16; denso (arch qwen35, no lugar da Ornith1.5_9B_Uncensored removida 2026-10-19); **SEM MTP** (header sem nextn); **decode ~52 tok/s, prefill 21k ~1671 tok/s**; VRAM 9088 MiB; visão carregada (2026-10-19) |
 | `MiMo2.6_9B` | stock | 131072 | MiMo-V2.6-Distill-Qwen-9B (XiaomiMiMo, distill em base Qwen3.5; arch qwen35, denso) Q4_K_M bartowski + mmproj f16 (ggml-org oficial só Q8_0 9,5 GB — não cabe com floor 128k); reasoning separado; **SEM MTP** (header sem nextn); **decode ~47-51 tok/s, prefill ~1800 tok/s @2,6k**; VRAM 9510 MiB; visão validada; sampling temp 0.6 / top-p 0.95 / top-k 20 (generation_config oficial) (2026-10-20) |
-| `Flint_40B_A2.5B` | stock | 131072 | Recursive Flint (RecursiveSI) MoE 40B/2,5B agêntico de código (arch `flint`: 49 camadas = 2 densas + 47 MoE, 256 experts top-6 + shared, 35 SWA janela 513 + 14 full-attention); **texto puro — sem mmproj, SEM MTP/draft**; GGUF oficial ggml-org Q4_K_M (23,4 GB); ncmoe 38 + `--load-mode none` + ub2048 (ncmoe 36 testado: sem ganho, +830 MiB); requer build ≥ PR ggml-org#30928 (imagem stock atualizada p/ 11804/c7fc50941 + pdcache repinada no mesmo commit); sampling temp 1.0 / top-p 0.95 / top-k 20; workaround de scaling de ativações custa 10-30% (nota do PR); **decode ~42 tok/s curto / ~38 @1,7k, prefill ~850 tok/s @1,7k; VRAM 9583 MiB @128k** (fingerprint `b1-c7fc509`) (2026-10-22) |
+| `Flint_40B_A2.5B` | stock | 131072 | Recursive Flint (RecursiveSI) MoE 40B/2,5B agêntico de código (arch `flint`: 49 camadas = 2 densas + 47 MoE, 256 experts top-6 + shared, 35 SWA janela 513 + 14 full-attention); **texto puro — sem mmproj, SEM MTP/draft**; GGUF oficial ggml-org Q4_K_M (23,4 GB); ncmoe 38 + `--load-mode none` + **ub 4096** (calibração 2026-10-26: prefill ~1097→1300 tok/s; VRAM serving 10567 MiB; sem draft o ub4096 cabe); requer build ≥ PR ggml-org#30928 (imagem stock atualizada p/ 11804/c7fc50941 + pdcache repinada no mesmo commit); sampling temp 1.0 / top-p 0.95 / top-k 20; workaround de scaling de ativações custa 10-30% (nota do PR); **decode ~42 tok/s curto / ~38 @1,7k, prefill ~1300 tok/s @8k** (fingerprint `b1-c7fc509`) (2026-10-22; ub4096 em 2026-10-26) |
 | `Flint_40B_A2.5B_Uncensored` | stock | 131072 | Mesmo Flint, decensurado Heretic (electroglyph; abliterated 98→5 recusas/100) — GGUF Octopusman388 Q4_K_M (24,2 GB); MESMA receita da entry base (ncmoe 38 + `--load-mode none` + ub2048, temp 1.0/top-p 0.95/top-k 20); **known issue do autor: reasoning descontrolado em prompts sensíveis** — mitigado na entry com `--reasoning-budget 4096` + mensagem de fechamento (limita o drift, não elimina; presence-penalty não ajuda); TEXTO puro, SEM MTP/draft; **validado 2026-10-24: decode ~37 tok/s, VRAM pico 9874 MiB @128k** (~2,4 GB de folga); reasoning consome MUITOS tokens — orçar max_tokens generoso |
 | `bonsai-27b` | PrismML | 131072 | PTQ1_0 + mmproj (visão validada); **KV q4_0 (2026-10-20)** — o q5_1 dos macros NÃO tem caminho rápido de FA no fork PrismML (issue PrismML #191; build sem `-DGGML_CUDA_FA_ALL_QUANTS=ON`): degrada 30-40× (decode 12,6→78 tok/s @4k no 9B com f16). Com q4_0: **decode ~23 tok/s, prefill ~480 tok/s estável @21k+**; VRAM 10700 MiB |
 | `bonsai-27b-heretic` | PrismML | 131072 | finetune Uncensored "Heretic" (OS-Software) do Bonsai 2 acima; PTQ1_0 + mmproj Q8_0, mesma engine pinada e MESMO fix de KV q4_0: **decode ~23 tok/s, prefill ~464 tok/s @4k**; VRAM 10590 MiB; sem pdcache/sleep (patch só no master ggml-org) (2026-10-20) |

@@ -536,9 +536,11 @@ models:
   # Requer llama.cpp >= PR #29416 (merge 2026-10-10): visor minicpmv4_7 +
   # rope.section_order zyxt — imagem stock atualizada p/ build 11561
   # (0.6.0-dev e937b17a). MoE híbrido: --load-mode none + -ncmoe (regra 2)
-  # + -ub 2048 (regra 7). Sampling do model card: temp 1.0 / top-p 0.95 /
+  # + -ub 4096 (calibração 2026-10-26, calibrate.sh: prefill ~1383→1619
+  # tok/s; VRAM serving 10359 MiB — sem draft MTP o ub4096 cabe, regra 7).
+  # Sampling do model card: temp 1.0 / top-p 0.95 /
   # top-k 20. Medido (RTX 3060 12GB, display idle): decode ~32-35 tok/s,
-  # prefill ~1040 tok/s, VRAM ~9,0 GB (ncmoe 32); visão validada.
+  # prefill ~1040→~1600 tok/s; visão validada.
   # ---------------------------------------------------------------------
   MiniCPM-V_4.7_35B:
     cmd: |
@@ -547,7 +549,7 @@ models:
       --mmproj /models/MiniCPM-V-4.7-35B-A3B-Q4_K_M/mmproj-model-f16.gguf
       --load-mode none
       -c 131072 -ngl 99 -ncmoe 32
-      -b 4096 -ub 2048
+      -b 4096 -ub 4096
       --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
       --presence-penalty 0.0 --repeat-penalty 1.0
     cmdStop: ${docker-stop}
@@ -568,6 +570,9 @@ models:
   #   --load-mode none + -ncmoe 38/47 (regra 2); NOTA do PR: workaround
   #   de scaling de ativações custa 10-30% de performance (upstream).
   # - SEM MTP/draft (o Flint não publica head nextn — spec inaplicável).
+  # -ub 4096: calibração 2026-10-26 (benchmarks/calibrate.sh) — prefill
+  #   ~1097→1300 tok/s; VRAM serving 10567 MiB. Sem draft o ub4096 cabe
+  #   (regra 7); batch irrelevante acima de 4096.
   # - Sampling do model card: temp 1.0 / top-p 0.95 / top-k 20. Orçar
   #   max_tokens generoso: modelo reasoning (usa ~32k em problemas difíceis).
   # ---------------------------------------------------------------------
@@ -577,7 +582,7 @@ models:
       -m /models/Flint-GGUF/Flint-Q4_K_M.gguf
       --load-mode none
       -c 131072 -ngl 99 -ncmoe 38
-      -b 4096 -ub 2048
+      -b 4096 -ub 4096
       --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
     cmdStop: ${docker-stop}
     ttl: 1800
