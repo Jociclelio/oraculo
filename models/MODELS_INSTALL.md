@@ -483,6 +483,57 @@ hf download bartowski/MiMo-V2.6-Distill-Qwen-9B-GGUF \
 
 ---
 
+## Batch 2026-10-26 — alternativas ao Qwen3.6 35B (5 modelos + 1 bloqueado)
+
+Instalados para testar alternativas ao Qwen3.6 35B-A3B (todos arch
+`qwen3_5_moe`, exceto o K2). Receita padrão: macro pdcache + KV q5_1 +
+`--load-mode none` + `-ncmoe 31` + `-ub 2048` (regra 7).
+
+```bash
+hf download InternScience/Sage-A1.5-Q4_K_M-GGUF \
+  Sage-A1.5-Q4_K_M.gguf Sage-A1.5-mmproj.gguf \
+  --local-dir models/Sage-A1.5-Q4_K_M
+
+hf download abenzerps/Apodex-1.1-mini-GGUF \
+  Apodex-1.1-mini-Q4_K_M.gguf mmproj-Apodex-1.1-mini-F16.gguf \
+  --local-dir models/Apodex-1.1-mini-Q4_K_M
+
+hf download bartowski/nex-agi_Nex-N2.5-mini-GGUF \
+  nex-agi_Nex-N2.5-mini-Q4_K_M.gguf mmproj-nex-agi_Nex-N2.5-mini-f16.gguf \
+  --local-dir models/Nex-N2.5-mini-Q4_K_M
+
+hf download mradermacher/BigBang-v1-GGUF \
+  BigBang-v1.Q4_K_M.gguf BigBang-v1.mmproj-f16.gguf \
+  --local-dir models/BigBang-v1-Q4_K_M
+
+hf download IFM/K2-Horizon-MoVA-36B-A4B-GGUF \
+  K2-Horizon-MoVA-36B-A4B-Q4_K_M.gguf \
+  --local-dir models/K2-Horizon-MoVA-36B-A4B-Q4_K_M
+```
+
+| Entry | Modelo (origem GGUF) | Sampling oficial | Medido 2026-10-26 |
+|-------|----------------------|------------------|-------------------|
+| `SageA1.5_35B` | Sage-A1.5 (oficial InternScience) | temp 1.0 / top-p 0.95 / top-k 20 / presence 1.5 | decode ~34 tok/s; VRAM 9849 MiB; thinking |
+| `Apodex1.1_35B` | Apodex-1.1 mini (abenzerps; oficial = NVFP4) | temp 1.0 / top-k 20 / top-p 0.95 | decode ~39 tok/s; VRAM 9849 MiB |
+| `NexN2.5_35B` | Nex-N2.5 mini (bartowski) | temp 0.7 / top-p 0.95 / top-k 40 | decode ~36 tok/s; VRAM 10609 MiB |
+| `BigBangv1_35B` | BigBang v1 (mradermacher) | temp 1.0 / top-k 20 / top-p 0.95 | decode ~37 tok/s; VRAM 10625 MiB |
+| `K2Horizon_36B_MoVA_40k` | K2-Horizon MoVA (oficial IFM) | temp 1.0 / top-p 0.95 | decode ~16-18 tok/s; prefill ~814 tok/s; VRAM 10665 MiB |
+
+> **K2 Horizon — entry `_40k` (quebra o floor 128k)**: arch `k2_horizon`
+> (suporte no llama.cpp desde PR ggml-org#29535). 48 camadas de atenção
+> completa com 8 KV heads × 128 → **192 KiB/tok em f16** (72 em q5_1):
+> 128k pediria 9,2 GB só de KV. Além disso os 64 experts "MoVA" (top-4)
+> ficam na GPU (o `-ncmoe` cobre só os 100 experts do FFN) — piso de
+> ~6,5 GB. Teto validado: **ctx 40960** com `-ncmoe 47`.
+>
+> **Raon-1 mini 30B (KRAFTON): BLOQUEADO** — arch `raon1_mini` não existe
+> no llama.cpp master nem em fork conhecido (avaliado em 2026-10-26).
+> Reavaliar se um PR for aceito.
+>
+> Os 4 qwen3_5_moe são thinking/reasoning — orçar `max_tokens` generoso.
+
+---
+
 ## Recursive Flint 40B-A2.5B (RecursiveSI — MoE agêntico de código, texto puro)
 
 MoE 39,8B total / ~2,5B ativos (49 camadas = 2 densas + 47 MoE; 256 experts

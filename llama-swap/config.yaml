@@ -362,6 +362,111 @@ models:
     cmdStop: ${docker-stop}
     ttl: 1800
 
+  # =====================================================================
+  # Batch 2026-10-26 — alternativas ao Qwen3.6 35B (todos arch
+  # qwen3_5_moe, exceto K2 Horizon arch k2_horizon — suportado desde
+  # PR ggml-org#29535, 2026-10-06, dentro do pin do build 11804).
+  # Receita padrão: pdcache + KV q5_1 + --load-mode none + -ncmoe +
+  # ub 2048 (regras 2/7/10). ncmoe inicial 31 (paridade Qwen3.6 35B,
+  # 40 camadas) / 30 no K2 (48 camadas) — ajustar por carga real.
+  # Raon-1 mini 30B (KRAFTON) AVALIADO E BLOQUEADO: arch `raon1_mini`
+  # NÃO existe no llama.cpp master (nem fork conhecido) — sem engine.
+  # =====================================================================
+
+  # ---------------------------------------------------------------------
+  # Sage-A1.5 35B-A3B (InternScience) — qwen3_5_moe multimodal (visor
+  # SigLIP-ish 27 camadas). GGUF oficial Q4_K_M + mmproj. Sampling do
+  # model card: temp 1.0 / top-p 0.95 / top-k 20 / min-p 0.0 /
+  # presence-penalty 1.5 / rep 1.0.
+  # ---------------------------------------------------------------------
+  SageA1.5_35B:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/Sage-A1.5-Q4_K_M/Sage-A1.5-Q4_K_M.gguf
+      --mmproj /models/Sage-A1.5-Q4_K_M/Sage-A1.5-mmproj.gguf
+      --load-mode none
+      -c 131072 -ngl 99 -ncmoe 31
+      -b 4096 -ub 2048
+      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
+      --presence-penalty 1.5 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
+  # Apodex 1.1 mini 35B-A3B (apodex) — qwen3_5_moe multimodal. GGUF
+  # convertido pelo abenzerps (o repo oficial publica NVFP4, sem GGUF).
+  # Sampling do generation_config oficial: temp 1.0 / top-k 20 / top-p 0.95.
+  # ---------------------------------------------------------------------
+  Apodex1.1_35B:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/Apodex-1.1-mini-Q4_K_M/Apodex-1.1-mini-Q4_K_M.gguf
+      --mmproj /models/Apodex-1.1-mini-Q4_K_M/mmproj-Apodex-1.1-mini-F16.gguf
+      --load-mode none
+      -c 131072 -ngl 99 -ncmoe 31
+      -b 4096 -ub 2048
+      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
+  # Nex-N2.5 mini 35B (nex-agi) — qwen3_5_moe multimodal, thinking com
+  # reasoning_effort (chat_template_kwargs). GGUF bartowski Q4_K_M +
+  # mmproj f16. Sampling do model card: temp 0.7 / top-p 0.95 / top-k 40.
+  # ---------------------------------------------------------------------
+  NexN2.5_35B:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/Nex-N2.5-mini-Q4_K_M/nex-agi_Nex-N2.5-mini-Q4_K_M.gguf
+      --mmproj /models/Nex-N2.5-mini-Q4_K_M/mmproj-nex-agi_Nex-N2.5-mini-f16.gguf
+      --load-mode none
+      -c 131072 -ngl 99 -ncmoe 31
+      -b 4096 -ub 2048
+      --temp 0.7 --top-p 0.95 --top-k 40
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
+  # BigBang v1 35B-A3B (endless-frontier) — qwen3_5_moe multimodal. GGUF
+  # mradermacher Q4_K_M + mmproj f16. Sampling do generation_config
+  # oficial: temp 1.0 / top-k 20 / top-p 0.95.
+  # ---------------------------------------------------------------------
+  BigBangv1_35B:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/BigBang-v1-Q4_K_M/BigBang-v1.Q4_K_M.gguf
+      --mmproj /models/BigBang-v1-Q4_K_M/BigBang-v1.mmproj-f16.gguf
+      --load-mode none
+      -c 131072 -ngl 99 -ncmoe 31
+      -b 4096 -ub 2048
+      --temp 1.0 --top-p 0.95 --top-k 20
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
+  # K2 Horizon MoVA 36B-A4B (IFM) — arch k2_horizon (48 camadas: 3 densas
+  # + 45 MoE, 100 experts top-8 + shared + 64 experts MoVA top-4 — estes
+  # FICAM na GPU: o -ncmoe não os cobre), TEXTO puro (GGUF oficial sem
+  # mmproj). KV ENORME: 8 KV heads × 128 × 48 camadas = 192 KiB/tok em
+  # f16 (72 em q5_1) — 128k é impossível (KV 9,2 GB), teto validado 40k
+  # (sufixo _40k pela convenção). Reasoning com reasoning_effort (default
+  # high no template). Sampling do model card: temp 1.0 / top-p 0.95.
+  # Validado 2026-10-26 (serving real, c 40960, ncmoe 47, ub 2048):
+  # decode ~18,4 tok/s, prefill ~814 tok/s @1,2k, VRAM 10665 MiB
+  # (~1,6 GB de folga). ncmoe 34-42 OOMa de KV em qualquer ctx — o piso
+  # de GPU (~6,5 GB: embd 250k vocab + atenção + experts MoVA) domina.
+  # ---------------------------------------------------------------------
+  K2Horizon_36B_MoVA_40k:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/K2-Horizon-MoVA-36B-A4B-Q4_K_M/K2-Horizon-MoVA-36B-A4B-Q4_K_M.gguf
+      --load-mode none
+      -c 40960 -ngl 99 -ncmoe 47
+      -b 4096 -ub 2048
+      --temp 1.0 --top-p 0.95
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
   # ---------------------------------------------------------------------
   # Bonsai 2 27B (PrismML fork) — GGUF ternário PTQ1_0 (PQ2_0 removida em
   # 2026-10-13; mantida a quantização menor), movidos de

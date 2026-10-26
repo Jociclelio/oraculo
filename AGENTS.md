@@ -282,6 +282,11 @@ ctx 64k anterior (decode não muda com o ctx; prefill por token idêntico).
 | `Qwen3.6_35B_It_General` / `_It_Reasoning` | stock | 131072 | Instruct (sem/temp thinking); ncmoe 33; ub2048; VRAM 11172/11172 MiB (c/ mmproj) |
 | `Qwen3.6_35B_A3B_Hauhau_Aggressive` | stock | 131072 | Uncensored Aggressive, multimodal; ncmoe 29; ub2048 + `--load-mode none`; **prefill ~1150 tok/s, decode ~39 tok/s**; VRAM 10891 MiB; SEM MTP (GGUF sem tensors nextn — spec inaplicável; `--moe-cache-mib` testado e rejeitado: decode -21%) |
 | `Ornith1.5_35B_MTP` | stock | 131072 | agêntico (APEX Compact), ncmoe 29 + `--load-mode none` (faltava — regra 2); ub2048: prefill ~990 tok/s; VRAM 11538 MiB (c/ mmproj, visão confirmada — Baseten/Atomic Chat/repo mudler); aceitação ~0,80 |
+| `SageA1.5_35B` | stock | 131072 | InternScience Sage-A1.5 35B-A3B multimodal (arch qwen3_5_moe); GGUF oficial Q4_K_M + mmproj; ncmoe 31 + `--load-mode none` + ub 2048; thinking; **decode ~34 tok/s**; VRAM 9849 MiB; sampling temp 1.0 / top-p 0.95 / top-k 20 / presence 1.5; visão carregada, não testada; carga validada (2026-10-26) |
+| `Apodex1.1_35B` | stock | 131072 | Apodex 1.1 mini 35B-A3B multimodal (arch qwen3_5_moe; GGUF abenzerps — oficial publica NVFP4, sem GGUF); ncmoe 31; **decode ~39 tok/s** (mais rápido que o Qwen3.6 35B); VRAM 9849 MiB; temp 1.0 / top-k 20 / top-p 0.95 (2026-10-26) |
+| `NexN2.5_35B` | stock | 131072 | Nex-N2.5 mini 35B multimodal (arch qwen3_5_moe, GGUF bartowski + mmproj f16); ncmoe 31; **decode ~36 tok/s**; VRAM 10609 MiB; temp 0.7 / top-p 0.95 / top-k 40; thinking via reasoning_effort no template (2026-10-26) |
+| `BigBangv1_35B` | stock | 131072 | BigBang v1 35B-A3B multimodal (arch qwen3_5_moe, GGUF mradermacher + mmproj f16); ncmoe 31; **decode ~37 tok/s**; VRAM 10625 MiB; temp 1.0 / top-k 20 / top-p 0.95 (2026-10-26) |
+| `K2Horizon_36B_MoVA_40k` | stock | **40960** | IFM K2-Horizon MoVA 36B-A4B (arch `k2_horizon`, PR ggml-org#29535); TEXTO puro; **KV gigante** (8 KV heads × 128 × 48 camadas full-attention = 192 KiB/tok f16, 72 em q5_1) → 128k impossível, **teto validado 40k**; os 64 experts MoVA (top-4) FICAM na GPU (o `-ncmoe` não os cobre) — piso ~6,5 GB; ncmoe 47 + `--load-mode none` + ub 2048; **decode ~16-18 tok/s, prefill ~814 tok/s @1,2k; VRAM 10665 MiB**; reasoning_effort no template; temp 1.0 / top-p 0.95 (2026-10-26) |
 | `Ornith1.5_9B` | stock | 131072 | Ornith-1.5-9B Q4_K_M + mmproj BF16 (ornith-ai); variante edge DENSA da família (arch qwen35), raciocínio agêntico `<think/tool_call>`; head MTP embutida (nextn=1) → draft-mtp self-draft n=2; **decode ~48-52 tok/s, prefill ~1430-1580 tok/s, aceitação ~0,53-0,69**; VRAM 9862 MiB (2026-10-16) |
 | `Qwen3.5_9B_HauhauCS` | stock | 131072 | Qwen3.5-9B-Uncensored-HauhauCS-Aggressive Q4_K_M + mmproj BF16; denso (arch qwen35, no lugar da Ornith1.5_9B_Uncensored removida 2026-10-19); **SEM MTP** (header sem nextn); **decode ~52 tok/s, prefill 21k ~1671 tok/s**; VRAM 9088 MiB; visão carregada (2026-10-19) |
 | `MiMo2.6_9B` | stock | 131072 | MiMo-V2.6-Distill-Qwen-9B (XiaomiMiMo, distill em base Qwen3.5; arch qwen35, denso) Q4_K_M bartowski + mmproj f16 (ggml-org oficial só Q8_0 9,5 GB — não cabe com floor 128k); reasoning separado; **SEM MTP** (header sem nextn); **decode ~47-51 tok/s, prefill ~1800 tok/s @2,6k**; VRAM 9510 MiB; visão validada; sampling temp 0.6 / top-p 0.95 / top-k 20 (generation_config oficial) (2026-10-20) |
@@ -331,10 +336,16 @@ ganham a adicional quando aplicável.
   - MiniCPM-V 4.7 35B-A3B (256 experts top-8, GDN)
   - Qwen3.6-35B-A3B (todas as variantes: General, Code, It_*, Hauhau)
   - Ornith-1.5-35B (APEX Compact)
+  - Sage-A1.5 35B, Apodex-1.1 mini, Nex-N2.5 mini, BigBang v1
+    (arch qwen3_5_moe, batch 2026-10-26)
   - Nemotron-3.5-Bolt-74B-A9B (quant "24GB" ~sub-Q4, mas com offload;
     MoE 74B/9B, mmproj + draft DFlash LiLiCorr — entry `Nemotron3.5_Bolt_74B`)
   - Flint-40B-A2.5B (256 experts top-6 + shared; base e Heretic)
+  - K2-Horizon 36B MoVA (arch k2_horizon; entry `K2Horizon_36B_MoVA_40k`;
+    experts MoVA ficam na GPU — KV gigante limita o ctx a 40k)
   - Xing4.0-29B-A4B (MLA + mHC)
+  - Raon-1 mini 30B (KRAFTON): AVALIADO E BLOQUEADO 2026-10-26 — arch
+    `raon1_mini` não existe no llama.cpp master nem em fork conhecido.
 - **Tiny** — densos que cabem 100% na VRAM em ~4-bit (Q4_K_M/QAT):
   - Gemma4-12B (QAT ~int4, multimodal visão+áudio)
   - MiniCPM-V 4.7 1B
