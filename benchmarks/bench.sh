@@ -30,8 +30,7 @@ STOCK_IMG=${STOCK_IMG:-ghcr.io/ggml-org/llama.cpp:full-cuda}
 
 declare -A GGUF IMG MOE NCMOE MMPROJ UB B
 GGUF[Gemma4_12B]="gemma-4-12B-it-qat-UD-Q4_K_XL/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf"
-GGUF[Qwen3.6_35B_General]="unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf"
-GGUF[Qwen3.6_35B_Code]="unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf"
+GGUF[Qwen3.6_35B_A3B]="unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf"
 GGUF[Qwen3.6_35B_A3B_Hauhau_Aggressive]="Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf"
 GGUF[Ornith1.5_35B_MTP]="Ornith-1.5-35B-MTP-APEX-Compact/Ornith-1.5-35B-A3B-APEX-MTP-Compact.gguf"
 GGUF[LFM2.5_24B_A2B]="LFM2.5-24B-A2B-GGUF/LFM2.5-24B-A2B-Q4_K_M.gguf"

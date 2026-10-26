@@ -166,11 +166,14 @@ models:
     ttl: 1800
 
   # ---------------------------------------------------------------------
-  # Qwen 3.6 35B-A3B Thinking General (Q4_K_M + head MTP embutido) — MoE
+  # Qwen 3.6 35B-A3B Thinking (Q4_K_M + head MTP embutido) — MoE
   # GGUF: variante -MTP (tensors nextn validados no header) — speculative
   # decoding self-draft via --spec-type draft-mtp (sem --model-draft).
+  # Única entry do Qwen3.6 desde 2026-10-26 (General assumiu o zoo;
+  # Code/It_* removidas — variante MTP única cobre os casos; uncensored
+  # continua na entry Hauhau_Aggressive).
   # ---------------------------------------------------------------------
-  Qwen3.6_35B_General:
+  Qwen3.6_35B_A3B:
     cmd: |
       ${docker-pdcache}
       -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
@@ -183,62 +186,10 @@ models:
       --presence-penalty 1.5 --repeat-penalty 1.0
     cmdStop: ${docker-stop}
     ttl: 1800
-
-  # ---------------------------------------------------------------------
-  # Qwen 3.6 35B-A3B Thinking Code (Q4_K_M + head MTP) — temp 0.6, sem penalty
-  # ---------------------------------------------------------------------
-  Qwen3.6_35B_Code:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
-      --mmproj /models/unsloth_Qwen3.6_35B_A3B_MTP/mmproj-F16.gguf
-      --load-mode none
-      --spec-type draft-mtp --spec-draft-n-max 2
-      -c 131072 -ngl 99 -ncmoe 31
-      -b 4096 -ub 1024
-      --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
-      --presence-penalty 0.0 --repeat-penalty 1.0
-    cmdStop: ${docker-stop}
-    ttl: 1800
-    # VALIDADA em 2026-10-18 (prompt 21k, qwen35moe/GDN): unload (docker rm -f)
-    # + re-request → cache_n 21213/21217 (99,98%), prompt_n 4, prefill ~0,5 s
-    # (era 33 s); snapshot .centry 638 MiB (escrita 730 ms, leitura 765 ms,
-    # restore p/ GPU 48 ms). Rollout do macro para todas as entries stock no
-    # mesmo dia — ver regra 9.
-
-  # ---------------------------------------------------------------------
-  # Qwen 3.6 35B-A3B Instruct General (Q4_K_M + head MTP)
-  # ---------------------------------------------------------------------
-  Qwen3.6_35B_It_General:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
-      --mmproj /models/unsloth_Qwen3.6_35B_A3B_MTP/mmproj-F16.gguf
-      --load-mode none
-      --spec-type draft-mtp --spec-draft-n-max 2
-      -c 131072 -ngl 99 -ncmoe 33
-      -b 4096 -ub 2048
-      --temp 0.7 --top-p 0.8 --top-k 20 --min-p 0.0
-      --presence-penalty 1.5 --repeat-penalty 1.0
-    cmdStop: ${docker-stop}
-    ttl: 1800
-
-  # ---------------------------------------------------------------------
-  # Qwen 3.6 35B-A3B Instruct Reasoning (Q4_K_M + head MTP)
-  # ---------------------------------------------------------------------
-  Qwen3.6_35B_It_Reasoning:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
-      --mmproj /models/unsloth_Qwen3.6_35B_A3B_MTP/mmproj-F16.gguf
-      --load-mode none
-      --spec-type draft-mtp --spec-draft-n-max 2
-      -c 131072 -ngl 99 -ncmoe 33
-      -b 4096 -ub 2048
-      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
-      --presence-penalty 1.5 --repeat-penalty 1.0
-    cmdStop: ${docker-stop}
-    ttl: 1800
+    # VALIDADA em 2026-10-18 (prompt 21k, qwen35moe/GDN, como Qwen3.6_35B_Code):
+    # unload (docker rm -f) + re-request → cache_n 21213/21217 (99,98%),
+    # prompt_n 4, prefill ~0,5 s (era 33 s); snapshot .centry 638 MiB.
+    # Rollout do macro para todas as entries stock no mesmo dia — ver regra 9.
 
   # ---------------------------------------------------------------------
   # Ornith 1.5 35B-A3B MTP (APEX Compact, mudler) — acceptance ~0.80,
@@ -329,16 +280,29 @@ models:
   # (1 GB, draft separado → -ctkd/-ctvd f16, regra 5).
   # Sampling do model card: temp 1.0 / top-p 0.95.
   # ---------------------------------------------------------------------
+  # ---------------------------------------------------------------------
+  # Nemotron-3.5-Bolt 74B-A9B (NVIDIA) — arch nemotron_h_moe (88 blocos
+  # híbridos Mamba/atenção; KV pequeno → 128k ok). GGUF "24GB" + mmproj
+  # + draft DFlash LiLiCorr.
+  # Receita VALIDADA 2026-10-26 (serving real):
+  # - ncmoe 74/88: com o ncmoe 32 original a carga OOMava (experts de ~56
+  #   blocos ficavam na GPU). mmproj na CPU (--no-mmproj-offload, -1,7 GB)
+  #   para caber tudo @128k.
+  # - SEM draft: o DFlash medido com aceitação ~27% dava decode 9,2 tok/s
+  #   (overhead > ganho); sem draft: decode ~19 tok/s, prefill ~560 tok/s.
+  #   GGUF do draft (952 MB) segue em disco para reteste.
+  # - ub 2048 (com draft era ub 1024 — compute buffer).
+  # decode ~19 tok/s, prefill ~560 tok/s @2k; VRAM ~11060 MiB
+  # (~1,2 GB de folga). temp 1.0 / top-p 0.95 (model card).
+  # ---------------------------------------------------------------------
   Nemotron3.5_Bolt_74B:
     cmd: |
       ${docker-pdcache}
       -m /models/Nemotron3.5-Bolt-74B-A9B-24GB/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB.gguf
       --mmproj /models/Nemotron3.5-Bolt-74B-A9B-24GB/mmproj-NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB.gguf
-      --model-draft /models/Nemotron3.5-Bolt-74B-A9B-24GB/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB-LiLiCorr.gguf
-      --spec-type draft-dflash --spec-draft-n-max 6
+      --no-mmproj-offload
       --load-mode none
-      -c 131072 -ngl 99 -ncmoe 32
-      -ngld 99 -ctkd f16 -ctvd f16
+      -c 131072 -ngl 99 -ncmoe 74
       -b 4096 -ub 2048
       --temp 1.0 --top-p 0.95
     cmdStop: ${docker-stop}

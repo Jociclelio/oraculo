@@ -382,22 +382,22 @@ Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
 
 | Modelo | Contexto | Notas |
 |--------|----------|-------|
-| Gemma4_12B | 131072 | Multimodal (visão + áudio nativo) QAT |
-| LFM2.5_24B_A2B | 131072 | LiquidAI MoE 24B/2,45B raciocínio agêntico; ncmoe 20; **~45 tok/s, prefill ~1900 tok/s**; temp 0.1/top-k 50/rep 1.05 |
+| Gemma4_12B | 131072 | Multimodal (visão + áudio nativo) QAT; **~40 tok/s, prefill ~1250 tok/s** |
+| LFM2.5_24B_A2B | 131072 | LiquidAI MoE 24B/2,45B raciocínio agêntico; ncmoe 20; **~46 tok/s, prefill ~1640 tok/s**; temp 0.1/top-k 50/rep 1.05 |
+| LFM2.5_24B_A2B_IQ2_M | 131072 | **LFM2.5 em IQ2_M (7,5 GB) — 100% GPU**; decode ~106 tok/s (o mais rápido do zoo), prefill ~2960 tok/s |
 | MiniCPM-V_4.7_35B | 131072 | **MiniCPM-V 4.7 35B-A3B** multimodal (OpenBMB; backbone Qwen3.6); sem MTP; ncmoe 32 + ub 4096; **~32-35 tok/s, prefill ~1600 tok/s**; visão validada |
-| MiniCPM-V_4.7_1B | 131072 | **MiniCPM-V 4.7 1B** multimodal (OpenBMB); variante edge densa; **decode ~200 tok/s, prefill ~8,5k tok/s**; visão validada |
-| Ornith1.5_9B | 131072 | **Ornith-1.5-9B** (ornith-ai) denso, raciocínio agêntico; MTP self-draft n=2; **decode ~50 tok/s, prefill ~1,5k tok/s, aceitação ~0,53-0,69** |
-| Qwen3.6_35B_General | 131072 | MoE (32 experts CPU) / head MTP (draft-mtp n=2) / aceitação ~82-93% |
-| Qwen3.6_35B_Code | 131072 | MoE (29 experts CPU) / head MTP / temp=0.6 / **~27 tok/s, prefill ~890 tok/s** |
-| Qwen3.6_35B_It_General / _It_Reasoning | 131072 | Instruct (sem/temp thinking); MoE 32 experts CPU |
+| MiniCPM-V_4.7_1B | 131072 | **MiniCPM-V 4.7 1B** multimodal (OpenBMB); variante edge densa; **decode ~248 tok/s, prefill ~10,4k tok/s**; visão validada |
+| Ornith1.5_9B | 131072 | **Ornith-1.5-9B** (ornith-ai) denso, raciocínio agêntico; MTP self-draft n=2; **decode ~58 tok/s, prefill ~1600 tok/s** |
+| Qwen3.6_35B_A3B | 131072 | MoE (32 experts CPU) / head MTP (draft-mtp n=2) / aceitação ~82-93% — única entry Qwen3.6 |
 | Qwen3.6_35B_A3B_Hauhau_Aggressive | 131072 | Uncensored Aggressive, multimodal; ncmoe 29; **prefill ~1150 tok/s, decode ~39 tok/s** |
-| Ornith1.5_35B_MTP | 131072 | Agêntico (APEX Compact); MoE 28 experts CPU; aceitação ~0,80 |
+| Ornith1.5_35B_MTP | 131072 | Agêntico (APEX Compact); MoE 28 experts CPU; MTP (aceitação ~38%); **~32 tok/s, prefill ~1140 tok/s** |
+| Nemotron3.5_Bolt_74B | 131072 | **Nemotron-3.5-Bolt 74B-A9B** (NVIDIA, híbrido Mamba); ncmoe 74 + mmproj na CPU; sem draft; **~19 tok/s, prefill ~560 tok/s** |
 | SageA1.5_35B | 131072 | **Sage-A1.5 35B-A3B** (InternScience) multimodal; thinking; **~34 tok/s** |
 | Apodex1.1_35B | 131072 | **Apodex 1.1 mini 35B-A3B** multimodal; **~39 tok/s** — o mais rápido do zoológico 35B |
 | NexN2.5_35B | 131072 | **Nex-N2.5 mini 35B** multimodal; reasoning_effort; **~36 tok/s** |
 | BigBangv1_35B | 131072 | **BigBang v1 35B-A3B** multimodal; thinking; **~37 tok/s** |
-| bonsai-27b | 131072 | **Bonsai 2 27B PTQ1_0** + mmproj Q8_0 (visão) — engine PrismML; **24,5 tok/s** @ 64k |
-| Xing4.0_29B_A4B | 131072 | MoE 29B/4B + MLA + mHC — engine Xing (fork shuxiaoqiong); ncmoe 27; **~12,5 tok/s** @ 64k |
+| bonsai-27b | 131072 | **Bonsai 2 27B PTQ1_0** + mmproj Q8_0 (visão) — engine PrismML; **~27 tok/s, prefill ~530 tok/s** |
+| Xing4.0_29B_A4B | 131072 | MoE 29B/4B + MLA + mHC — engine Xing (fork shuxiaoqiong); ncmoe 27; **~28 tok/s, prefill ~580 tok/s** |
 
 ### Categorias
 
