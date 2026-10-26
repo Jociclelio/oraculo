@@ -392,10 +392,10 @@ Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
 | Qwen3.6_35B_A3B_Hauhau_Aggressive | 131072 | Uncensored Aggressive, multimodal; ncmoe 29; **prefill ~1150 tok/s, decode ~39 tok/s** |
 | Ornith1.5_35B_MTP | 131072 | Agêntico (APEX Compact); MoE 28 experts CPU; MTP (aceitação ~38%); **~32 tok/s, prefill ~1140 tok/s** |
 | Nemotron3.5_Bolt_74B | 131072 | **Nemotron-3.5-Bolt 74B-A9B** (NVIDIA, híbrido Mamba); ncmoe 74 + mmproj na CPU; sem draft; **~19 tok/s, prefill ~560 tok/s** |
-| SageA1.5_35B | 131072 | **Sage-A1.5 35B-A3B** (InternScience) multimodal; thinking; **~34 tok/s** |
-| Apodex1.1_35B | 131072 | **Apodex 1.1 mini 35B-A3B** multimodal; **~39 tok/s** — o mais rápido do zoológico 35B |
-| NexN2.5_35B | 131072 | **Nex-N2.5 mini 35B** multimodal; reasoning_effort; **~36 tok/s** |
-| BigBangv1_35B | 131072 | **BigBang v1 35B-A3B** multimodal; thinking; **~37 tok/s** |
+| SageA1.5_35B | 131072 | **Sage-A1.5 35B-A3B** (InternScience) multimodal; thinking; **~34 tok/s, prefill ~1000 tok/s** |
+| Apodex1.1_35B | 131072 | **Apodex 1.1 mini 35B-A3B** multimodal; **~39 tok/s, prefill ~940 tok/s** — o mais rápido do zoológico 35B |
+| NexN2.5_35B | 131072 | **Nex-N2.5 mini 35B** multimodal; reasoning_effort; **~36 tok/s, prefill ~900 tok/s** |
+| BigBangv1_35B | 131072 | **BigBang v1 35B-A3B** multimodal; thinking; **~37 tok/s, prefill ~970 tok/s** |
 | bonsai-27b | 131072 | **Bonsai 2 27B PTQ1_0** + mmproj Q8_0 (visão) — engine PrismML; **~27 tok/s, prefill ~530 tok/s** |
 | Xing4.0_29B_A4B | 131072 | MoE 29B/4B + MLA + mHC — engine Xing (fork shuxiaoqiong); ncmoe 27; **~28 tok/s, prefill ~580 tok/s** |
 
