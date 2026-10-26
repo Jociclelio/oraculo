@@ -6,6 +6,22 @@ sobe um container Docker efêmero de llama.cpp por modelo sob demanda) +
 (`:2785`). Hardware alvo: **RTX 3060 12 GB** (GPU **compartilhada** com o
 desktop pessoal) + 32 GB RAM + NVMe.
 
+**GPU unlock (2026-10-24)**: kmod `gpu-unlock` 1.0.0 (Zagitta/gpu-unlock,
+pacotes Arch `gpu-unlock-dkms` + `gpu-unlock-firmware` em `/home/jocic/gpu-unlock`)
+habilita a taxa plena de BF16 tensor da GA106 (estilo profissional) ANTES do
+driver NVIDIA bindar (roda no initramfs; opt-in via cmdline
+`gpu_unlock.targets=all` na entry systemd-boot `cachyos-unlock.conf`). Medido:
+BF16 GEMM 8192³ FP32-accum 47 TFLOPS (stock travado ~25 — metade do FP16).
+Ganho esperado: prefill de modelos DENSOS (Gemma4_12B, LFM IQ2_M, MiniCPM 1B,
+bonsai-9b) e ComfyUI/DiT; NÃO muda prefill das entries MoE `-ncmoe` (gargalo
+é streaming de pesos da RAM, regra 7) nem decode (banda de memória).
+ATENÇÃO: o drop-in `/etc/mkinitcpio.conf.d/zz-gpu-unlock.conf` foi editado
+localmente para remover o sufixo `?` do nome do módulo — com `?`, o
+systemd-modules-load do initramfs falha a achar `gpu_unlock?` (hook `systemd`
+do mkinitcpio escreve MODULES verbatim) e o unlock não roda. Se atualizar o
+pacote, reaplicar o sed. `default @saved` no loader.conf memoriza a entry do
+boot anterior.
+
 **Regra do repo**: toda mudança deve ser refletida na documentação —
 `docker-compose.yml` → `DOCKER.md`; `llama-swap/config.yaml` ou modelos →
 `AGENTS.md`; `manage.sh`/fluxo de uso → `README.md`; requisitos → `README.md`.
