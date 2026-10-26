@@ -639,8 +639,8 @@ models:
   # DESCARTADA (medido 2026-10-12): aceitação ~10% e decode 9,5 tok/s
   # (vs 32-35 sem draft) — o compute buffer do draft (~3,9 GB, logits
   # 248k vocab × ubatch) também não cabe na VRAM junto do target. O GGUF
-  # do draft (413 MB) ficou em models/MiniCPM-V-4.7-35B-A3B-DSpark/ para
-  # reteste futuro (conversão: convert_hf_to_gguf.py --target-model-dir
+  # do draft (413 MB) foi APAGADO em 2026-10-26 (limpeza de disco; para
+  # reteste, refazer a conversão convert_hf_to_gguf.py --target-model-dir
   # <dir com config/tokenizer do target>).
   # Requer llama.cpp >= PR #29416 (merge 2026-10-10): visor minicpmv4_7 +
   # rope.section_order zyxt — imagem stock atualizada p/ build 11561

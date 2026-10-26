@@ -374,9 +374,10 @@ hf download openbmb/MiniCPM-V-4.7-35B-A3B tokenizer.json tokenizer_config.json \
 
 Resultado: aceitação ~10% e decode 9,5 tok/s (vs 32-35 sem draft); o compute
 buffer do draft (~3,9 GB — logits de vocab 248k × ubatch) também não cabe na
-VRAM junto do target (`-devd none`/`-ngld 0` abortam no scheduler). O GGUF do
-draft (413 MB) ficou em `models/MiniCPM-V-4.7-35B-A3B-DSpark/` para reteste
-futuro. A entry serve **sem** speculative decoding.
+VRAM junto do target (`-devd none`/`-ngld 0` abortam no scheduler). O GGUF
+do draft (413 MB) foi **apagado em 2026-10-26** (limpeza de disco) — para
+reteste, refazer a conversão acima. A entry serve **sem** speculative
+decoding.
 
 ---
 
