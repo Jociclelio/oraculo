@@ -429,6 +429,62 @@ Detalhes e justificativas em [`AGENTS.md`](AGENTS.md#categorias-de-modelos-por-m
 - **Uncensored**: Qwen3.6-35B Hauhau, Qwen3.5-9B HauhauCS, Flint-40B Heretic,
   Bonsai 27B Heretic, Bonsai 9B Uncensored
 
+### IZ — Índice Zoo (métrica de desempenho, 0-100+)
+
+Nota de desempenho que combina decode e ingestão da janela pelo **elo mais
+fraco** (`min` dos fatores): um modelo é tão usável quanto o pior dos dois.
+Cada fator vira uma nota 0-1+ por interpolação piecewise com 3 âncoras de
+usabilidade, e a IZ extrapola acima do "excelente" (notas >100 = superior):
+
+| Ancoragem | Decode | Tempo p/ ler a janela toda |
+|---|---|---|
+| **Não usável** | 25 t/s | 320 s (~3 min) |
+| **Confortável** | 50 t/s | 128 s |
+| **Excelente (IZ = 100)** | 100 t/s | 32 s (⇔ 4096 t/s @128k) |
+
+```
+D(d):  d≤25 → 0,25·(d/25)   |  25-50 → 0,25+0,5·(d-25)/25
+       50-100 → 0,75+0,25·(d-50)/50   |  d>100 → 1,0+(d-100)/100
+P(t):  t≥320 → 0,25·(320/t) |  128-320 → 0,75-0,5·(t-128)/192
+       32-128 → 0,75+0,25·(128-t)/96   |  t<32 → 1,0+(32-t)/32
+t_janela = ctx_tokens ÷ prefill_tps  (janela PRÓPRIA do modelo)
+IZ = 100 × min(D, P)
+```
+
+Propriedades: **IZ ≥ 75 ⇔ decode ≥ 50 t/s E ingestão ≤ 128 s** (confortável
+nos dois); **IZ ≥ 100 ⇔ decode ≥ 100 t/s E ingestão ≤ 32 s**; qualquer fator
+na zona não-usável derruba a nota para <25 — o outro fator não salva.
+
+| # | Entry | Decode | t p/ ler a janela | **IZ** | O que limita |
+|---|---|---|---|---|---|
+| 1 | MiniCPM-V_4.7_1B | 248 t/s | 12,6 s (128k) | **160,7** | — (superior) |
+| 2 | LFM2.5_24B_A2B_IQ2_M | 106 t/s | 44,3 s (128k) | **96,8** | prefill quase excelente |
+| 3 | Ornith1.5_9B | 58 t/s | 81,9 s | **79,0** | decode |
+| 4 | Qwen3.5_9B_HauhauCS | 55 t/s | 72,8 s | **77,5** | decode |
+| 5 | MiMo2.6_9B | 53 t/s | 81,2 s | **76,5** | decode |
+| 6 | bonsai-9b-uncensored | 78 t/s | 126,0 s (192k) | **75,5** | prefill |
+| 7 | bonsai-9b | 84 t/s | 128,5 s (192k) | **74,9** | prefill |
+| 8 | Gemma4_12B | 40 t/s | 104,9 s | **70,0** | decode |
+| 9 | LFM2.5_24B_A2B | 46 t/s | 79,9 s | **67,0** | decode |
+| 10 | Flint_40B_A2.5B_Uncensored | 43 t/s | 148,9 s | **61,0** | equilibrado-médio |
+| 11 | Flint_40B_A2.5B | 41 t/s | 100,8 s | **57,0** | decode |
+| 12 | Qwen3.6_35B_A3B_Hauhau_Aggressive | 41 t/s | 119,2 s | **57,0** | decode |
+| 13 | Apodex1.1_35B | 39 t/s | 139,4 s | **53,0** | decode |
+| 14 | BigBangv1_35B | 37 t/s | 135,1 s | **49,0** | decode |
+| 15 | NexN2.5_35B | 36 t/s | 145,6 s | **47,0** | decode |
+| 16 | MiniCPM-V_4.7_35B | 36 t/s | 114,5 s | **47,0** | decode |
+| 17 | Qwen3.6_35B_A3B | 35 t/s | 131,1 s | **45,0** | decode |
+| 18 | SageA1.5_35B | 34 t/s | 131,1 s | **43,0** | decode |
+| 19 | Ornith1.5_35B_MTP | 32 t/s | 115,0 s | **39,0** | decode |
+| 20 | Xing4.0_29B_A4B | 28 t/s | 226,0 s | **31,0** | fraco nos dois |
+| 21 | bonsai-27b | 27 t/s | 247,3 s | **29,0** | fraco nos dois |
+| 22 | bonsai-27b-heretic | 26 t/s | 247,3 s | **27,0** | fraco nos dois |
+| 23 | Nemotron3.5_Bolt_74B | 19 t/s | 234,1 s | **19,0** | **não usável** (decode < 25) |
+
+> Calculada com os números pós-unlock da tabela acima (prefill @2k —
+> otimista: híbridos degradam com o contexto; as curvas reais estão em
+> [`benchmarks/`](benchmarks/)). Ordenada por IZ.
+
 > **Contexto e KV**: entry SEM sufixo = **128k** (floor, `-c 131072`),
 > viabilizado pelo KV cache quantizado `-ctk q5_1 -ctv q5_1` (tipo ÚNICO —
 > K/V misto quebra os híbridos GDN, ver AGENTS.md regra 10) + `-fa on` em
