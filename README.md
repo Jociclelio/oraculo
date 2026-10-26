@@ -378,26 +378,39 @@ carregado (ttl de 5 min). Também funciona sem `watch`, para consulta única.
 ## Modelos Disponíveis
 
 Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
-(26 entries: 21 stock/pdcache + 4 bonsai PrismML + 1 Xing).
+(23 entries: 18 stock/pdcache + 4 bonsai PrismML + 1 Xing).
 
-| Modelo | Contexto | Notas |
-|--------|----------|-------|
-| Gemma4_12B | 131072 | Multimodal (visão + áudio nativo) QAT; **~40 tok/s, prefill ~1250 tok/s** |
-| LFM2.5_24B_A2B | 131072 | LiquidAI MoE 24B/2,45B raciocínio agêntico; ncmoe 20; **~46 tok/s, prefill ~1640 tok/s**; temp 0.1/top-k 50/rep 1.05 |
-| LFM2.5_24B_A2B_IQ2_M | 131072 | **LFM2.5 em IQ2_M (7,5 GB) — 100% GPU**; decode ~106 tok/s (o mais rápido do zoo), prefill ~2960 tok/s |
-| MiniCPM-V_4.7_35B | 131072 | **MiniCPM-V 4.7 35B-A3B** multimodal (OpenBMB; backbone Qwen3.6); sem MTP; ncmoe 32 + ub 4096; **~32-35 tok/s, prefill ~1600 tok/s**; visão validada |
-| MiniCPM-V_4.7_1B | 131072 | **MiniCPM-V 4.7 1B** multimodal (OpenBMB); variante edge densa; **decode ~248 tok/s, prefill ~10,4k tok/s**; visão validada |
-| Ornith1.5_9B | 131072 | **Ornith-1.5-9B** (ornith-ai) denso, raciocínio agêntico; MTP self-draft n=2; **decode ~58 tok/s, prefill ~1600 tok/s** |
-| Qwen3.6_35B_A3B | 131072 | MoE (32 experts CPU) / head MTP (draft-mtp n=2) / aceitação ~82-93% — única entry Qwen3.6 |
-| Qwen3.6_35B_A3B_Hauhau_Aggressive | 131072 | Uncensored Aggressive, multimodal; ncmoe 29; **prefill ~1150 tok/s, decode ~39 tok/s** |
-| Ornith1.5_35B_MTP | 131072 | Agêntico (APEX Compact); MoE 28 experts CPU; MTP (aceitação ~38%); **~32 tok/s, prefill ~1140 tok/s** |
-| Nemotron3.5_Bolt_74B | 131072 | **Nemotron-3.5-Bolt 74B-A9B** (NVIDIA, híbrido Mamba); ncmoe 74 + mmproj na CPU; sem draft; **~19 tok/s, prefill ~560 tok/s** |
-| SageA1.5_35B | 131072 | **Sage-A1.5 35B-A3B** (InternScience) multimodal; thinking; **~34 tok/s, prefill ~1000 tok/s** |
-| Apodex1.1_35B | 131072 | **Apodex 1.1 mini 35B-A3B** multimodal; **~39 tok/s, prefill ~940 tok/s** — o mais rápido do zoológico 35B |
-| NexN2.5_35B | 131072 | **Nex-N2.5 mini 35B** multimodal; reasoning_effort; **~36 tok/s, prefill ~900 tok/s** |
-| BigBangv1_35B | 131072 | **BigBang v1 35B-A3B** multimodal; thinking; **~37 tok/s, prefill ~970 tok/s** |
-| bonsai-27b | 131072 | **Bonsai 2 27B PTQ1_0** + mmproj Q8_0 (visão) — engine PrismML; **~27 tok/s, prefill ~530 tok/s** |
-| Xing4.0_29B_A4B | 131072 | MoE 29B/4B + MLA + mHC — engine Xing (fork shuxiaoqiong); ncmoe 27; **~28 tok/s, prefill ~580 tok/s** |
+Medições **pós-unlock** (2026-10-26, gpu-unlock BF16 ativo): decode = 200
+tokens gerados com ctx ~0; prefill = prompt sintético @2k (`n_predict=1`);
+VRAM = pico `nvidia-smi` (total, incl. ~800 MiB do display) na carga real
+@128k. Decode @ctx longo tende a cair nos híbridos (curvas em
+[`benchmarks/`](benchmarks/)).
+
+| Entry | Ctx | Decode | Prefill @2k | VRAM | Categorias | Notas |
+|-------|-----|--------|-------------|------|------------|-------|
+| Qwen3.6_35B_A3B | 131072 | ~35 tok/s | ~1000 tok/s | 11200 MiB | SmallMoE | thinking + head MTP (aceitação ~57%); multimodal; **única entry Qwen3.6** (Code/It_* removidas 2026-10-26) |
+| Qwen3.6_35B_A3B_Hauhau_Aggressive | 131072 | ~41 tok/s | ~1100 tok/s | 11240 MiB | SmallMoE + Uncensored | multimodal; sem MTP |
+| LFM2.5_24B_A2B | 131072 | ~46 tok/s | ~1640 tok/s | 10602 MiB | SmallMoE | raciocínio agêntico; temp 0.1/top-k 50/rep 1.05 |
+| LFM2.5_24B_A2B_IQ2_M | 131072 | **~106 tok/s** | ~2960 tok/s | 10632 MiB | SmallMoE + SuperCompressed | 100% GPU (7,5 GB); **o mais rápido do zoo** |
+| MiniCPM-V_4.7_35B | 131072 | ~36 tok/s | ~1150-1620 tok/s | 10598 MiB | SmallMoE | multimodal; visão validada; ncmoe 32 + ub 4096 |
+| SageA1.5_35B | 131072 | ~34 tok/s | ~1000 tok/s | 9849 MiB | SmallMoE | multimodal; thinking (consome max_tokens) |
+| Apodex1.1_35B | 131072 | ~39 tok/s | ~940 tok/s | 9849 MiB | SmallMoE | multimodal; o mais rápido do zoo 35B |
+| NexN2.5_35B | 131072 | ~36 tok/s | ~900 tok/s | 10609 MiB | SmallMoE | multimodal; thinking via reasoning_effort |
+| BigBangv1_35B | 131072 | ~37 tok/s | ~970 tok/s | 10625 MiB | SmallMoE | multimodal; thinking |
+| Ornith1.5_35B_MTP | 131072 | ~32 tok/s | ~1140 tok/s | 11564 MiB | SmallMoE | multimodal; MTP self-draft (aceitação ~38%); agêntico |
+| Flint_40B_A2.5B | 131072 | ~41 tok/s | ~1300 tok/s | 10734 MiB | SmallMoE | código agêntico; texto puro; ub 4096 (calibração) |
+| Flint_40B_A2.5B_Uncensored | 131072 | ~43 tok/s | ~880 tok/s | 10764 MiB | SmallMoE + Uncensored | texto puro; reasoning-budget ativo |
+| Nemotron3.5_Bolt_74B | 131072 | ~16-19 tok/s | ~560 tok/s | ~11100 MiB | SmallMoE | híbrido Mamba (arch `nemotron_h_moe`); ncmoe 74 + mmproj na CPU; sem draft |
+| Xing4.0_29B_A4B | 131072 | ~28 tok/s | ~580 tok/s | 10916 MiB | SmallMoE | MLA + mHC; engine Xing dedicada (fork pinado) |
+| Gemma4_12B | 131072 | ~40 tok/s | ~1250 tok/s | 9314 MiB | Tiny | multimodal (visão + áudio nativo); QAT; thinking |
+| MiniCPM-V_4.7_1B | 131072 | **~248 tok/s** | **~10,4k tok/s** | 10620 MiB | Tiny | multimodal; visão validada; recorde de prefill do zoo |
+| Ornith1.5_9B | 131072 | ~58 tok/s | ~1600 tok/s | 10244 MiB | Tiny | multimodal; MTP self-draft n=2; agêntico |
+| Qwen3.5_9B_HauhauCS | 131072 | ~55 tok/s | ~1800 tok/s | 10255 MiB | Tiny + Uncensored | multimodal |
+| MiMo2.6_9B | 131072 | ~53 tok/s | ~1615 tok/s | 9508 MiB | Tiny | multimodal; reasoning separado |
+| bonsai-27b | 131072 | ~27 tok/s | ~530 tok/s | 10538 MiB | SuperCompressed | PTQ1_0 ternário; engine PrismML; KV q4_0; visão validada |
+| bonsai-27b-heretic | 131072 | ~26 tok/s | ~530 tok/s | 10544 MiB | SuperCompressed + Uncensored | sem pdcache/sleep (patch só no master) |
+| bonsai-9b | 196608 | ~84 tok/s | ~1530 tok/s | 10870 MiB | SuperCompressed | PTQ1_0 ternário; KV bf16 @192k; visão validada |
+| bonsai-9b-uncensored | 196608 | ~78 tok/s | ~1560 tok/s | 10886 MiB | SuperCompressed + Uncensored | LoRA AtomicChat rank-1 (3,2 MB); thinking pesado |
 
 ### Categorias
 
@@ -419,8 +432,8 @@ Detalhes e justificativas em [`AGENTS.md`](AGENTS.md#categorias-de-modelos-por-m
 > **Contexto e KV**: entry SEM sufixo = **128k** (floor, `-c 131072`),
 > viabilizado pelo KV cache quantizado `-ctk q5_1 -ctv q5_1` (tipo ÚNICO —
 > K/V misto quebra os híbridos GDN, ver AGENTS.md regra 10) + `-fa on` em
-> todas as entries. Modelo que não alcança 128k =
-> sufixo `_XXk` com o maior contexto validado por carga real. Ver
+> todas as entries. **Modelo que não alcança 128k é removido do zoo**
+> (política 2026-10-26; precedente: K2-Horizon 40k). Ver
 > [`AGENTS.md`](AGENTS.md) (regra 10).
 
 > **Strata (removida 2026-10-14)**: os pesos (86G) foram apagados na
