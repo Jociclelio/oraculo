@@ -113,7 +113,11 @@ macros:
   # - Cache em bind mount ./data/llama-pdcache (persistente, gitignored).
   #   O guard torna o diretório compartilhável entre entries/modelos —
   #   entradas incompatíveis são ignoradas com segurança.
-  # - Budget 40 GiB (NVMe tinha 391 GiB livres em 2026-10-17).
+  # - Budget 12 GiB (reduzido de 40 GiB em 2026-10-26 — o cache havia
+  #   crescido até o teto antigo num NVMe agora com ~98 GiB livres; o
+  #   eviction no teto é LRU e os snapshots são reconstruídos on-demand).
+  #   NÃO mover para /tmp: tmpfs de 16 GB em RAM — competiria com os ~22 GB
+  #   de pesos fixados (--load-mode none) e sumiria no reboot.
   # - --checkpoint-min-step 2048: checkpoints em RAM a cada ~2k tokens de
   #   prompt (turno agêntico típico) — o default 8192 é grosso demais; são
   #   eles que vão para o snapshot em disco.
@@ -136,7 +140,7 @@ macros:
     --cache-reuse 256 --cache-ram 1024
     --sleep-idle-seconds 180
     --slot-save-path /kvcache
-    --prompt-cache-disk-budget 40
+    --prompt-cache-disk-budget 12
     --checkpoint-min-step 2048
     --ctx-checkpoints 16
 
