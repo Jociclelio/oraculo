@@ -395,6 +395,21 @@ Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
 | bonsai-27b | 131072 | **Bonsai 2 27B PTQ1_0** + mmproj Q8_0 (visão) — engine PrismML; **24,5 tok/s** @ 64k |
 | Xing4.0_29B_A4B | 131072 | MoE 29B/4B + MLA + mHC — engine Xing (fork shuxiaoqiong); ncmoe 27; **~12,5 tok/s** @ 64k |
 
+### Categorias
+
+Por **modelo** (não por entry); um modelo pode ter mais de uma categoria.
+Detalhes e justificativas em [`AGENTS.md`](AGENTS.md#categorias-de-modelos-por-modelo-não-por-entry).
+
+- **SmallMoE** (MoE com offload de experts p/ RAM): LFM2.5-24B-A2B,
+  MiniCPM-V 4.7 35B, Qwen3.6-35B, Ornith-1.5-35B, Nemotron-3.5-Bolt-74B,
+  Flint-40B, Xing4.0-29B
+- **Tiny** (cabem 100% na VRAM em ~4-bit): Gemma4-12B, MiniCPM-V 4.7 1B,
+  Ornith-1.5-9B, Qwen3.5-9B, MiMo-V2.6-9B
+- **SuperCompressed** (sub-Q4_K_M e 100% VRAM): LFM2.5-24B-A2B (IQ2_M),
+  Bonsai 2 27B, Bonsai 2 9B (PTQ1_0 ternários)
+- **Uncensored**: Qwen3.6-35B Hauhau, Qwen3.5-9B HauhauCS, Flint-40B Heretic,
+  Bonsai 27B Heretic, Bonsai 9B Uncensored
+
 > **Contexto e KV**: entry SEM sufixo = **128k** (floor, `-c 131072`),
 > viabilizado pelo KV cache quantizado `-ctk q5_1 -ctv q5_1` (tipo ÚNICO —
 > K/V misto quebra os híbridos GDN, ver AGENTS.md regra 10) + `-fa on` em

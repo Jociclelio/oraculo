@@ -307,6 +307,39 @@ ctx 64k anterior (decode não muda com o ctx; prefill por token idêntico).
 > (mesma arch qwen35moe, aceitação MTP ~0,62 inferior) e uma das entries
 > mais pesadas em VRAM/disco.
 
+## Categorias de modelos (por MODELO, não por entry)
+
+Um modelo pode pertencer a mais de uma categoria. Variantes do mesmo modelo
+(GGUF/LoRA diferentes, ex.: base vs Heretic) herdam a categoria do modelo e
+ganham a adicional quando aplicável.
+
+- **SmallMoE** — MoE que PRECISA de offload de experts p/ RAM (`--load-mode
+  none` + `-ncmoe`, regra 2); não cabem inteiras na VRAM:
+  - LFM2.5-24B-A2B (64 experts top-4)
+  - MiniCPM-V 4.7 35B-A3B (256 experts top-8, GDN)
+  - Qwen3.6-35B-A3B (todas as variantes: General, Code, It_*, Hauhau)
+  - Ornith-1.5-35B (APEX Compact)
+  - Nemotron-3.5-Bolt-74B-A9B (quant "24GB" ~sub-Q4, mas com offload;
+    MoE 74B/9B, mmproj + draft DFlash LiLiCorr — entry `Nemotron3.5_Bolt_74B`)
+  - Flint-40B-A2.5B (256 experts top-6 + shared; base e Heretic)
+  - Xing4.0-29B-A4B (MLA + mHC)
+- **Tiny** — densos que cabem 100% na VRAM em ~4-bit (Q4_K_M/QAT):
+  - Gemma4-12B (QAT ~int4, multimodal visão+áudio)
+  - MiniCPM-V 4.7 1B
+  - Ornith-1.5-9B (MTP self-draft)
+  - Qwen3.5-9B (HauhauCS)
+  - MiMo-V2.6-Distill-Qwen-9B
+- **SuperCompressed** — quantização ABAIXO de Q4_K_M e ainda assim 100% VRAM:
+  - LFM2.5-24B-A2B na variante unsloth IQ2_M (7,5 GB, sem offload)
+  - Bonsai 2 27B (PTQ1_0 ternário, engine PrismML) — base e Heretic
+  - Bonsai 2 9B (PTQ1_0 ternário) — base e Uncensored (LoRA AtomicChat)
+- **Uncensored** — sem censura (orthogonal às outras categorias):
+  - Qwen3.6-35B-A3B Uncensored Hauhau Aggressive (também SmallMoE)
+  - Qwen3.5-9B Uncensored HauhauCS (também Tiny)
+  - Flint-40B-A2.5B Uncensored Heretic (também SmallMoE)
+  - Bonsai 2 27B Heretic (também SuperCompressed)
+  - Bonsai 2 9B Uncensored LoRA AtomicChat (também SuperCompressed)
+
 Relevância para servir (uso agêntico/opencode): **alta** = Qwen3.6_35B_Code/General,
 bonsai-27b,
 MiniCPM-V_4.7_35B, Gemma4_12B, LFM2.5_24B_A2B; **média** =
