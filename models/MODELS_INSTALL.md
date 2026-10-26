@@ -106,9 +106,9 @@ usando uma das macros — `docker-stock` (llama.cpp oficial),
 
 **Convenção de contexto no nome da entry** (validar VRAM por carga real):
 entry sem sufixo = 128k (floor, `-c 131072`; o KV quantizado
-`-ctk q5_1 -ctv iq4_nl` dos macros é o que viabiliza isso). Modelo que não
-alcança 128k = sufixo `_XXk` com o maior contexto validado
-(ex.: `Saluki27B_Qwen3.8_32k`).
+`-ctk q5_1 -ctv q5_1` dos macros é o que viabiliza isso). Modelo que não
+alcança 128k é **removido** (política 2026-10-26 — precedente:
+K2-Horizon 40k).
 
 ```yaml
   NOME_DO_MODELO:
@@ -506,10 +506,6 @@ hf download bartowski/nex-agi_Nex-N2.5-mini-GGUF \
 hf download mradermacher/BigBang-v1-GGUF \
   BigBang-v1.Q4_K_M.gguf BigBang-v1.mmproj-f16.gguf \
   --local-dir models/BigBang-v1-Q4_K_M
-
-hf download IFM/K2-Horizon-MoVA-36B-A4B-GGUF \
-  K2-Horizon-MoVA-36B-A4B-Q4_K_M.gguf \
-  --local-dir models/K2-Horizon-MoVA-36B-A4B-Q4_K_M
 ```
 
 | Entry | Modelo (origem GGUF) | Sampling oficial | Medido 2026-10-26 |
@@ -518,14 +514,15 @@ hf download IFM/K2-Horizon-MoVA-36B-A4B-GGUF \
 | `Apodex1.1_35B` | Apodex-1.1 mini (abenzerps; oficial = NVFP4) | temp 1.0 / top-k 20 / top-p 0.95 | decode ~39 tok/s; VRAM 9849 MiB |
 | `NexN2.5_35B` | Nex-N2.5 mini (bartowski) | temp 0.7 / top-p 0.95 / top-k 40 | decode ~36 tok/s; VRAM 10609 MiB |
 | `BigBangv1_35B` | BigBang v1 (mradermacher) | temp 1.0 / top-k 20 / top-p 0.95 | decode ~37 tok/s; VRAM 10625 MiB |
-| `K2Horizon_36B_MoVA_40k` | K2-Horizon MoVA (oficial IFM) | temp 1.0 / top-p 0.95 | decode ~16-18 tok/s; prefill ~814 tok/s; VRAM 10665 MiB |
 
-> **K2 Horizon — entry `_40k` (quebra o floor 128k)**: arch `k2_horizon`
-> (suporte no llama.cpp desde PR ggml-org#29535). 48 camadas de atenção
-> completa com 8 KV heads × 128 → **192 KiB/tok em f16** (72 em q5_1):
-> 128k pediria 9,2 GB só de KV. Além disso os 64 experts "MoVA" (top-4)
-> ficam na GPU (o `-ncmoe` cobre só os 100 experts do FFN) — piso de
-> ~6,5 GB. Teto validado: **ctx 40960** com `-ncmoe 47`.
+> **K2-Horizon 36B MoVA — REMOVIDO em 2026-10-26 (política do floor de
+> contexto)**: foi instalado e validado (decode ~16-18 tok/s, VRAM
+> 10665 MiB), mas o KV de 192 KiB/tok (48 camadas full-attention, 8 KV
+> heads × 128) + os 64 experts MoVA fixos na GPU limitavam o ctx a **40k**
+> — abaixo do mínimo de 128k. GGUF apagado. Re-baixável se a política
+> mudar: `hf download IFM/K2-Horizon-MoVA-36B-A4B-GGUF
+> K2-Horizon-MoVA-36B-A4B-Q4_K_M.gguf` (receita validada: `-c 40960
+> -ncmoe 47` + macro pdcache).
 >
 > **Raon-1 mini 30B (KRAFTON): BLOQUEADO** — arch `raon1_mini` não existe
 > no llama.cpp master nem em fork conhecido (avaliado em 2026-10-26).

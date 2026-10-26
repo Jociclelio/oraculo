@@ -378,7 +378,7 @@ carregado (ttl de 5 min). Também funciona sem `watch`, para consulta única.
 ## Modelos Disponíveis
 
 Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
-(27 entries: 22 stock/pdcache + 4 bonsai PrismML + 1 Xing).
+(26 entries: 21 stock/pdcache + 4 bonsai PrismML + 1 Xing).
 
 | Modelo | Contexto | Notas |
 |--------|----------|-------|
@@ -396,7 +396,6 @@ Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
 | Apodex1.1_35B | 131072 | **Apodex 1.1 mini 35B-A3B** multimodal; **~39 tok/s** — o mais rápido do zoológico 35B |
 | NexN2.5_35B | 131072 | **Nex-N2.5 mini 35B** multimodal; reasoning_effort; **~36 tok/s** |
 | BigBangv1_35B | 131072 | **BigBang v1 35B-A3B** multimodal; thinking; **~37 tok/s** |
-| K2Horizon_36B_MoVA_40k | 40960 | **K2-Horizon MoVA 36B-A4B** (IFM) texto puro; KV gigante → teto 40k; **~16-18 tok/s** |
 | bonsai-27b | 131072 | **Bonsai 2 27B PTQ1_0** + mmproj Q8_0 (visão) — engine PrismML; **24,5 tok/s** @ 64k |
 | Xing4.0_29B_A4B | 131072 | MoE 29B/4B + MLA + mHC — engine Xing (fork shuxiaoqiong); ncmoe 27; **~12,5 tok/s** @ 64k |
 
@@ -408,8 +407,8 @@ Detalhes e justificativas em [`AGENTS.md`](AGENTS.md#categorias-de-modelos-por-m
 - **SmallMoE** (MoE com offload de experts p/ RAM): LFM2.5-24B-A2B,
   MiniCPM-V 4.7 35B, Qwen3.6-35B, Ornith-1.5-35B, Nemotron-3.5-Bolt-74B,
   Flint-40B, Xing4.0-29B, Sage-A1.5 35B, Apodex-1.1 mini, Nex-N2.5 mini,
-  BigBang v1, K2-Horizon 36B (Raon-1 mini bloqueado: sem suporte no
-  llama.cpp)
+  BigBang v1 (Raon-1 mini bloqueado: sem suporte no llama.cpp; K2-Horizon
+  removido: contexto máx. 40k < floor 128k)
 - **Tiny** (cabem 100% na VRAM em ~4-bit): Gemma4-12B, MiniCPM-V 4.7 1B,
   Ornith-1.5-9B, Qwen3.5-9B, MiMo-V2.6-9B
 - **SuperCompressed** (sub-Q4_K_M e 100% VRAM): LFM2.5-24B-A2B (IQ2_M),

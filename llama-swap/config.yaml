@@ -18,11 +18,12 @@
 #   sleep-idle-seconds = 300 -> ttl: 300 (campo YAML do llama-swap)
 #   alias = <nome> -> campo `aliases` da entry do llama-swap
 #
-# Convenção de NOME/CONTEXTO (tuning 2026-10-15):
+# Convenção de NOME/CONTEXTO (tuning 2026-10-15; política 2026-10-26):
 #   - Toda entry SEM sufixo de contexto roda em 128k (-c 131072) — floor,
 #     viabilizado pelo KV quantizado (-ctk q5_1 -ctv q5_1, requer -fa on;
 #     tipos K/V DIFERENTES são proibidos — ver regra 10).
-#   - Modelo que não alcança 128k: sufixo _XXk com o maior contexto validado.
+#   - Modelo que não alcança 128k é REMOVIDO do zoo (antes: sufixo _XXk;
+#     precedente: K2-Horizon 40k, removido 2026-10-26).
 #   - VRAM validada por carga real (RTX 3060 12 GB, display idle ~900 MiB);
 #     com jogos/desktop pesado (1,8+ GB) entries de MoE híbrido podem OOM.
 
@@ -368,13 +369,15 @@ models:
 
   # =====================================================================
   # Batch 2026-10-26 — alternativas ao Qwen3.6 35B (todos arch
-  # qwen3_5_moe, exceto K2 Horizon arch k2_horizon — suportado desde
-  # PR ggml-org#29535, 2026-10-06, dentro do pin do build 11804).
-  # Receita padrão: pdcache + KV q5_1 + --load-mode none + -ncmoe +
-  # ub 2048 (regras 2/7/10). ncmoe inicial 31 (paridade Qwen3.6 35B,
-  # 40 camadas) / 30 no K2 (48 camadas) — ajustar por carga real.
+  # qwen3_5_moe). Receita padrão: pdcache + KV q5_1 + --load-mode none +
+  # -ncmoe + ub 2048 (regras 2/7/10). ncmoe 31 (paridade Qwen3.6 35B,
+  # 40 camadas) — ajustar por carga real.
   # Raon-1 mini 30B (KRAFTON) AVALIADO E BLOQUEADO: arch `raon1_mini`
   # NÃO existe no llama.cpp master (nem fork conhecido) — sem engine.
+  # K2-Horizon 36B MoVA REMOVIDO em 2026-10-26: KV de 192 KiB/tok
+  # (48 camadas full-attention + MoVA fixo na GPU) limitava o ctx a 40k
+  # — abaixo do floor de 128k (política: modelo que não atende 128k sai
+  # do zoo).
   # =====================================================================
 
   # ---------------------------------------------------------------------
@@ -444,30 +447,6 @@ models:
       -c 131072 -ngl 99 -ncmoe 31
       -b 4096 -ub 2048
       --temp 1.0 --top-p 0.95 --top-k 20
-    cmdStop: ${docker-stop}
-    ttl: 1800
-
-  # ---------------------------------------------------------------------
-  # K2 Horizon MoVA 36B-A4B (IFM) — arch k2_horizon (48 camadas: 3 densas
-  # + 45 MoE, 100 experts top-8 + shared + 64 experts MoVA top-4 — estes
-  # FICAM na GPU: o -ncmoe não os cobre), TEXTO puro (GGUF oficial sem
-  # mmproj). KV ENORME: 8 KV heads × 128 × 48 camadas = 192 KiB/tok em
-  # f16 (72 em q5_1) — 128k é impossível (KV 9,2 GB), teto validado 40k
-  # (sufixo _40k pela convenção). Reasoning com reasoning_effort (default
-  # high no template). Sampling do model card: temp 1.0 / top-p 0.95.
-  # Validado 2026-10-26 (serving real, c 40960, ncmoe 47, ub 2048):
-  # decode ~18,4 tok/s, prefill ~814 tok/s @1,2k, VRAM 10665 MiB
-  # (~1,6 GB de folga). ncmoe 34-42 OOMa de KV em qualquer ctx — o piso
-  # de GPU (~6,5 GB: embd 250k vocab + atenção + experts MoVA) domina.
-  # ---------------------------------------------------------------------
-  K2Horizon_36B_MoVA_40k:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/K2-Horizon-MoVA-36B-A4B-Q4_K_M/K2-Horizon-MoVA-36B-A4B-Q4_K_M.gguf
-      --load-mode none
-      -c 40960 -ngl 99 -ncmoe 47
-      -b 4096 -ub 2048
-      --temp 1.0 --top-p 0.95
     cmdStop: ${docker-stop}
     ttl: 1800
 

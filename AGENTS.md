@@ -56,8 +56,9 @@ load/unload manual — apontar o request para outro `model` faz o swap
   `models/models.ini` é HISTÓRICO desativado — nada o lê.
   **Convenção de contexto** (VRAM validada por carga real, display idle):
   entry SEM sufixo = **128k** (floor, `-c 131072`), viabilizado pelo KV
-  quantizado `-ctk q5_1 -ctv iq4_nl` (regra 10); modelo que não alcança 128k
-  = sufixo `_XXk` com o maior contexto validado. Com jogos no desktop
+  quantizado `-ctk q5_1 -ctv q5_1` (regra 10); modelo que não alcança 128k
+  é REMOVIDO do zoo (política 2026-10-26; precedente: K2-Horizon 40k).
+  Com jogos no desktop
   (1,8+ GB VRAM) as entries de MoE híbrido podem OOM.
 - Macros no config: `docker-stock` (imagem oficial
   `ghcr.io/ggml-org/llama.cpp:full-cuda`, entrypoint `/app/llama-server`),
@@ -286,7 +287,6 @@ ctx 64k anterior (decode não muda com o ctx; prefill por token idêntico).
 | `Apodex1.1_35B` | stock | 131072 | Apodex 1.1 mini 35B-A3B multimodal (arch qwen3_5_moe; GGUF abenzerps — oficial publica NVFP4, sem GGUF); ncmoe 31; **decode ~39 tok/s** (mais rápido que o Qwen3.6 35B); VRAM 9849 MiB; temp 1.0 / top-k 20 / top-p 0.95 (2026-10-26) |
 | `NexN2.5_35B` | stock | 131072 | Nex-N2.5 mini 35B multimodal (arch qwen3_5_moe, GGUF bartowski + mmproj f16); ncmoe 31; **decode ~36 tok/s**; VRAM 10609 MiB; temp 0.7 / top-p 0.95 / top-k 40; thinking via reasoning_effort no template (2026-10-26) |
 | `BigBangv1_35B` | stock | 131072 | BigBang v1 35B-A3B multimodal (arch qwen3_5_moe, GGUF mradermacher + mmproj f16); ncmoe 31; **decode ~37 tok/s**; VRAM 10625 MiB; temp 1.0 / top-k 20 / top-p 0.95 (2026-10-26) |
-| `K2Horizon_36B_MoVA_40k` | stock | **40960** | IFM K2-Horizon MoVA 36B-A4B (arch `k2_horizon`, PR ggml-org#29535); TEXTO puro; **KV gigante** (8 KV heads × 128 × 48 camadas full-attention = 192 KiB/tok f16, 72 em q5_1) → 128k impossível, **teto validado 40k**; os 64 experts MoVA (top-4) FICAM na GPU (o `-ncmoe` não os cobre) — piso ~6,5 GB; ncmoe 47 + `--load-mode none` + ub 2048; **decode ~16-18 tok/s, prefill ~814 tok/s @1,2k; VRAM 10665 MiB**; reasoning_effort no template; temp 1.0 / top-p 0.95 (2026-10-26) |
 | `Ornith1.5_9B` | stock | 131072 | Ornith-1.5-9B Q4_K_M + mmproj BF16 (ornith-ai); variante edge DENSA da família (arch qwen35), raciocínio agêntico `<think/tool_call>`; head MTP embutida (nextn=1) → draft-mtp self-draft n=2; **decode ~48-52 tok/s, prefill ~1430-1580 tok/s, aceitação ~0,53-0,69**; VRAM 9862 MiB (2026-10-16) |
 | `Qwen3.5_9B_HauhauCS` | stock | 131072 | Qwen3.5-9B-Uncensored-HauhauCS-Aggressive Q4_K_M + mmproj BF16; denso (arch qwen35, no lugar da Ornith1.5_9B_Uncensored removida 2026-10-19); **SEM MTP** (header sem nextn); **decode ~52 tok/s, prefill 21k ~1671 tok/s**; VRAM 9088 MiB; visão carregada (2026-10-19) |
 | `MiMo2.6_9B` | stock | 131072 | MiMo-V2.6-Distill-Qwen-9B (XiaomiMiMo, distill em base Qwen3.5; arch qwen35, denso) Q4_K_M bartowski + mmproj f16 (ggml-org oficial só Q8_0 9,5 GB — não cabe com floor 128k); reasoning separado; **SEM MTP** (header sem nextn); **decode ~47-51 tok/s, prefill ~1800 tok/s @2,6k**; VRAM 9510 MiB; visão validada; sampling temp 0.6 / top-p 0.95 / top-k 20 (generation_config oficial) (2026-10-20) |
@@ -298,6 +298,16 @@ ctx 64k anterior (decode não muda com o ctx; prefill por token idêntico).
 | `bonsai-9b-uncensored` | PrismML | 196608 | Bonsai 2 9B + LoRA uncensored AtomicChat (rank-1, 3,2 MB, `--lora-scaled :1` — remove direção de recusa no grafo; base byte-idêntico; custo ~4,3 MMLU); MESMOS GGUFs/engine/KV bf16 @192k do `bonsai-9b`; VRAM 10672 MiB; aplicação validada por logprobs distintos vs base; modelo thinking consome muitos tokens de raciocínio (~900 p/ pergunta simples) (2026-10-20) |
 | `Xing4.0_29B_A4B` | Xing | 131072 | MoE 29B/4B + MLA + mHC; `--load-mode none` + ncmoe 27; ub1024; **KV q5_1/q5_1 (regra 10)**; ~12,5 tok/s @ 64k; VRAM 10850 MiB |
 
+> **Removidos em 2026-10-26 — política do floor de contexto**: modelo que
+> não atende o mínimo de 128k é removido do zoo (não mais sufixo `_XXk`).
+> Precedente: **K2-Horizon 36B MoVA** (`K2Horizon_36B_MoVA_40k`, GGUF 21 GB
+> apagado) — KV de 192 KiB/tok (48 camadas full-attention, 8 KV heads × 128)
+> + os 64 experts MoVA fixos na GPU (o `-ncmoe` não os cobre, piso ~6,5 GB)
+> limitavam o ctx validado a **40k**. Medido antes da remoção: decode
+> ~16-18 tok/s, prefill ~814 tok/s, VRAM 10665 MiB @40k — tecnicamente
+> funcional, desclassificado pela política. Arch `k2_horizon` suportada
+> desde PR ggml-org#29535; re-instalável se a política mudar.
+>
 > **Removidos em 2026-10-13** (liberação de disco, GGUFs apagados + entries
 > retiradas do config): LFM2.5-8B-A1B-Hermes (`LFM2.5_8B_A1B_Hermes`/`_128k`),
 > Gemma4-12B-agentic-fable5 (`Gemma4_12B_Agentic`/`_128k`), Underdog-Saluki-27B
@@ -341,11 +351,13 @@ ganham a adicional quando aplicável.
   - Nemotron-3.5-Bolt-74B-A9B (quant "24GB" ~sub-Q4, mas com offload;
     MoE 74B/9B, mmproj + draft DFlash LiLiCorr — entry `Nemotron3.5_Bolt_74B`)
   - Flint-40B-A2.5B (256 experts top-6 + shared; base e Heretic)
-  - K2-Horizon 36B MoVA (arch k2_horizon; entry `K2Horizon_36B_MoVA_40k`;
-    experts MoVA ficam na GPU — KV gigante limita o ctx a 40k)
   - Xing4.0-29B-A4B (MLA + mHC)
   - Raon-1 mini 30B (KRAFTON): AVALIADO E BLOQUEADO 2026-10-26 — arch
     `raon1_mini` não existe no llama.cpp master nem em fork conhecido.
+  - K2-Horizon 36B MoVA: REMOVIDO em 2026-10-26 — KV de 192 KiB/tok
+    (48 camadas full-attention) + experts MoVA fixos na GPU limitavam o
+    ctx a 40k, abaixo do floor de 128k (política de remoção, ver
+    "Removidos").
 - **Tiny** — densos que cabem 100% na VRAM em ~4-bit (Q4_K_M/QAT):
   - Gemma4-12B (QAT ~int4, multimodal visão+áudio)
   - MiniCPM-V 4.7 1B
