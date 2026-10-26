@@ -9,7 +9,8 @@ Uso:
   generate_image.py --prompt "um gato astronauta" [--size 1024x1024]
                     [--steps 8] [--seed ALEATORIO] [--prefix minhaprefix]
 
-Saída: imprime o caminho do PNG gerado em comfyui/output/.
+Saída: imprime o caminho do PNG gerado em /tmp/oraculo-comfyui/output/ (volátil —
+some no reboot).
 """
 import argparse
 import json
@@ -21,7 +22,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO / "comfyui/workflows/qwen_image_2_1_turbo_t2i_api.json"
-OUTPUT_DIR = REPO / "comfyui/output"
+OUTPUT_DIR = Path("/tmp/oraculo-comfyui/output")
 BASE_URL = "http://127.0.0.1:8188"  # gpu-shim (NUNCA :8189)
 
 
@@ -62,7 +63,8 @@ def main():
     pid = r["prompt_id"]
     print(f"prompt_id: {pid} (seed {seed})", file=sys.stderr)
 
-    deadline = time.time() + 600  # turbo 8 passos ~ 10-20 s; folga p/ carga fria do DiT
+    deadline = time.time() + 1800  # turbo 8 passos ~ 10-20 s quente; carga FRIA do DiT/TE
+    # (pós-boot/pos-recreate) pode levar >10 min — folga larga
     while time.time() < deadline:
         hist = api(f"/history/{pid}", timeout=30)
         if pid in hist:

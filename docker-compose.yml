@@ -63,7 +63,7 @@ services:
   # Imagem yanwk/comfyui-boot (ComfyUI + Manager, pinada).
   # UI: http://localhost:8188 (gpu-shim: unload de VRAM prévio) | API: /prompt
   # Modelos: ./models/comfyui (diffusion_models/text_encoders/vae)
-  # Saídas: ./comfyui/output | Workflows API p/ Open WebUI: ./comfyui/workflows
+  # Saídas: /tmp/oraculo-comfyui/output (volátil, some no reboot) | Workflows API p/ Open WebUI: ./comfyui/workflows
   # VRAM COMPARTILHADA: antes de gerar, nenhum container ls-* carregado
   # (ttl 300 do llama-swap descarrega sozinho; unload forçado: ./manage.sh unload).
   # =========================================================
@@ -82,8 +82,8 @@ services:
     volumes:
       - ./models/comfyui:/root/ComfyUI/models
       - ./comfyui/custom_nodes:/root/ComfyUI/custom_nodes
-      - ./comfyui/input:/root/ComfyUI/input
-      - ./comfyui/output:/root/ComfyUI/output
+      - /tmp/oraculo-comfyui/input:/root/ComfyUI/input
+      - /tmp/oraculo-comfyui/output:/root/ComfyUI/output
       - ./comfyui/user:/root/ComfyUI/user
       - ./comfyui/user-scripts:/root/user-scripts
       - ./data/comfyui/hf-cache:/root/.cache/huggingface

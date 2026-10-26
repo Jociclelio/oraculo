@@ -28,9 +28,7 @@ mcp-data/
 # estado dos serviços docker (webui.db, uploads, sessões WhatsApp, caches)
 data/
 
-# comfyui — runtime (saídas, uploads, perfil, custom nodes da imagem)
-comfyui/output/
-comfyui/input/
+# comfyui — runtime (perfil, custom nodes da imagem; input/output vivem em /tmp/oraculo-comfyui)
 comfyui/user/
 comfyui/custom_nodes/
 

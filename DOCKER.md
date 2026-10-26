@@ -339,8 +339,12 @@ GGUF em Ampere — decisão validada: os GGUFs de difusão foram removidos
 (`ComfyUI-GGUF` nem é instalado).
 
 **Volumes**: `./models/comfyui → /root/ComfyUI/models`;
-`./comfyui/{custom_nodes,input,output,user}` → idem no container; caches de
+`./comfyui/{custom_nodes,user}` → idem no container; caches de
 HF/torch em binds no repo (`./data/comfyui/hf-cache`, `./data/comfyui/torch-cache`).
+**`input` e `output` vivem FORA do repo, em `/tmp/oraculo-comfyui/{input,output}`
+(voláteis — esvaziam no reboot; o `input` é só a área de upload transitório da
+edição e o `output` é lixo de teste, nada a preservar). O `placeholder.png`
+obrigatório do input é recriado a cada boot pelo `pre-start.sh`.
 
 - `./comfyui/user-scripts` → `/root/user-scripts`: `pre-start.sh` (sourced
   pelo entrypoint) sobe o gpu-shim; log em `comfyui/user/gpu-shim.log`.
@@ -350,7 +354,7 @@ HF/torch em binds no repo (`./data/comfyui/hf-cache`, `./data/comfyui/torch-cach
 - O núcleo do ComfyUI vive na camada gravável do container: persiste entre
   restarts, mas **recriar o container** volta ao snapshot da imagem (pip
   installs do usuário vão para `/root/.local`, mesmo comportamento).
-- Saídas em `./comfyui/output/` (ignorado pelo git); workflows API versionados
+- Saídas em `/tmp/oraculo-comfyui/output/` (volátil — some no reboot); workflows API versionados
   em `./comfyui/workflows/`.
 
 **Templates da UI nativa** (override de template): os oficiais
@@ -432,6 +436,31 @@ a 1ª imagem é a editada, as demais são referências endereçáveis no prompt
 como `<image2>`..`<image10>` (o nó aceita 16; 10 é o que o template oficial
 liga). Sem imagem num slot, o LoadImage correspondente carrega
 `input/placeholder.png` (64×64, cinza).
+
+> **`input/placeholder.png` é OBRIGATÓRIO** (64×64 cinza): os 9 slots vazios
+> do workflow de edição apontam para ele e a validação do ComfyUI rejeita o
+> prompt com `Invalid image file: placeholder.png` (HTTP 400) se faltar.
+> Recriado automaticamente a cada boot pelo `pre-start.sh`; manual:
+> `docker exec comfyui python3 -c "from PIL import Image;
+> Image.new('RGB',(64,64),(128,128,128)).save('/root/ComfyUI/input/placeholder.png')"`.
+> **Nunca apagar o diretório de um bind mount com o container rodando**
+> (vale para `/tmp/oraculo-comfyui/*` e para os binds do repo): o mount fica
+> órfão no container e as escritas falham com ENOENT (sintoma: outputs
+> "somem") — `docker restart comfyui` remonta.
+
+**Scripts de API** (chamada direta pelo agente/skill, stdlib pura; passam
+SEMPRE pela porta 8188 do gpu-shim — regra 8): `comfyui/user-scripts/
+generate_image.py` (t2i) e `edit_image.py` (edição; 1ª `--image` define o
+canvas, `--ref` extras viram `<image2>`..`<image10>`). Ambos imprimem o
+caminho do PNG em `/tmp/oraculo-comfyui/output/` na stdout e aceitam `--seed`.
+**Artefatos em edições são problema de seed, validado 2026-10-25** (caneca
+t2i seed 1234 → "make the mug white"): editar com a MESMA seed da geração
+da imagem base reproduz o padrão de ruído inicial correlacionado e a saída
+sai com granulado oversaturado/deformado; seeds distintas saem limpas
+(7 e 999 limpos no mesmo teste). Regra prática: na edição NUNCA reutilizar
+a seed da geração original — sem `--seed` os scripts sorteiam aleatório,
+que é o caminho saudável; se uma edição pontual sair com artefatos, trocar
+a seed resolve.
 
 **`resolution=0` no nó 6 é obrigatório com referências**: o parâmetro define
 o orçamento de pixels para REDIMENSIONAR cada referência — com o default
