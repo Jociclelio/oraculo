@@ -56,7 +56,7 @@ load/unload manual — apontar o request para outro `model` faz o swap
   `models/models.ini` é HISTÓRICO desativado — nada o lê.
   **Convenção de contexto** (VRAM validada por carga real, display idle):
   entry SEM sufixo = **128k** (floor, `-c 131072`), viabilizado pelo KV
-  quantizado `-ctk q5_1 -ctv q5_1` (regra 10); modelo que não alcança 128k
+  quantizado `-ctk q4_0 -ctv q4_0` (regra 10; q5_1 até 2026-10-26); modelo que não alcança 128k
   é REMOVIDO do zoo (política 2026-10-26; precedente: K2-Horizon 40k).
   Com jogos no desktop
   (1,8+ GB VRAM) as entries de MoE híbrido podem OOM.
@@ -74,8 +74,14 @@ load/unload manual — apontar o request para outro `model` faz o swap
     imagem stock em uso + patch de prompt disk cache portado do fork
     qqkzlm (regra 9; a base `prism` original do fork tem prefill de MoE na
     CPU 20x mais lento — ver Dockerfile)
+  - `engines/llama.cpp-bonsai-ada/` — commit `2cadbfb64` (branch
+    `bonsai-q8-product` de professorpalmer/llama.cpp-ada-ternary; =
+    PrismML `adfffbe` + a pilha de 71 patches do projeto
+    bonsai-ada-surgery). Supersetch da prismml: KV tiered
+    (`--kv-vram-cells`), FA lê q4_0/q8_0/q3_0 K/V in place, MTP
+    self-draft + lookup n-gram, harness-proofing de reasoning.
   - Verificar engine em runtime: `system_fingerprint` nos responses
-    (`b1-8444536` PrismML, `b1-8c37919` Xing).
+    (`b1-8444536` PrismML, `b1-8c37919` Xing, `b1-2cadbfb` bonsai-ada).
 - Instalar modelo novo: guia em `models/MODELS_INSTALL.md`
   (`hf download ... --local-dir models/<Dir>` + entry no config + restart).
 
@@ -243,35 +249,46 @@ load/unload manual — apontar o request para outro `model` faz o swap
     (Gemma/bonsai/1B) o wake cai para ~2-4 s. Trade-off assumido: follow-up
     instantâneo só na janela de 0-180 s de idle (antes eram 300 s de ttl);
     gpu-shim continua descarregando se o modelo estiver acordado.
- 10. **KV cache quantizado em TODAS as entries: `-ctk q5_1 -ctv q5_1`**
-    (nos macros, exige `-fa on` — já padrão) e SEMPRE com tipo ÚNICO K=V.
-    **K e V com tipos diferentes (ex.: q5_1/iq4_nl) destrói a performance
-    nos híbridos GDN/SWA no stock** (medido 2026-10-15, Hauhau/qwen35moe:
-    prefill 1313→23 tok/s, decode 34→7,5 tok/s, degrada com o contexto —
-    validação de VRAM não pega isso; sempre gerar tokens suficientes).
-    O fork Xing rejeita K≠V explicitamente. Padrão 2026-10-15 junto da
-    subida do floor de contexto para 128k: q5_1 (6 bpw) ocupa ~0,71× do
-    q8_0 (8,5), o que compensa os 2× tokens do 128k. Sempre que apertar
-    VRAM, a alavanca é subir `-ncmoe` (mais experts na RAM, ~0,5 GB/camada
-    no Qwen3.6), não voltar o KV para q8_0.
-    **EXCEÇÃO fork PrismML (2026-10-20)**: no fork, o KV q5_1 NÃO tem
-    caminho rápido de flash attention (issue PrismML #191; nosso build
-    não define `-DGGML_CUDA_FA_ALL_QUANTS=ON`) — degrada com o contexto
-    (medido no 9B @4k: decode 12,6 vs 77,9 tok/s com f16; prefill 41 vs
-    1723). As entries bonsai SOBRESCREVEM: q4_0 nos 27B (rápido E menor
-    que o q5_1 — mantém o floor 128k), bf16 nos 9B (teto de performance;
-    @192k — o nativo 256k não cabe e 224k fica sem margem).
+ 10. **KV cache quantizado em TODAS as entries: `-ctk q4_0 -ctv q4_0`**
+    (nos macros, desde 2026-10-27; exige `-fa on` — já padrão) e SEMPRE
+    com tipo ÚNICO K=V. **K e V com tipos diferentes (ex.: q5_1/iq4_nl)
+    destrói a performance nos híbridos GDN/SWA no stock** (medido
+    2026-10-15, Hauhau/qwen35moe: prefill 1313→23 tok/s, decode 34→7,5
+    tok/s, degrada com o contexto — validação de VRAM não pega isso;
+    sempre gerar tokens suficientes). O fork Xing rejeita K≠V
+    explicitamente (aceita q4_0/q4_0 — validado 2026-10-27).
+    **HISTÓRICO / MUDANÇA 2026-10-27**: o default desde 2026-10-15 era
+    q5_1/q5_1 (6 bpw, ~0,71× do q8_0 — compensava os 2× tokens do 128k).
+    A bateria e2e de decode×contexto (24 entries, `results/ctxsweep/`)
+    revelou que **o q5_1 NÃO tem kernel de flash attention dedicado**
+    (só f16/bf16/q4_0/q8_0 têm) e cai no caminho genérico lento:
+    decode @130k foi **2,3× menor** que q8_0 no MiniCPM 1B, **2,26×** no
+    MiMo 9B, **1,27×** na Gemma4 12B e **1,19×** no Qwen3.6 (A/B controlado,
+    256 tok/pt, temp 0) — e o q5_1 perde **+9-18% até em ctx vazio**.
+    O mesmo sintoma no fork PrismML (issue PrismML #191, 2026-10-20) não
+    era exceção: era o mesmo bug de cobertura de kernels.
+    **q4_0 ≈ q8_0 em velocidade** com o MENOR footprint (0,53× do q8_0,
+    0,73× do q5_1) → default geral. **q8_0** é override opcional onde a
+    precisão do KV importa e houver folga (+41% de KV vs q4_0; validar
+    carga por entry). Sempre que apertar VRAM, a alavanca é subir
+    `-ncmoe` (mais experts na RAM, ~0,5 GB/camada no Qwen3.6), não mudar
+    o KV. EXCEÇÕES bonsai no fork PrismML: bf16 nos 9B (medido — teto de
+    performance; @192k), q4_0 nos 27B (= novo default, validado antes).
 
 ---
 
 ## Modelos (RTX 3060 12 GB — medições e2e)
 
 VRAM = pico nvidia-smi (total, incl. ~890 MiB do display) na carga real @
-128k com KV `q5_1`/`q5_1` (validação 2026-10-15, revalidado após a troca
-iq4_nl→q5_1 — ver regra 10). **Números "pós-unlock 2026-10-26"**: decode
-(200 tok) e prefill @2k medidos e2e no serving com gpu-unlock ATIVO
-(BF16 47 TFLOPS) — não comparáveis aos anteriores; decode @ctx longo
-tende a cair nos híbridos (ver séries do `benchmarks/bench.sh`).
+128k com o KV do macro vigente na validação (q5_1/q5_1 até 2026-10-26;
+**q4_0/q4_0 desde 2026-10-27** — ver regra 10; q4_0 usa ~73% do KV do
+q5_1, então as validações de VRAM continuam valendo com folga).
+**Números "pós-unlock 2026-10-26"**: decode (200 tok) e prefill @2k
+medidos e2e no serving com gpu-unlock ATIVO (BF16 47 TFLOPS) — não
+comparáveis aos anteriores; decode @ctx longo tende a cair nos híbridos
+(ver séries do `benchmarks/bench.sh` e a bateria `results/ctxsweep/`
+de 2026-10-27, que também reescreveu a regra 10 — q5_1 era lento por
+falta de kernel FA dedicado).
 
 | Entry | Engine | Ctx | Notas / tok/s medido |
 |-------|--------|-----|----------------------|
@@ -293,11 +310,12 @@ tende a cair nos híbridos (ver séries do `benchmarks/bench.sh`).
 | `MiMo2.6_9B` | stock | 131072 | MiMo-V2.6-Distill-Qwen-9B (XiaomiMiMo, distill em base Qwen3.5; arch qwen35, denso) Q4_K_M bartowski + mmproj f16; reasoning separado; **SEM MTP** (header sem nextn); **decode ~53 tok/s, prefill ~1615 tok/s** (pós-unlock 2026-10-26); VRAM 9508 MiB; visão validada; sampling temp 0.6 / top-p 0.95 / top-k 20 (generation_config oficial) |
 | `Flint_40B_A2.5B` | stock | 131072 | Recursive Flint (RecursiveSI) MoE 40B/2,5B agêntico de código (arch `flint`: 49 camadas = 2 densas + 47 MoE, 256 experts top-6 + shared, 35 SWA janela 513 + 14 full-attention); **texto puro — sem mmproj, SEM MTP/draft**; GGUF oficial ggml-org Q4_K_M (23,4 GB); ncmoe 38 + `--load-mode none` + **ub 4096** (calibração 2026-10-26: prefill ~1097→1300 tok/s; VRAM serving 10567 MiB; sem draft o ub4096 cabe); requer build ≥ PR ggml-org#30928 (imagem stock atualizada p/ 11804/c7fc50941 + pdcache repinada no mesmo commit); sampling temp 1.0 / top-p 0.95 / top-k 20; workaround de scaling de ativações custa 10-30% (nota do PR); **decode ~42 tok/s curto / ~38 @1,7k, prefill ~1300 tok/s @8k** (fingerprint `b1-c7fc509`) (2026-10-22; ub4096 em 2026-10-26) |
 | `Flint_40B_A2.5B_Uncensored` | stock | 131072 | Mesmo Flint, decensurado Heretic (electroglyph; abliterated 98→5 recusas/100) — GGUF Octopusman388 Q4_K_M (24,2 GB); MESMA receita da entry base (ncmoe 38 + `--load-mode none` + ub2048, temp 1.0/top-p 0.95/top-k 20); **known issue do autor: reasoning descontrolado em prompts sensíveis** — mitigado na entry com `--reasoning-budget 4096` + mensagem de fechamento (limita o drift, não elimina; presence-penalty não ajuda); TEXTO puro, SEM MTP/draft; **validado 2026-10-24: decode ~37 tok/s, VRAM pico 9874 MiB @128k** (~2,4 GB de folga); reasoning consome MUITOS tokens — orçar max_tokens generoso |
-| `bonsai-27b` | PrismML | 131072 | PTQ1_0 + mmproj (visão validada); **KV q4_0 (2026-10-20)** — o q5_1 dos macros NÃO tem caminho rápido de FA no fork PrismML (issue PrismML #191): com q4_0 **decode ~27 tok/s, prefill ~530 tok/s** (pós-unlock 2026-10-26); VRAM 10538 MiB |
+| `bonsai-27b` | PrismML | 131072 | PTQ1_0 + mmproj (visão validada); **KV q4_0 (desde 2026-10-20 — hoje é o default do zoo, ver regra 10; na época era override porque o macro usava q5_1, lento no fork PrismML — issue PrismML #191)**: com q4_0 **decode ~27 tok/s, prefill ~530 tok/s** (pós-unlock 2026-10-26); VRAM 10538 MiB |
 | `bonsai-27b-heretic` | PrismML | 131072 | finetune Uncensored "Heretic" (OS-Software) do Bonsai 2 acima; PTQ1_0 + mmproj Q8_0, mesma engine pinada e MESMO fix de KV q4_0: **decode ~26 tok/s, prefill ~530 tok/s** (pós-unlock 2026-10-26); VRAM 10544 MiB; sem pdcache/sleep (patch só no master ggml-org) |
+| `bonsai-27b-ada` | bonsai-ada | 262144 | MESMOS pesos PTQ1_0 do `bonsai-27b`, runtime alternativo (fork ada-ternary `2cadbfb6` = PrismML `adfffbe` + 71 patches do projeto bonsai-ada-surgery; engine `llama.cpp-bonsai-ada`). GGUF com head MTP ProCreations enxertada (trunk byte-idêntico, CaryPalmer HF); KV q4_0 TIERED (`--kv-vram-cells 131072` em VRAM, resto em RAM pinneada — bit-idêntico, janela 262k inteira); MTP self-draft (aceitação ~69-91%) + lookup n-gram; mmproj na GPU (+346 MiB — ViT na CPU com -t 5 levava ~60 s/img); harness-proofing (budget thinking 20480 c/ fechamento, effort "high" dos clients normalizado); **decode ~52 tok/s @5,5k, ~49 @45k, ~38 @130k, ~32 @175k** vs stock prism 23/16 nos mesmos prompts (2026-10-26); prefill igual ao stock (~500 curto, ~205-315 profundo); VRAM ~10,7 GB total (folga ~1,5 GB c/ display — linha KV conservadora de propósito, subir com dedicação exclusiva); SEM pdcache/sleep; cache de prompt em RAM cobre follow-up no slot (medido cache_n 129k). **Substitui o serving PrismML do 27B** (entries `bonsai-27b`/`-heretic` mantidas como fallback) |
 | `bonsai-9b` | PrismML | 196608 | Bonsai 2 9B (variante edge, denso); PTQ1_0 + mmproj Q8_0, mesma engine PrismML pinada; **KV bf16 @192k (2026-10-20 — q5_1 lento no fork, issue PrismML #191)**: **decode ~84 tok/s, prefill ~1530 tok/s** (pós-unlock 2026-10-26); VRAM 10870 MiB; visão validada; SEM MTP/DFlash (drafts no repo HF não baixados) |
 | `bonsai-9b-uncensored` | PrismML | 196608 | Bonsai 2 9B + LoRA uncensored AtomicChat (rank-1, 3,2 MB, `--lora-scaled :1` — remove direção de recusa no grafo; base byte-idêntico; custo ~4,3 MMLU); MESMOS GGUFs/engine/KV bf16 @192k do `bonsai-9b`; **decode ~78 tok/s** (pós-unlock 2026-10-26); VRAM 10886 MiB; aplicação validada por logprobs distintos vs base; modelo thinking consome muitos tokens de raciocínio |
-| `Xing4.0_29B_A4B` | Xing | 131072 | MoE 29B/4B + MLA + mHC; `--load-mode none` + ncmoe 27; ub1024; **KV q5_1/q5_1 (regra 10)**; **decode ~28 tok/s, prefill ~580 tok/s** (pós-unlock 2026-10-26 — quase 2× o 12,5 pré-unlock @64k); VRAM 10916 MiB |
+| `Xing4.0_29B_A4B` | Xing | 131072 | MoE 29B/4B + MLA + mHC; `--load-mode none` + ncmoe 27; ub1024; **KV q4_0/q4_0 (regra 10; q5_1 até 2026-10-26 — fork aceita q4_0, validado 2026-10-27)**; **decode ~28 tok/s, prefill ~580 tok/s** (pós-unlock 2026-10-26 — quase 2× o 12,5 pré-unlock @64k); VRAM 10916 MiB; ATENÇÃO: prefill colapsa em profundidade (bateria 2026-10-27: 227 t/s @32k, 65 @130k vs ~1000 dos irmãos qwen3_5_moe — investigar caminho de atenção do fork, teste sugerido: q8_0/f16) |
 
 > **Removidos em 2026-10-26 — política do floor de contexto**: modelo que
 > não atende o mínimo de 128k é removido do zoo (não mais sufixo `_XXk`).

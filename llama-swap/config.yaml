@@ -20,8 +20,8 @@
 #
 # Convenção de NOME/CONTEXTO (tuning 2026-10-15; política 2026-10-26):
 #   - Toda entry SEM sufixo de contexto roda em 128k (-c 131072) — floor,
-#     viabilizado pelo KV quantizado (-ctk q5_1 -ctv q5_1, requer -fa on;
-#     tipos K/V DIFERENTES são proibidos — ver regra 10).
+#     viabilizado pelo KV quantizado (-ctk q4_0 -ctv q4_0 desde 2026-10-27,
+#     requer -fa on; tipos K/V DIFERENTES são proibidos — ver regra 10).
 #   - Modelo que não alcança 128k é REMOVIDO do zoo (antes: sufixo _XXk;
 #     precedente: K2-Horizon 40k, removido 2026-10-26).
 #   - VRAM validada por carga real (RTX 3060 12 GB, display idle ~900 MiB);
@@ -43,7 +43,9 @@ macros:
   # - Porta interna fixa 8080; ${PORT} (macro do llama-swap) publica só no
   #   loopback do host — o proxy padrão http://localhost:${PORT} roteia para cá.
   # - Flags globais herdadas da seção [*] do models.ini:
-  #   cache-type-k/v = q5_1/q5_1 (tipo ÚNICO — ver regra 10) -> -ctk/-ctv; cache-reuse = 256 -> --cache-reuse;
+  #   cache-type-k/v = q4_0/q4_0 (tipo ÚNICO — ver regra 10; default q4_0
+#   desde 2026-10-27 — kernel FA rápido + menor VRAM; q5_1 era lento)
+#   -> -ctk/-ctv; cache-reuse = 256 -> --cache-reuse;
   #   parallel = 1 -> -np 1; flash-attn = on -> -fa on; jinja = 1 -> --jinja;
   #   threads = 5 -> -t 5; cache-ram = 2048 -> --cache-ram.
   "docker-stock": >
@@ -54,7 +56,7 @@ macros:
     ghcr.io/ggml-org/llama.cpp:full-cuda
     --host 0.0.0.0 --port 8080
     -fa on --jinja -np 1 -t 5
-    -ctk q5_1 -ctv q5_1
+    -ctk q4_0 -ctv q4_0
     --cache-reuse 256 --cache-ram 2048
 
   # Macro Bonsai/PrismML — mesma receita do docker-stock, mas com a imagem
@@ -73,15 +75,46 @@ macros:
     llama.cpp-prismml:latest
     --host 0.0.0.0 --port 8080
     -fa on --jinja -np 1 -t 5
-    -ctk q5_1 -ctv q5_1
+    -ctk q4_0 -ctv q4_0
     --cache-reuse 256 --cache-ram 2048
 
-  # ATENÇÃO (2026-10-20): no fork PrismML o KV q5_1 NÃO tem caminho rápido de
-  # flash attention (issue PrismML #191; nosso build não define
-  # -DGGML_CUDA_FA_ALL_QUANTS=ON) — decode/prefill degradam com o contexto
-  # (medido no 9B @4k: 12,6 tok/s vs 77,9 com f16). As entries bonsai
-  # SOBRESCREVEM o KV: q4_0 nos 27B (rápido e menor que o q5_1 — mantém o
-  # floor 128k), f16 nos 9B (teto de performance; VRAM folgada).
+  # ATENÇÃO (2026-10-27): o default dos macros É q4_0/q4_0 — a bateria e2e
+  # de 24 entries (results/ctxsweep/) mostrou que o KV q5_1 NÃO tem kernel
+  # FA dedicado (só f16/bf16/q4_0/q8_0) e cai no caminho genérico lento:
+  # decode @130k 2,3x menor que q8_0 no MiniCPM 1B, 2,26x no MiMo, 1,27x na
+  # Gemma e 1,19x no Qwen3.6 — e +9-18% de desvantagem até em ctx 0.
+  # q4_0 ≈ q8_0 em velocidade com o MENOR footprint de KV (0,53x do q8_0,
+  # 0,73x do q5_1) — mantém o floor 128k com folga. O fork PrismML tem o
+  # mesmo problema no q5_1 (issue PrismML #191); entries bonsai: q4_0 nos
+  # 27B (desde 2026-10-20), f16 nos 9B (medido — teto de performance lá).
+
+  # Macro bonsai-ada — imagem local llama.cpp-bonsai-ada
+  # (engines/llama.cpp-bonsai-ada/: fork llama.cpp-ada-ternary branch
+  # `bonsai-q8-product`, commit pinado 2cadbfb6 = PrismML adfffbe + a pilha
+  # de 71 patches do projeto bonsai-ada-surgery). Supersetch da prismml:
+  # KV tiered (--kv-vram-cells), FA lê q4_0/q8_0/q3_0 K/V IN PLACE (patch
+  # 0009 — resolve a limitação da issue PrismML #191 no caminho quantizado),
+  # MTP self-draft + lookup drafting, packed KQ mask, harness-proofing.
+  # Env vars do launcher original (start-server.ps1) que a receita 12 GB
+  # seta: BATCH_INVARIANT (aritmética do mat-vec PTQ1_0 independente do
+  # batch), SHARED_POOL + MTP_DRAFT_UBATCH (um pool CUDA p/ target+draft),
+  # KQ_MASK_PACKED (máscara 1-bit, 1/16 da f16), CHECKPOINT_EVERY_NT e o
+  # reasoning_effort default via chat-template-kwargs.
+  "docker-bonsai-ada": >
+    docker run --rm --name ls-${MODEL_ID} --gpus all
+    --entrypoint /usr/local/bin/llama-server
+    -p 127.0.0.1:${PORT}:8080
+    -v ./models:/models
+    -e GGML_CUDA_BATCH_INVARIANT=1
+    -e GGML_CUDA_SHARED_POOL=1
+    -e LLAMA_MTP_DRAFT_UBATCH=256
+    -e LLAMA_ARG_KQ_MASK_PACKED=1
+    -e LLAMA_ARG_CHECKPOINT_EVERY_NT=8192
+    -e 'LLAMA_ARG_CHAT_TEMPLATE_KWARGS={"reasoning_effort":"medium"}'
+    llama.cpp-bonsai-ada:latest
+    --host 0.0.0.0 --port 8080
+    -fa on --jinja -np 1 -t 5
+    --cache-reuse 256 --cache-ram 4096
 
   # Macro Xing4.0 — mesma receita do docker-prismml, mas com a imagem local
   # do fork shuxiaoqiong (engines/llama.cpp-xing/, commit pinado 8c379195a).
@@ -97,7 +130,7 @@ macros:
     llama.cpp-xing:latest
     --host 0.0.0.0 --port 8080
     -fa on --jinja -np 1 -t 5
-    -ctk q5_1 -ctv q5_1
+    -ctk q4_0 -ctv q4_0
     --cache-reuse 256 --cache-ram 2048
 
   # Macro pdcache — mesma receita do docker-stock, mas com a imagem local
@@ -137,7 +170,7 @@ macros:
     llama.cpp-pdcache:latest
     --host 0.0.0.0 --port 8080
     -fa on --jinja -np 1 -t 5
-    -ctk q5_1 -ctv q5_1
+    -ctk q4_0 -ctv q4_0
     --cache-reuse 256 --cache-ram 1024
     --sleep-idle-seconds 180
     --slot-save-path /kvcache
@@ -333,7 +366,7 @@ models:
 
   # =====================================================================
   # Batch 2026-10-26 — alternativas ao Qwen3.6 35B (todos arch
-  # qwen3_5_moe). Receita padrão: pdcache + KV q5_1 + --load-mode none +
+  # qwen3_5_moe). Receita padrão: pdcache + KV q4_0 (default 2026-10-27) + --load-mode none +
   # -ncmoe + ub 2048 (regras 2/7/10). ncmoe 31 (paridade Qwen3.6 35B,
   # 40 camadas) — ajustar por carga real.
   # Raon-1 mini 30B (KRAFTON) AVALIADO E BLOQUEADO: arch `raon1_mini`
@@ -458,6 +491,55 @@ models:
     ttl: 300
 
   # ---------------------------------------------------------------------
+  # Bonsai 2 27B "ada" — MESMOS pesos ternários PTQ1_0, runtime alternativo
+  # (engine llama.cpp-bonsai-ada = fork ada-ternary 2cadbfb6, pilha de 71
+  # patches do projeto bonsai-ada-surgery sobre o PrismML adfffbe). GGUF com
+  # a head MTP da ProCreations enxertada (blk.64; trunk byte-idêntico ao
+  # PTQ1_0 do PrismML — CaryPalmer/Ternary-Bonsai-2-27B-262k-GGUF no HF).
+  # Ganhos vs a entry bonsai-27b (stock prism 84445367f):
+  #   - decode ~2x já em ctx curto (53 vs 27 tok/s @4k no tweet de um 3060
+  #     12 GB; validar aqui) e degradação muito menor com o contexto;
+  #   - janela 262.144 (trained max) com KV TIERED: posições [0,N) em VRAM,
+  #     resto em RAM pinneada (bit-idêntico, custo só PCIe past the line);
+  #   - MTP self-draft (draft-mtp, sem --model-draft — regra 5) + lookup
+  #     drafting n-gram (rewrites/edits de arquivo até 3x mais rápidos);
+  #   - harness-proofing de reasoning (effort "high" dos clients não quebra;
+  #     budget de thinking com fechamento forçado).
+  # Receita do launcher 12 GB (start-server.ps1): KV q4_0, draft 2 (4 past
+  # the line), draft window 16k, lookup 32, backend-sampling.
+  # MUDANÇA 2026-10-27: mmproj VOLTOU para a GPU (removido
+  # --no-mmproj-offload da receita original) — o encoder ViT na CPU com
+  # -t 5 levava ~60 s por imagem de alta resolução (medido); na GPU custa
+  # ~346 MiB (receipt do repo) e a folga de VRAM cobre.
+  # --kv-vram-cells 143360: linha ajustada em 2026-10-27 p/ compensar o
+  # mmproj na GPU (+1,1 GB medido, incl. pools do ViT) mantendo ~750 MiB
+  # de folga p/ o display + jogos ocasionais (regra 3). Acima da linha o
+  # decode degrada pouco (32 vs 38 t/s @174k medido com linha 155k).
+  # Sem pdcache/sleep (patch é contra o master ggml-org); o checkpoint
+  # interno (CHECKPOINT_EVERY_NT) + cache-reuse cobrem follow-ups no slot.
+  # ---------------------------------------------------------------------
+  bonsai-27b-ada:
+    cmd: |
+      ${docker-bonsai-ada}
+      -m /models/Ternary-Bonsai-2-27B-262k-GGUF/Ternary-Bonsai-2-27B-PTQ1_0-mtp-procreations.gguf
+      --mmproj /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf
+      -c 131072 -ngl 99
+      -ctk q4_0 -ctv q4_0
+      -ctkd q4_0 -ctvd q4_0
+      --kv-vram-cells 131072
+      --spec-type ngram-mod,draft-mtp
+      --spec-draft-n-max 2 --spec-draft-n-max-tail 4 --spec-draft-window 16384
+      --spec-lookup-n-max 32
+      --backend-sampling
+      --reasoning-effort-allow medium --reasoning-effort-fallback medium
+      --reasoning-max-tokens-floor 24576
+      --reasoning-budget 20480
+      --reasoning-budget-message "Now produce the complete answer."
+      --ctx-checkpoints 16
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
   # Bonsai 2 9B (variante edge da família, denso — instalado 2026-10-20,
   # origem prism-ml/Ternary-Bonsai-2-9B-gguf). MESMA engine PrismML pinada
   # (regra dura: PTQ1_0 só roda no fork — a stock/pdcache recusa o formato
@@ -550,7 +632,7 @@ models:
   # - --load-mode none é OBRIGATÓRIO: com mmap + overrides de tensor p/ CPU
   #   (-ncmoe), o loader avisa e o desempenho desaba (1,2 tok/s medido);
   #   sem mmap: 12,7 tok/s (validado 2026-10-10).
-  # - MoE: -ncmoe 27/64 experts na CPU (128k + KV q5_1 validado 2026-10-15).
+  # - MoE: -ncmoe 27/64 experts na CPU (128k + KV quantizado validado 2026-10-15).
   # - Sampling do README oficial: temp 1.0 / top_p 0.95 / repeat-penalty 1.05.
   # - MTP draft: arquivo Q4_K_M-MTP não existe no repo (só IQ3) — sem spec
   #   decoding; tensors nextn do GGUF são ignorados pelo loader.
@@ -558,7 +640,7 @@ models:
   # ---------------------------------------------------------------------
   # - KV: o fork Xing NÃO aceita K/V com tipos diferentes (MLA: "model does
   #   not support different K and V cache types") — mesmo corte do stock
-  #   (ver regra 10: tipo único q5_1/q5_1 nos macros serve aqui também).
+  #   (ver regra 10: tipo único q4_0/q4_0 nos macros serve aqui também).
   #   Validado 128k: ncmoe 27 → 10689 MiB total; ncmoe 25 → 11501 (apertado).
   Xing4.0_29B_A4B:
     cmd: |
@@ -681,6 +763,7 @@ models:
       --presence-penalty 0.0 --repeat-penalty 1.0
     cmdStop: ${docker-stop}
     ttl: 1800
+
 
 
   # Variantes de contexto longo (_96k/_128k) REMOVIDAS em 2026-10-15: o floor

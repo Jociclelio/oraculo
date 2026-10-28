@@ -5,6 +5,7 @@ models/*
 !models/.gitkeep
 
 # Dependências e caches
+__pycache__/
 .opencode/
 .pi/
 

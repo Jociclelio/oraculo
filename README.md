@@ -42,8 +42,9 @@ Três engines por baixo:
 > pequenos (exemplo comentado no fim do `llama-swap/config.yaml`).
 
 > **Meta de performance**: prefill/decode razoável com **contexto ≥ 128k**
-> (padrão em todas as entries desde 2026-10-15, com KV quantizado
-> `-ctk q5_1 -ctv iq4_nl`). Medido no Bonsai PTQ1_0 @ ctx 65536
+> (padrão em todas as entries desde 2026-10-15, com KV quantizado —
+> `-ctk q4_0 -ctv q4_0` desde 2026-10-27; q5_1 antes). Medido no Bonsai
+> PTQ1_0 @ ctx 65536
 > (mmproj carregado, RTX 3060 12 GB): prefill ≈ **540 tok/s**,
 > decode ≈ **24,5 tok/s**, VRAM **9146 MiB** no processo / **10657 MiB**
 > total na GPU — sem OOM.
@@ -486,8 +487,10 @@ na zona não-usável derruba a nota para <25 — o outro fator não salva.
 > [`benchmarks/`](benchmarks/)). Ordenada por IZ.
 
 > **Contexto e KV**: entry SEM sufixo = **128k** (floor, `-c 131072`),
-> viabilizado pelo KV cache quantizado `-ctk q5_1 -ctv q5_1` (tipo ÚNICO —
-> K/V misto quebra os híbridos GDN, ver AGENTS.md regra 10) + `-fa on` em
+> viabilizado pelo KV cache quantizado `-ctk q4_0 -ctv q4_0` (tipo ÚNICO —
+> K/V misto quebra os híbridos GDN, ver AGENTS.md regra 10; default q4_0
+> desde 2026-10-27 — o q5_1 anterior não tem kernel de flash attention
+> dedicado e era até 2,3× mais lento em decode profundo) + `-fa on` em
 > todas as entries. **Modelo que não alcança 128k é removido do zoo**
 > (política 2026-10-26; precedente: K2-Horizon 40k). Ver
 > [`AGENTS.md`](AGENTS.md) (regra 10).

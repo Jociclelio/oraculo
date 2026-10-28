@@ -153,6 +153,37 @@ hf download prism-ml/Ternary-Bonsai-2-27B-gguf \
 > A variante `PQ2_0` (~6,8 GB, entry `bonsai-27b-pq2_0`) foi removida em
 > 2026-10-13 — manteve-se só o PTQ1_0, a quantização menor.
 
+### Bonsai 2 27B "ada" (runtime alternativo — engine ada-ternary, entry `bonsai-27b-ada`)
+
+Instalado em 2026-10-26: MESMOS pesos ternários PTQ1_0, mas servidos pelo
+fork `llama.cpp-ada-ternary` (branch `bonsai-q8-product`, commit pinado
+`2cadbfb6` = PrismML `adfffbe` + a pilha de 71 patches do projeto
+[professorpalmer/bonsai-ada-surgery](https://github.com/professorpalmer/bonsai-ada-surgery)).
+O GGUF é o oficial do projeto, com a head MTP da ProCreations enxertada
+(`blk.64`; os 851 tensors do trunk são byte-idênticos ao PTQ1_0 do PrismML):
+
+```bash
+hf download CaryPalmer/Ternary-Bonsai-2-27B-262k-GGUF \
+  Ternary-Bonsai-2-27B-PTQ1_0-mtp-procreations.gguf \
+  --local-dir models/Ternary-Bonsai-2-27B-262k-GGUF
+```
+
+| Arquivo | Tamanho | Uso |
+|---------|---------|-----|
+| `Ternary-Bonsai-2-27B-PTQ1_0-mtp-procreations.gguf` | ~6,4 GB | entry `bonsai-27b-ada` (mmproj reutilizado do dir `Ternary-Bonsai-2-27B-gguf/`) |
+
+A engine é construída com `./engines/llama.cpp-bonsai-ada/build.sh`. A
+entry usa a receita 12 GB do launcher do projeto: KV q4_0 TIERED
+(`--kv-vram-cells` — posições em VRAM, resto em RAM pinneada,
+bit-idêntico), MTP self-draft (`--spec-type ngram-mod,draft-mtp`,
+`draft-n-max 2` / `tail 4`, draft window 16k) + lookup drafting (n-gram,
+32), mmproj na CPU (`--no-mmproj-offload`) e harness-proofing de
+reasoning (`--reasoning-effort-allow medium`, budget 20480 com
+fechamento forçado). Medições e2e na RTX 3060 (2026-10-26): **decode
+~52 tok/s @5,5k, ~49 @45k, ~38 @130k, ~32 @175k** vs stock prism 23/16
+nos mesmos prompts; prefill igual ao stock; aceitação do draft ~69-91%.
+SEM pdcache/sleep (o patch de disco é contra o master ggml-org).
+
 ### Bonsai 2 9B (variante edge — engine PrismML, entry `bonsai-9b`)
 
 Instalado em 2026-10-20 (origem `prism-ml/Ternary-Bonsai-2-9B-gguf`):
@@ -210,7 +241,10 @@ hf download AtomicChat/Ternary-Bonsai-2-9B-Uncensored-LoRA-GGUF \
 
 > **MTP do Bonsai não foi baixado** (arquivo draft MTP ~7 GB no repo
 > upstream; fora de escopo do plano llama-swap-multi-engine). As entries
-> atuais não usam `--model-draft`.
+> atuais não usam `--model-draft`. NOTA 2026-10-26: o MTP chegou por outro
+> caminho — a entry `bonsai-27b-ada` usa o GGUF com a head enxertada
+> (`draft-mtp` self-draft, sem `--model-draft`); a entrada acima refere-se
+> aos drafts DFlash do repo prism-ml, que continuam não baixados.
 
 Nesta máquina os arquivos foram **migrados** de `/home/jocic/bonsai-llm/models/`
 (task 004 do plano) — o comando `hf download` acima é o caminho para
