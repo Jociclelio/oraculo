@@ -184,6 +184,33 @@ fechamento forçado). Medições e2e na RTX 3060 (2026-10-26): **decode
 nos mesmos prompts; prefill igual ao stock; aceitação do draft ~69-91%.
 SEM pdcache/sleep (o patch de disco é contra o master ggml-org).
 
+#### Bonsai 2 27B "ada" Uncensored (LoRA AtomicChat — entry `bonsai-27b-ada-uncensored`)
+
+Adicionada em 2026-10-28: a MESMA entry `bonsai-27b-ada` + LoRA rank-1 de
+9,7 MB do AtomicChat que remove a direção de recusa no grafo (base
+byte-idêntico, nada re-quantizado; método Arditi et al. 2024). A LoRA foi
+construída sobre o PTQ1_0 do PrismML — cujo trunk é byte-idêntico ao GGUF
+262k acima — e os 129 sites-alvo (64 `ffn_down` + 48 `ssm_out` + 16
+`attn_output` + `token_embd`) foram verificados presentes no GGUF c/ MTP
+(metadata `prism.abliterate.*` embarcado, direction_row 42).
+
+```bash
+hf download AtomicChat/Ternary-Bonsai-2-27B-Uncensored-LoRA-GGUF \
+  bonsai2-27b-uncensored-own42-lora.gguf \
+  --local-dir models/Ternary-Bonsai-2-27B-Uncensored-LoRA
+```
+
+| Arquivo | Tamanho | Uso |
+|---------|---------|-----|
+| `bonsai2-27b-uncensored-own42-lora.gguf` | 9,7 MB | `--lora-scaled :1.5` na entry `bonsai-27b-ada-uncensored` |
+
+**Scale 1,5** é o ponto validado pelo autor: refusals 99%→0% (em 1,0
+ainda 14% recusam; em 2,0 replies vazios) com MMLU 73.2→73.0. Outros
+arquivos no mesmo repo: `own38` (segunda direção) e
+`own42-layers15-63` (sem embedding — pior segundo o autor). **NÃO
+VALIDADO em carga nesta máquina** (GPU ocupada na adição) — validar
+recusas, tok/s e aceitação do draft-mtp com a LoRA ativa ao ativar.
+
 ### Bonsai 2 9B (variante edge — engine PrismML, entry `bonsai-9b`)
 
 Instalado em 2026-10-20 (origem `prism-ml/Ternary-Bonsai-2-9B-gguf`):

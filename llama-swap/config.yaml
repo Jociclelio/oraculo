@@ -540,6 +540,42 @@ models:
     ttl: 300
 
   # ---------------------------------------------------------------------
+  # Bonsai 2 27B "ada" Uncensored (AtomicChat) — MESMA receita da
+  # bonsai-27b-ada + LoRA rank-1 de 9,7 MB que remove a direção de recusa
+  # NO GRAFO (base byte-idêntico, nada re-quantizado). Sites verificados
+  # em CPU 2026-10-28: os 129 alvos da LoRA (64 ffn_down + 48 ssm_out +
+  # 16 attn_output + token_embd) existem no GGUF 262k c/ MTP; metadata
+  # prism.abliterate.* embarcado (direction_row 42, basis unfolded).
+  # --lora-scaled 1.5: escala validada pelo autor (refusals 99%→0%; em
+  # 1.0 ainda 14% recusam, em 2.0 replies vazios; MMLU 73.2→73.0).
+  # ATENÇÃO: NÃO VALIDADO em carga nesta máquina (GPU ocupada na adição
+  # da entry) — ao ativar, validar: (a) recusas vs base, (b) tok/s e
+  # aceitação do draft-mtp com LoRA ativa, (c) VRAM (LoRA é ~10 MB, mas
+  # os matmuls extras consomem um pouco de compute buffer).
+  # ---------------------------------------------------------------------
+  bonsai-27b-ada-uncensored:
+    cmd: |
+      ${docker-bonsai-ada}
+      -m /models/Ternary-Bonsai-2-27B-262k-GGUF/Ternary-Bonsai-2-27B-PTQ1_0-mtp-procreations.gguf
+      --mmproj /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf
+      --lora-scaled /models/Ternary-Bonsai-2-27B-Uncensored-LoRA/bonsai2-27b-uncensored-own42-lora.gguf:1.5
+      -c 131072 -ngl 99
+      -ctk q4_0 -ctv q4_0
+      -ctkd q4_0 -ctvd q4_0
+      --kv-vram-cells 131072
+      --spec-type ngram-mod,draft-mtp
+      --spec-draft-n-max 2 --spec-draft-n-max-tail 4 --spec-draft-window 16384
+      --spec-lookup-n-max 32
+      --backend-sampling
+      --reasoning-effort-allow medium --reasoning-effort-fallback medium
+      --reasoning-max-tokens-floor 24576
+      --reasoning-budget 20480
+      --reasoning-budget-message "Now produce the complete answer."
+      --ctx-checkpoints 16
+    cmdStop: ${docker-stop}
+    ttl: 300
+
+  # ---------------------------------------------------------------------
   # Bonsai 2 9B (variante edge da família, denso — instalado 2026-10-20,
   # origem prism-ml/Ternary-Bonsai-2-9B-gguf). MESMA engine PrismML pinada
   # (regra dura: PTQ1_0 só roda no fork — a stock/pdcache recusa o formato
