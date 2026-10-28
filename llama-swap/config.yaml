@@ -644,6 +644,27 @@ models:
     ttl: 1800
 
   # ---------------------------------------------------------------------
+  # LFM 2.5 24B-A2B Uncensored (AtomicChat) — MESMA receita da
+  # LFM2.5_24B_A2B + LoRA rank-1 de 24 MB que remove a direção de recusa
+  # nos blocos 14-39 (mixers + ffn_down dos 64 experts; sites verificados
+  # em CPU 2026-10-28: 52/52 presentes no Q4_K_M). --lora-scaled 1.75:
+  # escala validada pelo autor (refusals 96,3%→1,2% EN, thinking 30/30→0,
+  # MMLU 64,4→65,6). NCMOE: os sites ffn_down dos experts vivem na RAM
+  # (--load-mode none) — a LoRA aplica no grafo onde o tensor está.
+  # ---------------------------------------------------------------------
+  LFM2.5_24B_A2B_Uncensored:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/LFM2.5-24B-A2B-GGUF/LFM2.5-24B-A2B-Q4_K_M.gguf
+      --lora-scaled /models/LFM2.5-24B-A2B-Uncensored-LoRA/lora/LFM2.5-24B-A2B-Uncensored-LoRA.gguf:1.75
+      --load-mode none
+      -c 131072 -ngl 99 -ncmoe 20
+      -b 4096 -ub 2048
+      --temp 0.1 --top-k 50 --repeat-penalty 1.05
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
   # LFM 2.5 24B-A2B IQ2_M (unsloth UD) — a MESMA entry acima em 100% GPU:
   # IQ2_M (7,5 GB) cabe inteiro na VRAM, sem --load-mode none e sem
   # -ncmoe (regra 2 não se aplica — não há experts na CPU). Sem MTP
@@ -718,6 +739,31 @@ models:
       ${docker-pdcache}
       -m /models/MiniCPM-V-4.7-35B-A3B-Q4_K_M/MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf
       --mmproj /models/MiniCPM-V-4.7-35B-A3B-Q4_K_M/mmproj-model-f16.gguf
+      --load-mode none
+      -c 131072 -ngl 99 -ncmoe 32
+      -b 4096 -ub 4096
+      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
+      --presence-penalty 0.0 --repeat-penalty 1.0
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
+  # MiniCPM-V 4.7 35B Uncensored (AtomicChat) — MESMA receita da
+  # MiniCPM-V_4.7_35B + LoRA rank-1 de 106 MB (120 sites: 40 attn/linear
+  # outputs + ffn_down dos 256 experts + 40 shared experts; sites
+  # verificados em CPU 2026-10-28: 120/120 presentes no Q4_K_M).
+  # --lora-scaled 1.0: escala validada pelo autor (refusals 96,3%→0%,
+  # thinking 43%→0%, MMLU 84,25→84,50). Embedding NÃO é editado de
+  # propósito (o vision projector copia linhas dele) — visão segue igual
+  # à base. NCMOE: experts na RAM, LoRA aplica no grafo onde o tensor
+  # está. Requer build ≥ PR ggml-org#29416 (a stock 11561 tem).
+  # ---------------------------------------------------------------------
+  MiniCPM-V_4.7_35B_Uncensored:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/MiniCPM-V-4.7-35B-A3B-Q4_K_M/MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf
+      --mmproj /models/MiniCPM-V-4.7-35B-A3B-Q4_K_M/mmproj-model-f16.gguf
+      --lora-scaled /models/MiniCPM-V-4.7-35B-A3B-Uncensored-LoRA/lora/MiniCPM-V-4.7-35B-A3B-Uncensored-LoRA.gguf:1.0
       --load-mode none
       -c 131072 -ngl 99 -ncmoe 32
       -b 4096 -ub 4096

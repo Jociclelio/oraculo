@@ -217,6 +217,43 @@ carga fria: o 1º request após restart pode passar do health check do
 llama-swap se o GGUF estiver frio no NVMe (~4 min de carga; medida no
 container manual) — o retry com page cache quente sobe em ~30 s.
 
+#### LFM 2.5 24B-A2B Uncensored (LoRA AtomicChat — entry `LFM2.5_24B_A2B_Uncensored`)
+
+Adicionada em 2026-10-28: a MESMA entry `LFM2.5_24B_A2B` + LoRA rank-1 de
+24 MB que remove a direção de recusa nos blocos 14-39 (mixers + ffn_down
+dos 64 experts — o card do autor mostra que editar só os mixers deixa 83%
+das recusas: a recusa mora nos experts também). Sites verificados em CPU:
+52/52 presentes no Q4_K_M.
+
+```bash
+hf download AtomicChat/LFM2.5-24B-A2B-Uncensored-GGUF \
+  lora/LFM2.5-24B-A2B-Uncensored-LoRA.gguf \
+  --local-dir models/LFM2.5-24B-A2B-Uncensored-LoRA
+```
+
+**Scale 1,75** (validado pelo autor): refusals 96,3%→1,2% EN, XSTest 0%,
+thinking 30/30→0, MMLU 64,4→65,6. A LoRA vale para qualquer GGUF dos
+pesos originais (a IQ2_M incluída — não medida pelo autor na quant
+agressiva). Validado aqui 2026-10-28 (ver AGENTS.md).
+
+#### MiniCPM-V 4.7 35B Uncensored (LoRA AtomicChat — entry `MiniCPM-V_4.7_35B_Uncensored`)
+
+Adicionada em 2026-10-28: a MESMA entry `MiniCPM-V_4.7_35B` + LoRA
+rank-1 de 106 MB (120 sites: 40 attn/linear outputs + ffn_down dos 256
+experts + 40 shared experts). O token embedding NÃO é editado de
+propósito — o vision projector copia linhas dele, então a visão fica
+idêntica à base. Sites verificados em CPU: 120/120 presentes no Q4_K_M.
+
+```bash
+hf download AtomicChat/MiniCPM-V-4.7-35B-A3B-Uncensored-GGUF \
+  lora/MiniCPM-V-4.7-35B-A3B-Uncensored-LoRA.gguf \
+  --local-dir models/MiniCPM-V-4.7-35B-A3B-Uncensored-LoRA
+```
+
+**Scale 1,0** (validado pelo autor): refusals 96,3%→0%, thinking
+43%→0%, MMLU 84,25→84,50. Requer build ≥ PR ggml-org#29416 (a stock
+atual tem). Validado aqui 2026-10-28 (ver AGENTS.md).
+
 ### Bonsai 2 9B (variante edge — engine PrismML, entry `bonsai-9b`)
 
 Instalado em 2026-10-20 (origem `prism-ml/Ternary-Bonsai-2-9B-gguf`):
