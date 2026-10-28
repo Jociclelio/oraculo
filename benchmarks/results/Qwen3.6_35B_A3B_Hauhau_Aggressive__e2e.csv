@@ -1,3 +1,0 @@
-entry,target_ctx,prompt_n,prefill_tps,decode_tps,prefill_s,decode_s,total_s
-Qwen3.6_35B_A3B_Hauhau_Aggressive,16,7,26.06,35.18,0.27,0.37,0.64
-Qwen3.6_35B_A3B_Hauhau_Aggressive,16384,10049,13.80,0.00,728.44,0.00,728.44

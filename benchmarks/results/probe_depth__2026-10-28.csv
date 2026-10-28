@@ -1,0 +1,4 @@
+variant,depth_target,prompt_tokens,decode_tps,prefill_tps,draft,draft_acc,vram_mib
+combo,8192,8234,47.15,971.86,184/194,0.948,11191
+combo,65536,65501,40.73,955.05,184/195,0.944,11191
+combo,130016,130040,33.47,714.69,178/207,0.86,11191

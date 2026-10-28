@@ -9,8 +9,8 @@ Medição padronizada por modelo, gerando 4 gráficos:
 
 ## Receita comum a todos os modelos
 
-- **KV quant único**: `-ctk q5_1 -ctv q5_1` (regra 10 — K/V misto destrói os
-  híbridos GDN/SWA no stock; tipo único é obrigatório)
+- **KV quant único**: o vigente no `config.yaml` (regra 10 — desde
+  2026-10-27, `-ctk q4_0 -ctv q4_0`; tipo único K=V obrigatório)
 - **Visão plena**: `--mmproj` carregado nos modelos que suportam
 - **Corte de VRAM ~10 GB**: `-ncmoe` de serving por modelo (validado por
   carga real; o processo pode passar um pouco)
@@ -60,6 +60,28 @@ desta build (11561) mede decode ~6× abaixo do serving nos híbridos GDN
 {256,512,1024,2048}` (ub ≤ batch), 2 repetições. Prefill no llama-bench é
 confiável (validado contra o serving); decode não (ver acima).
 
+### `sweep_ctx.py` — sweep de contexto via llama-swap (gráficos 1/3/4 "reais")
+
+Varre o contexto 0→130k em passos de ~8k batendo no **serving** (`:8081`,
+receita do `config.yaml` — inclui MTP/draft, pdcache e KV vigentes). É a
+medição que alimenta o gráfico decode+prefill+IZ × contexto e o ranking do
+Índice Zoo. Saída: `results/ctxsweep/<entry>__ctxsweep.json` +
+consolidado `results/ctxsweep__<data>.csv`.
+
+```bash
+python3 benchmarks/sweep_ctx.py <entry> [entry2 ...]
+python3 benchmarks/plot_ctx.py <entry>        # PNG em results/plots/ctxsweep/
+python3 benchmarks/plot_ctx.py --all
+```
+
+O gráfico tem 3 curvas: **decode (t/s)** na régua do eixo esquerdo,
+**prefill (t/s)** na régua do eixo direito e **IZ** num eixo no MEIO do
+gráfico (0–100) com linhas de referência em iz = 25/50/75/100.
+
+Diferenças para o `bench.sh sweep`: usa texto real pt-BR crescente
+(pdcache entre pontos — conferir `cache_n`) em vez de prompts sintéticos
+independentes, e mede o desempenho de serving real (draft MTP incluso).
+
 ## Calibração de batch/ubatch — `calibrate.sh`
 
 Varre a grade `batch × ubatch` medindo **prefill e2e** (llama-server na
@@ -98,6 +120,42 @@ CAL_B="2048 4096 8192" CAL_UB="1024 2048 4096" ./benchmarks/calibrate.sh <entry>
   da build do llama.cpp — comparar apenas medições do mesmo boot/build.
 - Sem draft MTP, `ub 4096` cabe e é o vencedor; com draft, `ub 2048` é o
   teto (ub4096 aborta a carga).
+
+## Probe de profundidade — `probe_depth.py`
+
+Tuning de variantes de configuração sem sweep completo: replica a receita de
+serving da entry e injeta os flags da variante por cima (último valor vence),
+medindo só **3 pontos (8k/64k/130k)** por variante (~3-4 min cada): decode,
+prefill, aceitação do draft e VRAM de pico. Compara a **razão de planura**
+`dec@130k / dec@8k`. O vencedor vai para o `config.yaml` após validação de
+carga (o probe já é a carga) e sweep completo.
+
+```bash
+python3 benchmarks/probe_depth.py                          # bateria default
+PROBE_VARIANTS="base combo" python3 benchmarks/probe_depth.py
+DRY=1 python3 benchmarks/probe_depth.py                    # só imprime comandos
+```
+
+Resultado da bateria de 2026-10-28 (Qwen3.6_35B_A3B, dec t/s @8k/64k/130k):
+
+| variante | @8k | @64k | @130k | planura | acc@130k |
+|---|---|---|---|---|---|
+| base (n-max 2) | 45,1 | 38,9 | 29,7 | 0,66 | 0,85 |
+| n1 | 41,1 | 33,7 | 27,9 | 0,68 | 0,93 |
+| n3 | 46,9 | 40,9 | 31,9 | 0,68 | 0,77 |
+| pmin50 | 44,3 | 39,8 | 31,7 | 0,72 | 0,89 |
+| pmin70 | 45,2 | 40,3 | 29,3 | 0,65 | 0,92 |
+| **pmin50n3** | 42,5 | 41,1 | 33,0 | **0,78** | 0,86 |
+| ncmoe32 | 46,9 | 38,9 | 31,8 | 0,68 | 0,85 |
+| ngram (draft-mtp,ngram-simple) | 42,4 | 36,7 | 25,8 | 0,61 | 0,60 |
+| **combo (n3+pmin0.5+ncmoe32)** | **47,1** | 40,7 | **33,5** | 0,71 | 0,86 |
+
+**Vencedor: `combo`** — domina absolutamente (melhor em todos os pontos;
+a planura menor do que pmin50n3 é só o raso mais rápido). `--spec-draft-p-min
+0.5` filtra drafts fracos na cauda (acc@130k 0,85→0,86 com n-max 3, e
+-13% de drafts desperdiçados); `n-max 3` rende no meio da janela;
+`-ncmoe 32` levanta o raso (experts: mais 1 camada na GPU). O ngram
+empilhado ao MTP foi RUIM (acc desaba para 0,60 — rejeitado).
 
 ## Limitações conhecidas
 

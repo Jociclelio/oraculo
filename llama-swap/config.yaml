@@ -116,22 +116,12 @@ macros:
     -fa on --jinja -np 1 -t 5
     --cache-reuse 256 --cache-ram 4096
 
-  # Macro Xing4.0 — mesma receita do docker-prismml, mas com a imagem local
-  # do fork shuxiaoqiong (engines/llama.cpp-xing/, commit pinado 8c379195a).
-  # REGRA DURA: NUNCA usar a imagem stock para GGUFs Xing4.0 — o suporte à
-  # arquitetura `xing4_0` (MoE 29B/4B + MLA + mHC) vive no PR ggml-org#29012,
-  # ainda não mergeado; a stock recusa o GGUF. Mesmo padrão de entrypoint do
-  # PrismML (base nvidia/cuda herda nvidia_entrypoint.sh).
-  "docker-xing": >
-    docker run --rm --name ls-${MODEL_ID} --gpus all
-    --entrypoint /usr/local/bin/llama-server
-    -p 127.0.0.1:${PORT}:8080
-    -v ./models:/models
-    llama.cpp-xing:latest
-    --host 0.0.0.0 --port 8080
-    -fa on --jinja -np 1 -t 5
-    -ctk q4_0 -ctv q4_0
-    --cache-reuse 256 --cache-ram 2048
+  # Macro Xing4.0 — REMOVIDO em 2026-10-28 junto com a entry (modelo
+  # desclassificado: prefill colapsa em profundidade no fork — 227 t/s @32k,
+  # 65 @130k na bateria 2026-10-27; investigação do caminho de atenção do
+  # fork não vale o esforço). Imagem llama.cpp-xing:latest e engine
+  # engines/llama.cpp-xing/ apagadas; reativável via git history + PR
+  # ggml-org#29012 se o fork corrigir o caminho de atenção.
 
   # Macro pdcache — mesma receita do docker-stock, mas com a imagem local
   # llama.cpp-pdcache (engines/llama.cpp-pdcache/: master ggml-org pinado no
@@ -212,13 +202,17 @@ models:
       -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
       --mmproj /models/unsloth_Qwen3.6_35B_A3B_MTP/mmproj-F16.gguf
       --load-mode none
-      --spec-type draft-mtp --spec-draft-n-max 2
-      -c 131072 -ngl 99 -ncmoe 33
+      --spec-type draft-mtp --spec-draft-n-max 3 --spec-draft-p-min 0.5
+      -c 131072 -ngl 99 -ncmoe 32
       -b 4096 -ub 2048
       --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
       --presence-penalty 1.5 --repeat-penalty 1.0
     cmdStop: ${docker-stop}
     ttl: 1800
+    # Tuning de planura 2026-10-28 (probe de profundidade — benchmarks/
+    # probe_depth.py + bateria completa no benchmarks/README.md): n-max 2→3,
+    # --spec-draft-p-min 0.5 (filtra drafts fracos na cauda) e ncmoe 33→32.
+    # Decode @130k 23→31,5 tok/s; planura dec@130k/dec@8k 0,57→0,76.
     # VALIDADA em 2026-10-18 (prompt 21k, qwen35moe/GDN, como Qwen3.6_35B_Code):
     # unload (docker rm -f) + re-request → cache_n 21213/21217 (99,98%),
     # prompt_n 4, prefill ~0,5 s (era 33 s); snapshot .centry 638 MiB.
@@ -670,36 +664,6 @@ models:
       --temp 0.1 --top-k 50 --repeat-penalty 1.05
     cmdStop: ${docker-stop}
     ttl: 1800
-
-  # ---------------------------------------------------------------------
-  # Xing4.0 29B-A4B (Venastine-Research, Q4_K_M) — engine dedicada
-  # llama.cpp-xing (fork shuxiaoqiong, PR ggml-org#29012 — NUNCA stock).
-  # Arquitetura: MoE 29B/4B ativo (64 experts roteados + 1 shared, 40
-  # camadas), MLA (kv_lora 512), mHC hyper-connections, MTP head; contexto
-  # nativo 256K.
-  # - --load-mode none é OBRIGATÓRIO: com mmap + overrides de tensor p/ CPU
-  #   (-ncmoe), o loader avisa e o desempenho desaba (1,2 tok/s medido);
-  #   sem mmap: 12,7 tok/s (validado 2026-10-10).
-  # - MoE: -ncmoe 27/64 experts na CPU (128k + KV quantizado validado 2026-10-15).
-  # - Sampling do README oficial: temp 1.0 / top_p 0.95 / repeat-penalty 1.05.
-  # - MTP draft: arquivo Q4_K_M-MTP não existe no repo (só IQ3) — sem spec
-  #   decoding; tensors nextn do GGUF são ignorados pelo loader.
-  # - Modelo thinking: resposta vem em reasoning_content + content.
-  # ---------------------------------------------------------------------
-  # - KV: o fork Xing NÃO aceita K/V com tipos diferentes (MLA: "model does
-  #   not support different K and V cache types") — mesmo corte do stock
-  #   (ver regra 10: tipo único q4_0/q4_0 nos macros serve aqui também).
-  #   Validado 128k: ncmoe 27 → 10689 MiB total; ncmoe 25 → 11501 (apertado).
-  Xing4.0_29B_A4B:
-    cmd: |
-      ${docker-xing}
-      -m /models/Xing4.0-29B-A4B-Q4_K_M/Xing4.0-29B-A4B-Q4_K_M.gguf
-      --load-mode none
-      -c 131072 -ngl 99 -ncmoe 27
-      -b 4096 -ub 1024
-      --temp 1.0 --top-p 0.95 --repeat-penalty 1.05
-    cmdStop: ${docker-stop}
-    ttl: 300
 
   # ---------------------------------------------------------------------
   # MiniCPM-V 4.7 35B-A3B (OpenBMB) — primeiro MoE multimodal da série

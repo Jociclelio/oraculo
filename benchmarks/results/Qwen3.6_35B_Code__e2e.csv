@@ -1,7 +1,0 @@
-entry,target_ctx,prompt_n,prefill_tps,decode_tps,prefill_s,decode_s,total_s
-Qwen3.6_35B_Code,16,7,20.34,25.24,0.34,0.52,0.86
-Qwen3.6_35B_Code,16384,10049,1350.40,0.00,7.44,0.00,7.44
-Qwen3.6_35B_Code,32768,20034,1294.30,0.00,15.48,0.00,15.48
-Qwen3.6_35B_Code,65536,-1,0,0,0,0,0
-Qwen3.6_35B_Code,98304,-1,0,0,0,0,0
-Qwen3.6_35B_Code,126976,-1,0,0,0,0,0

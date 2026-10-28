@@ -520,10 +520,10 @@ ls-<Modelo>`) — **só 1 modelo carregado por vez**, descarregado também após
 `ttl: 300` s ocioso.
 
 - **Engines**: imagem stock `ghcr.io/ggml-org/llama.cpp:full-cuda` (macro
-  `docker-stock`), imagem local do fork PrismML `llama.cpp-prismml:latest`
-  para os Bonsai (build em `engines/llama.cpp-prismml/`, commit pinado
-  `84445367f` — **nunca stock** para Bonsai) e Strata (entry comentada,
-  infra em `engines/strata/`).
+  `docker-stock`) e imagens locais do fork PrismML
+  `llama.cpp-prismml:latest` (build em `engines/llama.cpp-prismml/`, commit
+  pinado `84445367f` — **nunca stock** para Bonsai) e do fork bonsai-ada
+  `llama.cpp-bonsai-ada:latest` (`engines/llama.cpp-bonsai-ada/`).
 - **Monte**: os containers de modelo montam `./models:/models` (mesmo monte
   do antigo serviço); o `models.ini` não é mais montado em lugar nenhum —
   os parâmetros vivem em `llama-swap/config.yaml`.
@@ -685,7 +685,6 @@ oraculo/
 ├── bin/llama-swap            # binário (gitignored)
 ├── logs/                     # llama-swap.log + pidfile (gitignored)
 ├── engines/llama.cpp-prismml/# engine Docker dedicada do fork PrismML (Bonsai)
-├── engines/strata/           # infra Strata (Dockerfile + README; modelo não baixado)
 │
 ├── data/                     # Estado dos serviços (gitignored): open-webui/,
 │   ├── open-terminal/, openwa/, 9router/, comfyui/ (caches),

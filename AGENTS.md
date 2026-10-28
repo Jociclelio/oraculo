@@ -52,7 +52,7 @@ load/unload manual — apontar o request para outro `model` faz o swap
 ## Arquitetura
 
 - **`llama-swap/config.yaml` é a FONTE DA VERDADE** dos parâmetros de cada
-  modelo (12 entries: 10 stock + 1 Bonsai + 1 Xing).
+  modelo (11 entries: 10 stock + 1 Bonsai).
   `models/models.ini` é HISTÓRICO desativado — nada o lê.
   **Convenção de contexto** (VRAM validada por carga real, display idle):
   entry SEM sufixo = **128k** (floor, `-c 131072`), viabilizado pelo KV
@@ -62,14 +62,13 @@ load/unload manual — apontar o request para outro `model` faz o swap
   (1,8+ GB VRAM) as entries de MoE híbrido podem OOM.
 - Macros no config: `docker-stock` (imagem oficial
   `ghcr.io/ggml-org/llama.cpp:full-cuda`, entrypoint `/app/llama-server`),
-  `docker-prismml` e `docker-xing` (imagens locais, entrypoint
+  `docker-prismml` (imagem local, entrypoint
   `/usr/local/bin/llama-server`), `docker-stop`.
 - **O llama-swap NÃO executa o cmd via shell (shlex)**: nada de `;`, pipes ou
   redirects no `cmd` — um único comando por entry.
 - Engines dedicadas vivem em `engines/<fork>/` (Dockerfile + build.sh),
   clonando o fork **pinado em commit** (o build falha se HEAD ≠ pin):
   - `engines/llama.cpp-prismml/` — commit `84445367f` (branch `prism`)
-  - `engines/llama.cpp-xing/` — commit `8c379195a` (branch `xing4_0-port`)
   - `engines/llama.cpp-pdcache/` — master ggml-org pinado no MESMO commit da
     imagem stock em uso + patch de prompt disk cache portado do fork
     qqkzlm (regra 9; a base `prism` original do fork tem prefill de MoE na
@@ -81,7 +80,7 @@ load/unload manual — apontar o request para outro `model` faz o swap
     (`--kv-vram-cells`), FA lê q4_0/q8_0/q3_0 K/V in place, MTP
     self-draft + lookup n-gram, harness-proofing de reasoning.
   - Verificar engine em runtime: `system_fingerprint` nos responses
-    (`b1-8444536` PrismML, `b1-8c37919` Xing, `b1-2cadbfb` bonsai-ada).
+    (`b1-8444536` PrismML, `b1-2cadbfb` bonsai-ada).
 - Instalar modelo novo: guia em `models/MODELS_INSTALL.md`
   (`hf download ... --local-dir models/<Dir>` + entry no config + restart).
 
@@ -89,11 +88,9 @@ load/unload manual — apontar o request para outro `model` faz o swap
 
 ## Regras duras (erros que já custaram horas)
 
-1. **NUNCA servir Bonsai 2 nem Xing4.0 com a imagem stock.**
+1. **NUNCA servir Bonsai 2 com a imagem stock.**
    - Bonsai (ternários PTQ1_0/PQ2_0): kernels só no fork PrismML; stock recusa
      ou carrega como Q2_0 legacy gerando lixo.
-   - Xing4.0 (arquitetura `xing4_0`): suporte só no fork shuxiaoqiong (PR
-     ggml-org#29012, não mergeado); stock recusa o GGUF.
 2. **MoE híbrido exige `--load-mode none`** nas entries com `-ncmoe`. Com
    mmap + overrides de tensor para CPU o decode desaba silenciosamente
    (medido: Xing 1,2→12,5 tok/s; Qwen3.6 MTP 1,3→27-33 tok/s). O loader
@@ -144,7 +141,7 @@ load/unload manual — apontar o request para outro `model` faz o swap
     2026-10-26: `ub 4096` em Flint_40B (prefill ~1097→1300, VRAM serving
     10567 MiB) e MiniCPM-V_4.7_35B (~1383→1619, VRAM 10359 MiB);
     Qwen3.6_35B_Code MANTÉM `ub 1024` (ub2048 + draft não cabe nesta
-    build); Xing segue `ub 1024` (folga de VRAM).
+    build);
  8. **Geração de imagem (ComfyUI) e inferência de LLM dividem a mesma VRAM —
     liberação bidirecional automática.** O ComfyUI
     (yanwk/comfyui-boot, porta 8188 via gpu-shim; núcleo em 127.0.0.1:8189)
@@ -299,7 +296,7 @@ falta de kernel FA dedicado).
 | `MiniCPM-V_4.7_35B` | stock | 131072 | MiniCPM-V 4.7 35B-A3B multimodal Q4_K_M + mmproj f16 (openbmb `-gguf`); backbone Qwen3.6 (arch qwen35moe, 256 experts/8 ativos, GDN); **SEM MTP** (header declara nextn=1 mas sem tensors; draft DSpark testado e descartado: aceitação ~10%, decode 9,5 tok/s, buffer ~3,9 GB não cabe — GGUF do draft APAGADO em 2026-10-26, re-baixável via MODELS_INSTALL.md); ncmoe 32 + `--load-mode none` + **ub 4096** (calibração 2026-10-26: prefill ~1383→1619 tok/s; VRAM serving 10359 MiB); requer llama.cpp ≥ PR #29416 (imagem stock atualizada p/ build 11561, fingerprint `b11561-e937b17a2`); **~32-35 tok/s, prefill ~1040→~1600 tok/s**; visão validada |
 | `MiniCPM-V_4.7_35B_Uncensored` | stock | 131072 | MESMA receita da `MiniCPM-V_4.7_35B` + LoRA rank-1 AtomicChat (106 MB, `--lora-scaled :1.0` — 120 sites: attn/linear outputs + ffn_down dos 256 experts + 40 shared experts; sites verificados em CPU: 120/120 no Q4_K_M; embedding NÃO editado — o vision projector copia linhas dele; autor: refusals 96,3%→0%, MMLU +0,25); **validado 2026-10-28**: 2/2 probes sem recusa (lockpicking; harmless OK), thinking intacto; VRAM ~10455 MiB c/ display |
 | `MiniCPM-V_4.7_1B` | stock | 131072 | MiniCPM-V 4.7 1B multimodal (openbmb `-gguf`); variante edge DENSA da série (arch qwen35, sem experts); mesmo visor LLaVA-UHD v4 da 35B; SEM MTP; **decode ~248 tok/s, prefill ~10400 tok/s** (pós-unlock 2026-10-26 — prefill recorde do zoo); visão validada (2026-10-16) |
-| `Qwen3.6_35B_A3B` | stock | 131072 | thinking + head MTP (aceitação ~57% pós-unlock); ncmoe 33; ub2048; **decode ~35 tok/s, prefill ~1000 tok/s** (pós-unlock 2026-10-26); VRAM 11200 MiB (c/ mmproj) — única entry do Qwen3.6 desde 2026-10-26 (Code/It_* removidas; uncensored na entry Hauhau) |
+| `Qwen3.6_35B_A3B` | stock | 131072 | thinking + head MTP; **tuning de planura 2026-10-28** (probe de profundidade, `benchmarks/probe_depth.py`): `--spec-draft-n-max 3 --spec-draft-p-min 0.5` + `-ncmoe 32` — decode ~38-42 tok/s curto, **~31,5 @130k** (era 23 com n-max 2/p-min 0/ncmoe 33; planura 0,57→0,76, acc@130k 0,80→0,92), prefill ~980-1094 curto / ~624 @130k; VRAM ~11190 MiB (c/ mmproj); IZ 36-58 em toda a janela (antes caía a 23 = "não usável"); ngram empilhado ao MTP testado e REJEITADO (acc 0,60) — única entry do Qwen3.6 desde 2026-10-26 (Code/It_* removidas; uncensored na entry Hauhau) |
 | `Qwen3.6_35B_A3B_Hauhau_Aggressive` | stock | 131072 | Uncensored Aggressive, multimodal; ncmoe 29; ub2048 + `--load-mode none`; **decode ~41 tok/s, prefill ~1100 tok/s** (pós-unlock 2026-10-26); VRAM 11240 MiB; SEM MTP (GGUF sem tensors nextn — spec inaplicável; `--moe-cache-mib` testado e rejeitado: decode -21%) |
 | `Ornith1.5_35B_MTP` | stock | 131072 | agêntico (APEX Compact), ncmoe 29 + `--load-mode none`; ub2048; MTP self-draft (aceitação ~38% pós-unlock); **decode ~32 tok/s, prefill ~1140 tok/s** (2026-10-26); VRAM 11564 MiB (c/ mmproj, visão confirmada — Baseten/Atomic Chat/repo mudler) |
 | `Nemotron3.5_Bolt_74B` | stock | 131072 | NVIDIA Nemotron-3.5-Bolt 74B-A9B (arch `nemotron_h_moe`: 88 blocos híbridos Mamba/atenção; KV pequeno → 128k ok); GGUF "24GB" + mmproj; **ncmoe 74/88** (o 32 original OOMava — experts de ~56 blocos ficavam na GPU) + `--no-mmproj-offload` (mmproj na CPU, -1,7 GB); **SEM draft** (DFlash medido c/ aceitação ~27% → decode 9,2 tok/s; sem draft **decode ~19 tok/s, prefill ~560 tok/s**; GGUF do draft (952 MB) em disco p/ reteste); ub 2048; **VRAM ~11060 MiB** (~1,2 GB de folga); temp 1.0 / top-p 0.95; visão carregada, não testada (2026-10-26) |
@@ -318,8 +315,15 @@ falta de kernel FA dedicado).
 | `bonsai-27b-ada-uncensored` | bonsai-ada | 262144 | MESMA receita da `bonsai-27b-ada` + LoRA rank-1 AtomicChat (9,7 MB, `--lora-scaled :1.5` — remove direção de recusa no grafo; sites verificados em CPU: os 129 alvos existem no GGUF 262k c/ MTP; refusals 99%→0% e MMLU 73.2→73.0 medidos pelo autor em prism-b10709); **validado 2026-10-28**: 3/3 probes sem recusa (lockpicking + phishing; sanidade harmless intacta — sem dano de sobre-recusa), **decode 43-50 tok/s em ctx curto** (paridade da base ada ~52), draft-mtp aceita com LoRA ativa; VRAM total 11194 MiB c/ display |
 | `bonsai-9b` | PrismML | 196608 | Bonsai 2 9B (variante edge, denso); PTQ1_0 + mmproj Q8_0, mesma engine PrismML pinada; **KV bf16 @192k (2026-10-20 — q5_1 lento no fork, issue PrismML #191)**: **decode ~84 tok/s, prefill ~1530 tok/s** (pós-unlock 2026-10-26); VRAM 10870 MiB; visão validada; SEM MTP/DFlash (drafts no repo HF não baixados) |
 | `bonsai-9b-uncensored` | PrismML | 196608 | Bonsai 2 9B + LoRA uncensored AtomicChat (rank-1, 3,2 MB, `--lora-scaled :1` — remove direção de recusa no grafo; base byte-idêntico; custo ~4,3 MMLU); MESMOS GGUFs/engine/KV bf16 @192k do `bonsai-9b`; **decode ~78 tok/s** (pós-unlock 2026-10-26); VRAM 10886 MiB; aplicação validada por logprobs distintos vs base; modelo thinking consome muitos tokens de raciocínio |
-| `Xing4.0_29B_A4B` | Xing | 131072 | MoE 29B/4B + MLA + mHC; `--load-mode none` + ncmoe 27; ub1024; **KV q4_0/q4_0 (regra 10; q5_1 até 2026-10-26 — fork aceita q4_0, validado 2026-10-27)**; **decode ~28 tok/s, prefill ~580 tok/s** (pós-unlock 2026-10-26 — quase 2× o 12,5 pré-unlock @64k); VRAM 10916 MiB; ATENÇÃO: prefill colapsa em profundidade (bateria 2026-10-27: 227 t/s @32k, 65 @130k vs ~1000 dos irmãos qwen3_5_moe — investigar caminho de atenção do fork, teste sugerido: q8_0/f16) |
 
+> **Removidos em 2026-10-28 — `Xing4.0_29B_A4B` + engine `llama.cpp-xing`**
+> (GGUF ~17 GB apagado, imagem Docker removida): desclassificado pelo
+> colapso de prefill em profundidade no fork (bateria 2026-10-27: 227 t/s
+> @32k, 65 @130k vs ~1000 dos irmãos qwen3_5_moe — caminho de atenção do
+> fork; investigação não vale o esforço). Entry, macro `docker-xing`,
+> `engines/llama.cpp-xing/` e imagem removidos; reativável via git history
+> se o fork (PR ggml-org#29012) corrigir o caminho de atenção.
+>
 > **Removidos em 2026-10-26 — política do floor de contexto**: modelo que
 > não atende o mínimo de 128k é removido do zoo (não mais sufixo `_XXk`).
 > Precedente: **K2-Horizon 36B MoVA** (`K2Horizon_36B_MoVA_40k`, GGUF 21 GB
@@ -340,9 +344,11 @@ falta de kernel FA dedicado).
 > — o draft morava no mesmo dir) e Mellum2.1-12B-A2.5B-Thinking
 > (`Mellum2.1_12B_A2.5B`). ~49,5 GB liberados no total. **Strata**
 > (`Strata`, Qwen3.8-Flash-Next Coder IQ1_M) removida em 2026-10-14: pesos
-> 86G apagados do disco (worst prefill do zoológico, ~8 tok/s); imagem da
-> engine e infra de build preservadas — reativável via
-> `engines/strata/README.md`. **Variantes de contexto `_96k`/`_128k`
+> 86G apagados do disco (worst prefill do zoológico, ~8 tok/s); **engine e
+> infra de build REMOVIDAS em 2026-10-28** (imagem `strata:latest` +
+> `engines/strata/` — nunca foi reativada; re-instalável do zero via git
+> history se um dia o Qwen3.8-Flash-Next justificar). **Variantes de
+> contexto `_96k`/`_128k`
 > removidas em 2026-10-15** (sem apagar GGUFs): o floor subiu para 128k em
 > todas as entries base com o KV quantizado q5_1/iq4_nl — as variantes
 > ficaram redundantes (mesmos GGUFs, mesma receita). **Qwen3.8-27B-GSQ-RCO
@@ -374,7 +380,6 @@ ganham a adicional quando aplicável.
   - Nemotron-3.5-Bolt-74B-A9B (quant "24GB" ~sub-Q4, mas com offload;
     MoE 74B/9B, mmproj + draft DFlash LiLiCorr — entry `Nemotron3.5_Bolt_74B`)
   - Flint-40B-A2.5B (256 experts top-6 + shared; base e Heretic)
-  - Xing4.0-29B-A4B (MLA + mHC)
   - Raon-1 mini 30B (KRAFTON): AVALIADO E BLOQUEADO 2026-10-26 — arch
     `raon1_mini` não existe no llama.cpp master nem em fork conhecido.
   - K2-Horizon 36B MoVA: REMOVIDO em 2026-10-26 — KV de 192 KiB/tok
@@ -404,7 +409,7 @@ ganham a adicional quando aplicável.
 Relevância para servir (uso agêntico/opencode): **alta** = Qwen3.6_35B_A3B,
 bonsai-27b,
 MiniCPM-V_4.7_35B, Gemma4_12B, LFM2.5_24B_A2B; **média** =
-Xing, Ornith 35B; Flint_40B_A2.5B (agêntico de código).
+Ornith 35B; Flint_40B_A2.5B (agêntico de código).
 
 ---
 

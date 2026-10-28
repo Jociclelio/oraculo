@@ -1,7 +1,0 @@
-entry,target_ctx,prompt_n,prefill_tps,decode_tps,prefill_s,decode_s,total_s
-Qwen3.8_35B_Distill,16,7,24.46,32.60,0.29,1.17,1.45
-Qwen3.8_35B_Distill,16384,10049,1337.84,0.00,7.51,0.00,7.51
-Qwen3.8_35B_Distill,32768,20034,1283.76,0.00,15.61,0.00,15.61
-Qwen3.8_35B_Distill,65536,-1,0,0,0,0,0
-Qwen3.8_35B_Distill,98304,-1,0,0,0,0,0
-Qwen3.8_35B_Distill,126976,-1,0,0,0,0,0

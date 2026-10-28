@@ -34,8 +34,8 @@ Três engines por baixo:
 | Engine | Imagem | Uso |
 |--------|--------|-----|
 | llama.cpp **stock** | `ghcr.io/ggml-org/llama.cpp:full-cuda` | todos os modelos clássicos (Gemma, Qwen, LFM, MiniCPM, Ornith) |
-| llama.cpp **fork PrismML** (dedicada) | `llama.cpp-prismml:latest` — build local em [`engines/llama.cpp-prismml/`](engines/llama.cpp-prismml/), commit pinado `84445367f` | GGUFs ternários **Bonsai 2 27B** — regra **nunca stock** (kernels ternários + Hadamard são exclusivos do fork) |
-| llama.cpp **fork Xing** (dedicada) | `llama.cpp-xing:latest` — build local em [`engines/llama.cpp-xing/`](engines/llama.cpp-xing/), commit pinado `8c379195a` | **Xing4.0 29B-A4B** — arquitetura `xing4_0` só no fork shuxiaoqiong (PR ggml-org#29012 não mergeado) |
+| llama.cpp **fork PrismML** (dedicada) | `llama.cpp-prismml:latest` — build local em [`engines/llama.cpp-prismml/`](engines/llama.cpp-prismml/), commit pinado `84445367f` | GGUFs ternários **Bonsai 2** (27B e 9B) — regra **nunca stock** (kernels ternários + Hadamard são exclusivos do fork) |
+| llama.cpp **fork bonsai-ada** (dedicada) | `llama.cpp-bonsai-ada:latest` — superset da PrismML (`engines/llama.cpp-bonsai-ada/`, commit `2cadbfb64`) | serving das entries `bonsai-27b-ada*` (KV tiered, MTP self-draft + lookup n-gram) |
 
 > **Posicionamento: stack para 1 usuário por vez.** Todas as entries usam
 > `-np 1`; entradas paralelas (`np>1`) só como exceção pontual para modelos
@@ -158,7 +158,7 @@ oraculo/
 │   ├── hermes/           #   HERMES_HOME (memória, skills, sessões, config.yaml)
 │   └── searxng/          #   settings.yml (secret_key)
 ├── models/               # GGUFs (re-baixáveis — ver MODELS_INSTALL.md)
-├── engines/              # builds das engines dedicadas (prismml, xing; strata sem pesos)
+├── engines/              # builds das engines dedicadas (prismml, ada, pdcache)
 ├── llama-swap/           # config.yaml — fonte da verdade dos modelos
 ├── logs/  mcp-data/  comfyui/  bin/
 ├── manage.sh  docker-compose.yml  .env
@@ -494,9 +494,9 @@ na zona não-usável derruba a nota para <25 — o outro fator não salva.
 > [`AGENTS.md`](AGENTS.md) (regra 10).
 
 > **Strata (removida 2026-10-14)**: os pesos (86G) foram apagados na
-> limpeza do NVMe e a entry saiu do config; a imagem da engine
-> (`strata:latest`) e a infra de build ([`engines/strata/`](engines/strata/))
-> ficam preservadas — reativável seguindo o README dela.
+> limpeza do NVMe e a entry saiu do config; **imagem (`strata:latest`) e
+> infra de build (`engines/strata/`) removidas em 2026-10-28** — nunca foi
+> reativada; re-instalável do zero via git history se justificar.
 
 ---
 
@@ -553,4 +553,3 @@ du -sh models/*/
 | [`DOCKER.md`](DOCKER.md) | Guia focado em Docker |
 | [`llama-swap/config.yaml`](llama-swap/config.yaml) | Entries/parâmetros dos modelos (fonte da verdade) |
 | [`models/MODELS_INSTALL.md`](models/MODELS_INSTALL.md) | Instalação de modelos (Bonsai via `hf download`, etc.) |
-| [`engines/strata/README.md`](engines/strata/README.md) | Engine Strata (Qwen3.8-Flash-Next) — infra preservada; pesos removidos 2026-10-14 |
