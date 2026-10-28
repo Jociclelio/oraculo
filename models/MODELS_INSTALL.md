@@ -153,6 +153,23 @@ hf download prism-ml/Ternary-Bonsai-2-27B-gguf \
 > A variante `PQ2_0` (~6,8 GB, entry `bonsai-27b-pq2_0`) foi removida em
 > 2026-10-13 — manteve-se só o PTQ1_0, a quantização menor.
 
+#### Bonsai 2 27B Uncensored "Heretic" (OS-Software) — REMOVIDO em 2026-10-28
+
+O finetune Heretic foi removido do zoo (entry `bonsai-27b-heretic` +
+GGUF ~6,2 GB apagados): redundante com a entry `bonsai-27b-ada-uncensored`
+(LoRA AtomicChat scale 1.5 sobre a ada — refusals 99%→0% validado,
+decode ~43-50 t/s vs ~26 do Heretic, janela 262k vs 128k). Se um dia
+fizer falta, re-instalar com:
+
+```bash
+hf download OS-Software/Ternary-Bonsai-2-27B-Uncensored-Heretic-v2-GGUF \
+  Ternary-Bonsai-2-27B-Uncensored-Heretic-PTQ1_0.gguf \
+  mmproj-Q8_0.gguf --local-dir models/Ternary-Bonsai-2-27B-Heretic
+```
+
+(entry no config: macro `docker-prismml` + KV q4_0, como a
+`bonsai-27b`; ver histórico no git.)
+
 ### Bonsai 2 27B "ada" (runtime alternativo — engine ada-ternary, entry `bonsai-27b-ada`)
 
 Instalado em 2026-10-26: MESMOS pesos ternários PTQ1_0, mas servidos pelo

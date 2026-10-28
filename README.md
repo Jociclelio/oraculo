@@ -409,7 +409,6 @@ VRAM = pico `nvidia-smi` (total, incl. ~800 MiB do display) na carga real
 | Qwen3.5_9B_HauhauCS | 131072 | ~55 tok/s | ~1800 tok/s | 10255 MiB | Tiny + Uncensored | multimodal |
 | MiMo2.6_9B | 131072 | ~53 tok/s | ~1615 tok/s | 9508 MiB | Tiny | multimodal; reasoning separado |
 | bonsai-27b | 131072 | ~27 tok/s | ~530 tok/s | 10538 MiB | SuperCompressed | PTQ1_0 ternário; engine PrismML; KV q4_0; visão validada |
-| bonsai-27b-heretic | 131072 | ~26 tok/s | ~530 tok/s | 10544 MiB | SuperCompressed + Uncensored | sem pdcache/sleep (patch só no master) |
 | bonsai-9b | 196608 | ~84 tok/s | ~1530 tok/s | 10870 MiB | SuperCompressed | PTQ1_0 ternário; KV bf16 @192k; visão validada |
 | bonsai-9b-uncensored | 196608 | ~78 tok/s | ~1560 tok/s | 10886 MiB | SuperCompressed + Uncensored | LoRA AtomicChat rank-1 (3,2 MB); thinking pesado |
 
@@ -479,8 +478,7 @@ na zona não-usável derruba a nota para <25 — o outro fator não salva.
 | 19 | Ornith1.5_35B_MTP | 32 t/s | 115,0 s | **39,0** | decode |
 | 20 | Xing4.0_29B_A4B | 28 t/s | 226,0 s | **31,0** | fraco nos dois |
 | 21 | bonsai-27b | 27 t/s | 247,3 s | **29,0** | fraco nos dois |
-| 22 | bonsai-27b-heretic | 26 t/s | 247,3 s | **27,0** | fraco nos dois |
-| 23 | Nemotron3.5_Bolt_74B | 19 t/s | 234,1 s | **19,0** | **não usável** (decode < 25) |
+| 22 | Nemotron3.5_Bolt_74B | 19 t/s | 234,1 s | **19,0** | **não usável** (decode < 25) |
 
 > Calculada com os números pós-unlock da tabela acima (prefill @2k —
 > otimista: híbridos degradam com o contexto; as curvas reais estão em

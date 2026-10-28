@@ -473,22 +473,12 @@ models:
     ttl: 300
 
   # ---------------------------------------------------------------------
-  # Bonsai 2 27B Uncensored "Heretic" (OS-Software) — finetune uncensored
-  # do Bonsai 2 acima, MESMA engine PrismML pinada (regra dura: PTQ1_0 só
-  # roda no fork — a stock/pdcache recusa o formato ternário). Sampling
-  # vive nos metadados do GGUF (como o irmão). SEM pdcache/sleep: o patch
-  # de KV em disco foi portado para o master ggml-org apenas (a base
-  # prism não o tem) — unload/re-ttl = re-prefill nesta entry.
+  # bonsai-27b-heretic REMOVIDA em 2026-10-28: redundante — a entry
+  # bonsai-27b-ada-uncensored (LoRA AtomicChat scale 1.5 sobre a ada,
+  # refusals 99%→0% validado) cobre o papel uncensored com o dobro do
+  # decode e janela 262k. GGUF apagado (~6,2 GB; re-instalável via
+  # MODELS_INSTALL.md).
   # ---------------------------------------------------------------------
-  bonsai-27b-heretic:
-    cmd: |
-      ${docker-prismml}
-      -m /models/Ternary-Bonsai-2-27B-Heretic/Ternary-Bonsai-2-27B-Uncensored-Heretic-PTQ1_0.gguf
-      --mmproj /models/Ternary-Bonsai-2-27B-Heretic/mmproj-Q8_0.gguf
-      -c 131072 -ngl 99
-      -ctk q4_0 -ctv q4_0
-    cmdStop: ${docker-stop}
-    ttl: 300
 
   # ---------------------------------------------------------------------
   # Bonsai 2 27B "ada" — MESMOS pesos ternários PTQ1_0, runtime alternativo
