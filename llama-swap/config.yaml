@@ -548,10 +548,11 @@ models:
   # prism.abliterate.* embarcado (direction_row 42, basis unfolded).
   # --lora-scaled 1.5: escala validada pelo autor (refusals 99%→0%; em
   # 1.0 ainda 14% recusam, em 2.0 replies vazios; MMLU 73.2→73.0).
-  # ATENÇÃO: NÃO VALIDADO em carga nesta máquina (GPU ocupada na adição
-  # da entry) — ao ativar, validar: (a) recusas vs base, (b) tok/s e
-  # aceitação do draft-mtp com LoRA ativa, (c) VRAM (LoRA é ~10 MB, mas
-  # os matmuls extras consomem um pouco de compute buffer).
+  # VALIDADO 2026-10-28 nesta máquina: 3/3 probes sem recusa (lockpicking,
+  # phishing e sanidade harmless cheetah/Paris intacta — sem o dano de
+  # sobre-recusa); decode 43-50 tok/s em ctx curto (paridade com a base
+  # ada ~52); draft-mtp aceitando com LoRA ativa (741 aceitos no probe 1);
+  # VRAM total 11194 MiB c/ display (~1,1 GB de folga).
   # ---------------------------------------------------------------------
   bonsai-27b-ada-uncensored:
     cmd: |

@@ -207,9 +207,15 @@ hf download AtomicChat/Ternary-Bonsai-2-27B-Uncensored-LoRA-GGUF \
 **Scale 1,5** é o ponto validado pelo autor: refusals 99%→0% (em 1,0
 ainda 14% recusam; em 2,0 replies vazios) com MMLU 73.2→73.0. Outros
 arquivos no mesmo repo: `own38` (segunda direção) e
-`own42-layers15-63` (sem embedding — pior segundo o autor). **NÃO
-VALIDADO em carga nesta máquina** (GPU ocupada na adição) — validar
-recusas, tok/s e aceitação do draft-mtp com a LoRA ativa ao ativar.
+`own42-layers15-63` (sem embedding — pior segundo o autor).
+**Validado nesta máquina em 2026-10-28**: 3/3 probes sem recusa
+(lockpicking + phishing; sanidade harmless intacta — sem o dano de
+sobre-recusa alertado no card), decode 43-50 tok/s em ctx curto
+(paridade da base ada ~52), draft-mtp aceitando com a LoRA ativa
+(741 aceitos no probe 1), VRAM total 11194 MiB c/ display. NOTA de
+carga fria: o 1º request após restart pode passar do health check do
+llama-swap se o GGUF estiver frio no NVMe (~4 min de carga; medida no
+container manual) — o retry com page cache quente sobe em ~30 s.
 
 ### Bonsai 2 9B (variante edge — engine PrismML, entry `bonsai-9b`)
 
