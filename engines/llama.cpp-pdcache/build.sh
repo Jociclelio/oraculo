@@ -18,8 +18,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 # Deve espelhar o ARG STOCK_COMMIT do Dockerfile (commit pinado, nunca HEAD).
-STOCK_COMMIT="c7fc5094179bf8a9c73c18593db714f8da41a402"
-STOCK_COMMIT_SHORT="c7fc50941"
+STOCK_COMMIT="8642541b255bfb5dc39cd351a178be09013a55d6"
+STOCK_COMMIT_SHORT="8642541b2"
 IMAGE="llama.cpp-pdcache"
 
 docker build \

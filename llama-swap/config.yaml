@@ -666,6 +666,29 @@ models:
     ttl: 1800
 
   # ---------------------------------------------------------------------
+  # LFM 3 1.7B (LiquidAI) — texto puro, DENSO, edge (no lugar do LFM2.5-8B
+  # Hermes removido). Tri-híbrido leve: 24 camadas = 13 conv gated + 5 SWA
+  # + 6 atenção global (KV minúsculo) — ctx nativo 256k, floor 128k folga.
+  # Agêntico (post-train OpenClaw/Hermes/Pi/OpenCode); tool calling.
+  # SEM MTP/draft (não publica head nextn). SEM mmproj (texto apenas).
+  # Requer llama.cpp >= b11960 v0.8.0 (arch lfm3) — imagem stock +
+  # engine pdcache atualizadas para o build 11960 (commit 8642541b2).
+  # GGUF oficial LiquidAI Q4_K_M (1,1 GB); alternativa no mesmo repo:
+  # LFM3-1.7B-QAD-Q4_0.gguf (QAD, distilação p/ recuperar perda do Q4_0).
+  # Sampling do model card (general): temp 0.1 / top-k 50 / rep 1.1
+  # (math/STEM: temp 1.0 / top-p 0.95 / top-k 20).
+  # ---------------------------------------------------------------------
+  LFM3_1.7B:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/LFM3-1.7B-GGUF/LFM3-1.7B-Q4_K_M.gguf
+      -c 131072 -ngl 99
+      -b 4096
+      --temp 0.1 --top-k 50 --repeat-penalty 1.1
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
   # MiniCPM-V 4.7 35B-A3B (OpenBMB) — primeiro MoE multimodal da série
   # MiniCPM-V; backbone Qwen3.6-35B-A3B (arch qwen35moe: 41 camadas, 256
   # experts, 8 ativos, GDN + full attention a cada 4; ctx nativo 262144) +

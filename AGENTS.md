@@ -52,7 +52,7 @@ load/unload manual — apontar o request para outro `model` faz o swap
 ## Arquitetura
 
 - **`llama-swap/config.yaml` é a FONTE DA VERDADE** dos parâmetros de cada
-  modelo (11 entries: 10 stock + 1 Bonsai).
+  modelo (26 entries em 2026-10-28: 21 stock/pdcache + 3 PrismML + 2 bonsai-ada).
   `models/models.ini` é HISTÓRICO desativado — nada o lê.
   **Convenção de contexto** (VRAM validada por carga real, display idle):
   entry SEM sufixo = **128k** (floor, `-c 131072`), viabilizado pelo KV
@@ -307,6 +307,7 @@ falta de kernel FA dedicado).
 | `Ornith1.5_9B` | stock | 131072 | Ornith-1.5-9B Q4_K_M + mmproj BF16 (ornith-ai); variante edge DENSA da família (arch qwen35), raciocínio agêntico `<think/tool_call>`; head MTP embutida (nextn=1) → draft-mtp self-draft n=2 (aceitação ~50% pós-unlock); **decode ~58 tok/s, prefill ~1600 tok/s** (2026-10-26); VRAM 10244 MiB |
 | `Qwen3.5_9B_HauhauCS` | stock | 131072 | Qwen3.5-9B-Uncensored-HauhauCS-Aggressive Q4_K_M + mmproj BF16; denso (arch qwen35, no lugar da Ornith1.5_9B_Uncensored removida 2026-10-19); **SEM MTP** (header sem nextn); **decode ~55 tok/s, prefill ~1800 tok/s** (pós-unlock 2026-10-26); VRAM 10255 MiB; visão carregada |
 | `MiMo2.6_9B` | stock | 131072 | MiMo-V2.6-Distill-Qwen-9B (XiaomiMiMo, distill em base Qwen3.5; arch qwen35, denso) Q4_K_M bartowski + mmproj f16; reasoning separado; **SEM MTP** (header sem nextn); **decode ~53 tok/s, prefill ~1615 tok/s** (pós-unlock 2026-10-26); VRAM 9508 MiB; visão validada; sampling temp 0.6 / top-p 0.95 / top-k 20 (generation_config oficial) |
+| `LFM3_1.7B` | stock | 131072 | LiquidAI LFM3 1.7B edge, TEXTO puro, denso (arch `lfm3`: tri-híbrido, 24 camadas = 13 conv gated + 5 SWA + 6 atenção global — KV minúsculo); agêntico + tool calling, thinking (`reasoning_content` separado — orçar max_tokens p/ o reasoning); requer build ≥ b11960 v0.8.0 (**imagem stock + pdcache repinada atualizadas em 2026-10-28 p/ 11960/8642541b2** — patch do pdcache re-portado, conflito no CMakeLists do server); SEM MTP; SEM mmproj; **decode ~152 tok/s, prefill ~6900 tok/s @1,4k**; VRAM ~3,1 GB total c/ display (menor pegada do zoo); sampling do model card: temp 0.1 / top-k 50 / rep 1.1 (math/STEM: temp 1.0 / top-p 0.95 / top-k 20); GGUF oficial LiquidAI Q4_K_M (alternativa QAD Q4_0 no mesmo repo, não usada na entry) (2026-10-28) |
 | `Flint_40B_A2.5B` | stock | 131072 | Recursive Flint (RecursiveSI) MoE 40B/2,5B agêntico de código (arch `flint`: 49 camadas = 2 densas + 47 MoE, 256 experts top-6 + shared, 35 SWA janela 513 + 14 full-attention); **texto puro — sem mmproj, SEM MTP/draft**; GGUF oficial ggml-org Q4_K_M (23,4 GB); ncmoe 38 + `--load-mode none` + **ub 4096** (calibração 2026-10-26: prefill ~1097→1300 tok/s; VRAM serving 10567 MiB; sem draft o ub4096 cabe); requer build ≥ PR ggml-org#30928 (imagem stock atualizada p/ 11804/c7fc50941 + pdcache repinada no mesmo commit); sampling temp 1.0 / top-p 0.95 / top-k 20; workaround de scaling de ativações custa 10-30% (nota do PR); **decode ~42 tok/s curto / ~38 @1,7k, prefill ~1300 tok/s @8k** (fingerprint `b1-c7fc509`) (2026-10-22; ub4096 em 2026-10-26) |
 | `Flint_40B_A2.5B_Uncensored` | stock | 131072 | Mesmo Flint, decensurado Heretic (electroglyph; abliterated 98→5 recusas/100) — GGUF Octopusman388 Q4_K_M (24,2 GB); MESMA receita da entry base (ncmoe 38 + `--load-mode none` + ub2048, temp 1.0/top-p 0.95/top-k 20); **known issue do autor: reasoning descontrolado em prompts sensíveis** — mitigado na entry com `--reasoning-budget 4096` + mensagem de fechamento (limita o drift, não elimina; presence-penalty não ajuda); TEXTO puro, SEM MTP/draft; **validado 2026-10-24: decode ~37 tok/s, VRAM pico 9874 MiB @128k** (~2,4 GB de folga); reasoning consome MUITOS tokens — orçar max_tokens generoso |
 | `bonsai-27b` | PrismML | 131072 | PTQ1_0 + mmproj (visão validada); **KV q4_0 (desde 2026-10-20 — hoje é o default do zoo, ver regra 10; na época era override porque o macro usava q5_1, lento no fork PrismML — issue PrismML #191)**: com q4_0 **decode ~27 tok/s, prefill ~530 tok/s** (pós-unlock 2026-10-26); VRAM 10538 MiB |
@@ -392,6 +393,7 @@ ganham a adicional quando aplicável.
   - Ornith-1.5-9B (MTP self-draft)
   - Qwen3.5-9B (HauhauCS)
   - MiMo-V2.6-Distill-Qwen-9B
+  - LFM3-1.7B (texto puro, tri-híbrido; menor pegada do zoo — ~3,1 GB)
 - **SuperCompressed** — quantização ABAIXO de Q4_K_M e ainda assim 100% VRAM:
   - LFM2.5-24B-A2B na variante unsloth IQ2_M (7,5 GB, sem offload)
   - Bonsai 2 27B (PTQ1_0 ternário, engine PrismML) — base e Heretic

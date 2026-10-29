@@ -726,6 +726,45 @@ top-p 0.95 / top-k 20) com um acréscimo obrigatório:
 
 ---
 
+## LFM3 1.7B (LiquidAI — edge denso, texto puro)
+
+Instalado em 2026-10-28. Modelo edge de 1,7B, DENSO, arch `lfm3` (tri-híbrido:
+24 camadas = 13 conv gated + 5 SWA + 6 atenção global — KV minúsculo), ctx
+nativo 256k, agêntico (post-train OpenClaw/Hermes/Pi/OpenCode) + tool calling,
+thinking (`reasoning_content` separado). TEXTO apenas (sem mmproj). SEM MTP.
+
+> ⚠️ **Requer llama.cpp ≥ b11960 (v0.8.0)** — a arch `lfm3` entrou nessa
+> release. A instalação exigiu atualizar a imagem stock
+> (`ghcr.io/ggml-org/llama.cpp:full-cuda` → build 11960, commit `8642541b2`)
+> E repinar/reconstruir a engine pdcache no MESMO commit (regra 9): o patch
+> do prompt disk cache foi re-portado ao master novo (conflito trivial no
+> `tools/server/CMakeLists.txt` — upstream adicionou `server-realtime.*`
+> à lista de fontes; patch regenerado). Ver
+> `engines/llama.cpp-pdcache/` (pin `8642541b2`).
+
+```bash
+hf download LiquidAI/LFM3-1.7B-GGUF \
+  LFM3-1.7B-Q4_K_M.gguf \
+  LFM3-1.7B-QAD-Q4_0.gguf \
+  --local-dir models/LFM3-1.7B-GGUF
+```
+
+| Arquivo | Tamanho | Uso |
+|---------|---------|-----|
+| `LFM3-1.7B-Q4_K_M.gguf` | ~1,1 GB | entry `LFM3_1.7B` |
+| `LFM3-1.7B-QAD-Q4_0.gguf` | ~1,0 GB | alternativa no disco — checkpoint QAD (Quantization-Aware Distillation, recupera a perda do Q4_0); não usado na entry |
+
+Entry com macro `docker-pdcache` (denso — sem `--load-mode none`/`-ncmoe`),
+`-c 131072 -ngl 99`. Sampling do model card (general): **temp 0.1 / top-k 50 /
+repeat-penalty 1.1** (math/STEM: temp 1.0 / top-p 0.95 / top-k 20). Nota: o
+`--cache-reuse` do macro não é suportado por este contexto (warning benigno no
+log). Medido (2026-10-28, RTX 3060 12 GB, display idle, fingerprint
+`b1-8642541`): **decode ~152 tok/s, prefill ~6900 tok/s @1,4k**; VRAM ~3,1 GB
+total c/ display — a menor pegada do zoo. Orçar `max_tokens` para o reasoning
+(pensa antes de responder, `reasoning_content` separado).
+
+---
+
 Após instalar + entry + `./manage.sh restart`, verifique:
 
 ```bash
