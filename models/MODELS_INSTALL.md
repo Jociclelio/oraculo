@@ -755,13 +755,50 @@ hf download LiquidAI/LFM3-1.7B-GGUF \
 | `LFM3-1.7B-QAD-Q4_0.gguf` | ~1,0 GB | alternativa no disco — checkpoint QAD (Quantization-Aware Distillation, recupera a perda do Q4_0); não usado na entry |
 
 Entry com macro `docker-pdcache` (denso — sem `--load-mode none`/`-ncmoe`),
-`-c 131072 -ngl 99`. Sampling do model card (general): **temp 0.1 / top-k 50 /
-repeat-penalty 1.1** (math/STEM: temp 1.0 / top-p 0.95 / top-k 20). Nota: o
-`--cache-reuse` do macro não é suportado por este contexto (warning benigno no
-log). Medido (2026-10-28, RTX 3060 12 GB, display idle, fingerprint
-`b1-8642541`): **decode ~152 tok/s, prefill ~6900 tok/s @1,4k**; VRAM ~3,1 GB
-total c/ display — a menor pegada do zoo. Orçar `max_tokens` para o reasoning
-(pensa antes de responder, `reasoning_content` separado).
+`-c 131072 -ngl 99`, sampling do model card (general): **temp 0.1 / top-k 50 /
+repeat-penalty 1.1** (math/STEM: temp 1.0 / top-p 0.95 / top-k 20) e
+`--reasoning-budget 2048` (mitigação do loop de reasoning, ver bateria abaixo).
+Nota: o `--cache-reuse` do macro não é suportado por este contexto (warning
+benigno no log).
+
+### Bateria de testes (2026-10-28, RTX 3060 12 GB, display idle, fingerprint `b1-8642541`)
+
+**Sweep de contexto** (`benchmarks/sweep_ctx.py`, 256 tok gerados, texto real
+pt-BR; JSON em `results/ctxsweep/LFM3_1.7B__ctxsweep.json`, gráfico em
+`results/plots/ctxsweep/LFM3_1.7B__ctx.png`):
+
+| métrica | @0 | @8k | @32k | @64k | @96k | @130k |
+|---|---|---|---|---|---|---|
+| decode (t/s) | 155,5 | 148,8 | 119,4 | 96,9 | 77,9 | **65,9** |
+| prefill (t/s) | — | 7770 | 5817 | 4220 | 3340 | **2663** |
+
+Planura dec@130k/dec@8k **0,42**; IZ **82,9 @130k**. VRAM ~3,1 GB total
+(com display) — a menor pegada do zoo. pdcache acertou entre os pontos
+(cache_n incremental) e não há draft MTP (0/0).
+
+**Funcional:**
+
+- **Tool calling**: 10/10 chamadas corretas (`get_weather({"city": ...})`,
+  `tool_choice` auto, temp 0.1) + resposta final correta com o resultado da
+  tool. Uma recusa isolada observada em dezenas de runs (estocástica).
+- **Reasoning/math**: correto (problema de trem: 75 min; thinking separado em
+  `reasoning_content`, ~150-270 tokens).
+- **Saída estruturada**: JSON exato com os campos pedidos.
+- **Needle-in-haystack**: PASS até ~64k de profundidade; **FAIL ≥ ~90k** — o
+  modelo ecoa a pergunta em vez de recuperar (degenera no thinking).
+  Condizente com RULER 128K 65,56 do card — usar < ~64k para recuperação
+  confiável em contexto longo.
+- **Loop de reasoning** (descoberta da bateria): em prompts triviais/ambíguos
+  ("confirme em uma palavra") o modelo pode divagar no thinking > 10k chars
+  sem concluir (1/5 rodadas sem limite; análogo ao known issue do Flint
+  Heretic). Mitigado na entry com `--reasoning-budget 2048` + mensagem de
+  fechamento: 8/8 rodadas com resposta, thinking normal (math) intacto.
+  Mesmo com budget, prompts patológicos pensam ~2k tokens antes de responder
+  — clientes com `max_tokens` curto podem ver `content` vazio.
+- **pdcache**: restore do snapshot em disco funciona (MESMO prompt ~8k após
+  `docker rm -f`: `cache_n` 7427/7942 = 93,5%). Prompts < 2048 tokens
+  re-prefill inteiros (sem checkpoint abaixo do `--checkpoint-min-step`) —
+  benigno: 45 ms neste modelo.
 
 ---
 

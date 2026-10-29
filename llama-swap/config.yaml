@@ -677,6 +677,10 @@ models:
   # LFM3-1.7B-QAD-Q4_0.gguf (QAD, distilação p/ recuperar perda do Q4_0).
   # Sampling do model card (general): temp 0.1 / top-k 50 / rep 1.1
   # (math/STEM: temp 1.0 / top-p 0.95 / top-k 20).
+  # --reasoning-budget 2048: bateria 2026-10-28 achou loop de reasoning em
+  #   prompts triviais/ambíguos (1/5 rodadas >10k chars sem concluir —
+  #   análogo ao known issue do Flint Heretic); com budget 8/8 respondem e
+  #   o thinking normal (< 2k tok, ex. math ~150-270) fica intacto.
   # ---------------------------------------------------------------------
   LFM3_1.7B:
     cmd: |
@@ -685,6 +689,7 @@ models:
       -c 131072 -ngl 99
       -b 4096
       --temp 0.1 --top-k 50 --repeat-penalty 1.1
+      --reasoning-budget 2048 --reasoning-budget-message "I have thought enough. I will now answer directly."
     cmdStop: ${docker-stop}
     ttl: 1800
 
