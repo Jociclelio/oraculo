@@ -304,19 +304,37 @@ PY
 
 ### comfyui — Geração/edição de imagens (Qwen-Image 2.1 Turbo)
 
-- **Imagem**: `yanwk/comfyui-boot:cu126-slim-20261019` (pinada; ComfyUI
-  v0.42.1 + ComfyUI-Manager, CUDA 12.6 / Python 3.12; suporte nativo FLUX.3
-  Klein — `Flux3LayoutPrompt`, `ReferenceMultiLatent`, `CreateBoundingBoxes`,
-  `CLIPLoader` tipo `flux3` — todos built-in do core ≥ v0.41.0)
-- **ATENÇÃO `/root` em volume anônimo**: o ComfyUI persiste num volume
-  anônimo Docker montado em `/root` (reattach automático no recreate do
-  container). O entrypoint SÓ copia o bundle da imagem para `/root/ComfyUI`
-  se `main.py` não existir — atualizar a tag da imagem NÃO atualiza o core
-  enquanto o código velho sobreviver no volume. Para atualizar: parar o
-  container, apagar dentro do volume TUDO em `/root/ComfyUI` EXCETO os
-  bind mounts (`custom_nodes`, `input`, `output`, `user`, `models` — apagar
-  dentro deles destrói dados do host), e subir de novo (feito em 2026-10-23
-  para v0.38.2→v0.42.1).
+- **Imagem**: `yanwk/comfyui-boot:cu130-slim-v2-20261027` (pinada; ComfyUI
+  v0.43.0 + ComfyUI-Manager, **torch 2.13.0+cu130 / Python 3.13** — migrado do
+  `cu126-slim-20261019` em 2026-10-31; suporte nativo FLUX.3 Klein —
+  `Flux3LayoutPrompt`, `ReferenceMultiLatent`, `CreateBoundingBoxes`,
+  `CLIPLoader` tipo `flux3` — todos built-in do core ≥ v0.41.0).
+  **MOTIVAÇÃO**: o core ≥ v0.42 usa comfy-kitchen/aimdo e EXIGE torch cu130+
+  para os kernels CUDA otimizados; com torch cu126 do cozy anterior o backend
+  `cuda` subia `disabled: True` e os paths `int8_convrot`/`w4a8` caíam no
+  fallback eager — o Prompt Enhancer (checkpoint `qwen3vl w4a8`) despencava de
+  ~40 t/s para ~1 t/s (cara de CPU). Validado na troca: backend `cuda`
+  `disabled: False`, geração e2e OK.
+- **Container roda como `1000:1000` (jocic)** — os binds ficam editáveis no
+  host sem root; `/dev/nvidia*` é 666 então a GPU funciona sem grupo extra.
+  Pegadinhas da migração: (a) o entrypoint da imagem faz `cp --archive` do
+  bundle, e como usuário 1000 o chown→root falha — por isso a 1ª subida
+  pre-copia o bundle via container efêmero root + `chown -R 1000:1000`;
+  (b) `HOME` do uid 1000 é `/` (root-owned) — o pre-start fixa `HOME=/root`;
+  (c) `python3` no PATH é um **3.12 base** sem torch — a imagem roda o core e
+  o pre-start em **`python3.13`**; (d) a slim cu130 NÃO traz `aiohttp`
+  (necessário ao gpu-shim) — o `pre-start.sh` auto-instala em `/root/.local`
+  (persiste no volume).
+- **`/root` em volume nomeado `comfyui-root`** (migrado do anônimo em
+  2026-10-31; sobrevive a `docker compose down` e recriação). O entrypoint SÓ
+  copia o bundle da imagem para `/root/ComfyUI` se `main.py` não existir —
+  atualizar a tag da imagem NÃO atualiza o core enquanto o código velho
+  sobreviver no volume. Para atualizar: parar o container, apagar dentro do
+  volume TUDO em `/root/ComfyUI` EXCETO os bind mounts (`custom_nodes`,
+  `input`, `output`, `user`, `models` — apagar dentro deles destrói dados do
+  host) e, por causa do `cp --archive` como usuário 1000, re-copiar o bundle
+  via container efêmero root + `chown -R 1000:1000 /root` antes de subir.
+  (feito em 2026-10-23 para v0.38.2→v0.42.1 e 2026-10-31 para cu126→cu130)
 - **Container**: `comfyui` (`network_mode: host`) — UI/API em
   `http://localhost:8188` via gpu-shim; ComfyUI em `127.0.0.1:8189`
 - **`gpus: all`** (o daemon já tem runtime nvidia default; ver `comando.txt`)
