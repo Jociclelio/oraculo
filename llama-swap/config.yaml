@@ -208,13 +208,14 @@ models:
       --mmproj /models/unsloth_Qwen3.6_35B_A3B_MTP/mmproj-F16.gguf
       --load-mode none
       --spec-type draft-mtp --spec-draft-n-max 3 --spec-draft-p-min 0.5
-      -c 131072 -ngl 99 -ncmoe 32
+      -c 131072 -ngl 99 -ncmoe 99
+      --moe-cache-mib 4096
       -b 4096 -ub 2048
       --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
       --presence-penalty 1.5 --repeat-penalty 1.0
     cmdStop: ${docker-stop}
     ttl: 1800
-    # Tuning de planura 2026-10-28 (probe de profundidade — benchmarks/
+    # Tuning de planura 2026-10-28 (probe de profundidade, benchmarks/
     # probe_depth.py + bateria completa no benchmarks/README.md): n-max 2→3,
     # --spec-draft-p-min 0.5 (filtra drafts fracos na cauda) e ncmoe 33→32.
     # Decode @130k 23→31,5 tok/s; planura dec@130k/dec@8k 0,57→0,76.
@@ -222,6 +223,21 @@ models:
     # unload (docker rm -f) + re-request → cache_n 21213/21217 (99,98%),
     # prompt_n 4, prefill ~0,5 s (era 33 s); snapshot .centry 638 MiB.
     # Rollout do macro para todas as entries stock no mesmo dia — ver regra 9.
+    # Cache de experts quentes 2026-11-03 (build 12063): ncmoe 32→99 (TODOS os
+    # experts na RAM — só 3,4 GB de pesos na GPU) + --moe-cache-mib 4096 (LRU
+    # de experts quentes em VRAM). A/B direto (ctx 8k, decode 256 tok, sem
+    # mmproj/MTP): ncmoe 32 sem cache 36,7 t/s → ncmoe 99 + cache 6 GiB
+    # 48,3 t/s (+32%; com MTP 55-56 t/s). COM mmproj+MTP @ctx 131072 validado:
+    # VRAM pico 11023 MiB @124k (vs 11190 do config antigo — mesmo envelope),
+    # decode curto ~44,3 t/s (vs ~38-42), decode @124k 32,4-32,8 t/s (vs 31,5),
+    # prefill @124k ~850 t/s (vs ~624, +36%). NOTA: o budget NÃO é o mesmo do
+    # A/B @8k (6144 MiB não cabe a 131k — 4096 é o máximo no envelope ~11 GB).
+    # Custos: ~+4 GB de RAM fixada (container 22,7 GiB; disponível ~2 GB com
+    # o modelo carregado — apertado, guard do pdcache degrada p/ re-prefill);
+    # cache LRU esvazia no sleep/destroy() (180 s idle) — 1º request pós-sleep
+    # paga re-aquecimento. A rejeição de 2026-10-26 vale para o regime antigo
+    # (experts parcialmente na GPU): com cobertura alta de VRAM o cache vira
+    # ganho — ver seção "Imagem stock (2026-11-03)" no topo.
 
   # ---------------------------------------------------------------------
   # Ornith 1.5 35B-A3B MTP (APEX Compact, mudler) — acceptance ~0.80,

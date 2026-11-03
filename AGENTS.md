@@ -32,12 +32,19 @@ save/restore de hidden state MTP (#30141). Engine pdcache repinada no MESMO
 commit (build limpo, patch aplicado sem conflito; snapshots `.centry` antigos
 descartados pelo guard — reescritos on-demand).
 **Cache de experts MoE em VRAM (`--moe-cache-mib`, merged 2026-10-07 + SLRU
-10-19) TESTADO E REJEITADO de novo no build 12063** (A/B no Qwen3.6_35B_A3B,
-ctx 8k, decode 256 tok): OFF 36,7 t/s → ON 1024 MiB 31,1 t/s (**-15%**) →
-ON 256 MiB 19,4 t/s (**-47%** — quanto menor o budget, pior: thrash). Em
-GPU single de 12 GB com folga curta de VRAM, o overhead do caminho de cache
-domina — NÃO usar em nenhuma entry. O PR alternativo por slots
-(`--moe-expert-cache`, ggml-org#27861) segue DRAFT/não-mesclado — não usar.
+10-19) — VALE APENAS com cobertura alta de VRAM.** Rejeitado no regime antigo
+(experts parcialmente na GPU, pouca folga): A/B 2026-11-03 no Qwen3.6 ncmoe 32
+(ctx 8k): OFF 36,7 t/s → ON 1024 MiB 31,1 (-15%) → ON 256 MiB 19,4 (-47%) —
+quanto menor o budget, pior (thrash); idem Hauhau 2026-10-26 (-21%).
+**Porém com TODOS os experts na RAM + budget grande a conta inverte** (mesmo
+A/B, ncmoe 99): + cache 6144 MiB → 48,3 t/s (+32%; 55-56 com MTP). Regra
+prática: só usar quando os pesos GPU-residentes do modelo forem pequenos o
+suficiente para o cache cobrir uma fração relevante dos experts (≥20-30%);
+em serving @131k o budget tem de ser reduzido (4096 no Qwen3.6 — 6144 não
+cabe). Pilotado na entry `Qwen3.6_35B_A3B` (ver tabela); outras entries
+SmallMoE exigem validação individual de VRAM/RAM antes de replicar.
+O PR alternativo por slots (`--moe-expert-cache`, ggml-org#27861) segue
+DRAFT/não-mesclado — não usar.
 
 **Regra do repo**: toda mudança deve ser refletida na documentação —
 `docker-compose.yml` → `DOCKER.md`; `llama-swap/config.yaml` ou modelos →
@@ -316,7 +323,7 @@ falta de kernel FA dedicado).
 | `LFM2.5_24B_A2B_Uncensored` | stock | 131072 | MESMA receita da `LFM2.5_24B_A2B` + LoRA rank-1 AtomicChat (24 MB, `--lora-scaled :1.75` — blocos 14-39: mixers + ffn_down dos 64 experts; sites verificados em CPU: 52/52 no Q4_K_M; autor: refusals 96,3%→1,2%, MMLU 64,4→65,6); **validado 2026-10-28**: 2/2 probes sem recusa (lockpicking; sanidade harmless OK), reasoning intacto, decode ~29-31 tok/s no serving (sem A/B controlado vs base); VRAM ~10600 MiB |
 | `MiniCPM-V_4.7_35B` | stock | 131072 | MiniCPM-V 4.7 35B-A3B multimodal Q4_K_M + mmproj f16 (openbmb `-gguf`); backbone Qwen3.6 (arch qwen35moe, 256 experts/8 ativos, GDN); **SEM MTP** (header declara nextn=1 mas sem tensors; draft DSpark testado e descartado: aceitação ~10%, decode 9,5 tok/s, buffer ~3,9 GB não cabe — GGUF do draft APAGADO em 2026-10-26, re-baixável via MODELS_INSTALL.md); ncmoe 32 + `--load-mode none` + **ub 4096** (calibração 2026-10-26: prefill ~1383→1619 tok/s; VRAM serving 10359 MiB); requer llama.cpp ≥ PR #29416 (imagem stock atualizada p/ build 11561, fingerprint `b11561-e937b17a2`); **~32-35 tok/s, prefill ~1040→~1600 tok/s**; visão validada |
 | `MiniCPM-V_4.7_35B_Uncensored` | stock | 131072 | MESMA receita da `MiniCPM-V_4.7_35B` + LoRA rank-1 AtomicChat (106 MB, `--lora-scaled :1.0` — 120 sites: attn/linear outputs + ffn_down dos 256 experts + 40 shared experts; sites verificados em CPU: 120/120 no Q4_K_M; embedding NÃO editado — o vision projector copia linhas dele; autor: refusals 96,3%→0%, MMLU +0,25); **validado 2026-10-28**: 2/2 probes sem recusa (lockpicking; harmless OK), thinking intacto; VRAM ~10455 MiB c/ display |
-| `Qwen3.6_35B_A3B` | stock | 131072 | thinking + head MTP; **tuning de planura 2026-10-28** (probe de profundidade, `benchmarks/probe_depth.py`): `--spec-draft-n-max 3 --spec-draft-p-min 0.5` + `-ncmoe 32` — decode ~38-42 tok/s curto, **~31,5 @130k** (era 23 com n-max 2/p-min 0/ncmoe 33; planura 0,57→0,76, acc@130k 0,80→0,92), prefill ~980-1094 curto / ~624 @130k; VRAM ~11190 MiB (c/ mmproj); IZ 36-58 em toda a janela (antes caía a 23 = "não usável"); ngram empilhado ao MTP testado e REJEITADO (acc 0,60) — única entry do Qwen3.6 desde 2026-10-26 (Code/It_* removidas; uncensored na entry Hauhau) |
+| `Qwen3.6_35B_A3B` | stock | 131072 | thinking + head MTP; **tuning de planura 2026-10-28** (probe de profundidade, `benchmarks/probe_depth.py`): `--spec-draft-n-max 3 --spec-draft-p-min 0.5` + `-ncmoe 32` — decode ~38-42 tok/s curto, **~31,5 @130k** (era 23 com n-max 2/p-min 0/ncmoe 33; planura 0,57→0,76, acc@130k 0,80→0,92), prefill ~980-1094 curto / ~624 @130k; VRAM ~11190 MiB (c/ mmproj); IZ 36-58 em toda a janela (antes caía a 23 = "não usável"); ngram empilhado ao MTP testado e REJEITADO (acc 0,60). **Rework 2026-11-03 (build 12063) — cache de experts quentes**: `-ncmoe 99` (TODOS os experts na RAM, ~3,4 GB de pesos na GPU) + `--moe-cache-mib 4096` (LRU em VRAM; 6144 só cabe @ctx curto) — **decode ~44,3 t/s curto / ~32,4-32,8 @124k, prefill ~850 t/s @124k (+36%)**, VRAM pico 11023 MiB @124k (mesmo envelope do config antigo); com MTP compõe (55-56 t/s @8k); custo: ~+4 GB de RAM fixada (22,7 GiB no container, ~2 GB disponíveis — apertado) e re-aquecimento do LRU após o sleep de 180 s — única entry do Qwen3.6 desde 2026-10-26 (Code/It_* removidas; uncensored na entry Hauhau) |
 | `Qwen3.6_35B_A3B_Hauhau_Aggressive` | stock | 131072 | Uncensored Aggressive, multimodal; ncmoe 29; ub2048 + `--load-mode none`; **decode ~41 tok/s, prefill ~1100 tok/s** (pós-unlock 2026-10-26); VRAM 11240 MiB; SEM MTP (GGUF sem tensors nextn — spec inaplicável; `--moe-cache-mib` testado e rejeitado: decode -21%) |
 | `Ornith1.5_35B_MTP` | stock | 131072 | agêntico (APEX Compact), ncmoe 29 + `--load-mode none`; ub2048; MTP self-draft (aceitação ~38% pós-unlock); **decode ~32 tok/s, prefill ~1140 tok/s** (2026-10-26); VRAM 11564 MiB (c/ mmproj, visão confirmada — Baseten/Atomic Chat/repo mudler) |
 | `Ornith1.5_9B` | stock | 131072 | Ornith-1.5-9B Q4_K_M + mmproj BF16 (ornith-ai); variante edge DENSA da família (arch qwen35), raciocínio agêntico `<think/tool_call>`; head MTP embutida (nextn=1) → draft-mtp self-draft n=2 (aceitação ~50% pós-unlock); **decode ~58 tok/s, prefill ~1600 tok/s** (2026-10-26); VRAM 10244 MiB |
