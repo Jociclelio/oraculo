@@ -578,11 +578,23 @@ models:
       ${docker-pdcache}
       -m /models/LFM2.5-24B-A2B-GGUF/LFM2.5-24B-A2B-Q4_K_M.gguf
       --load-mode none
-      -c 131072 -ngl 99 -ncmoe 20
+      -c 131072 -ngl 99 -ncmoe 99
+      --moe-cache-mib 7168
       -b 4096 -ub 2048
       --temp 0.1 --top-k 50 --repeat-penalty 1.05
     cmdStop: ${docker-stop}
     ttl: 1800
+    # Cache de experts quentes 2026-11-03 (build 12063): ncmoe 20→99 (TODOS os
+    # experts na RAM — 1,95 GB de pesos na GPU) + --moe-cache-mib 7168 (máximo
+    # que cabe no envelope ~10,3 GB @ctx 131k). A/B direto @8k: ncmoe 20 sem
+    # cache 47,4 t/s → ncmoe 99 sem cache 27,5 (-42%!) → +cache 6144 44,7 →
+    # +cache 8192 62,1 (+30%) — joelho da curva de cobertura em ~70-75%.
+    # Validado @131072: decode curto 52,7 t/s (+11%), decode @129k 32,9 t/s
+    # (baseline 29,4, +11-13%), prefill @129k 1449 t/s (baseline 1732, -16% —
+    # custo do streaming de TODOS os experts da RAM no prefill), VRAM pico
+    # 10292 MiB (~igual ao baseline 9941). Custo de RAM: +~5 GB fixados
+    # (~13,5 GB no container). Curva completa e regra da cobertura ≥20-30%:
+    # ver seção "Imagem stock (2026-11-03)" no topo do AGENTS.md.
 
   # ---------------------------------------------------------------------
   # LFM 2.5 24B-A2B Uncensored (AtomicChat) — MESMA receita da
@@ -599,7 +611,8 @@ models:
       -m /models/LFM2.5-24B-A2B-GGUF/LFM2.5-24B-A2B-Q4_K_M.gguf
       --lora-scaled /models/LFM2.5-24B-A2B-Uncensored-LoRA/lora/LFM2.5-24B-A2B-Uncensored-LoRA.gguf:1.75
       --load-mode none
-      -c 131072 -ngl 99 -ncmoe 20
+      -c 131072 -ngl 99 -ncmoe 99
+      --moe-cache-mib 7168
       -b 4096 -ub 2048
       --temp 0.1 --top-k 50 --repeat-penalty 1.05
     cmdStop: ${docker-stop}
