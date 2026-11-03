@@ -19,6 +19,13 @@ echo "[pre-start] gpu-shim iniciado (pid $!)"
 # slots vazios do workflow de edição (sem ele a validação do ComfyUI rejeita
 # o prompt com "Invalid image file: placeholder.png", HTTP 400).
 if [ ! -f /root/ComfyUI/input/placeholder.png ]; then
-  python3 -c "from PIL import Image; Image.new('RGB',(64,64),(128,128,128)).save('/root/ComfyUI/input/placeholder.png')" \
-    && echo "[pre-start] placeholder.png recriado"
+  # python3.13 (não o python3 3.12 do PATH): na imagem cu130-slim-v2-20261027
+  # o 3.12 não traz Pillow e o import falhava — o status do if propagava pelo
+  # `source` e o set -e do entrypoint derrubava o container (crash loop).
+  python3.13 -c "from PIL import Image; Image.new('RGB',(64,64),(128,128,128)).save('/root/ComfyUI/input/placeholder.png')" \
+    && echo "[pre-start] placeholder.png recriado" \
+    || echo "[pre-start] AVISO: placeholder.png não recriado (PIL indisponível?)"
 fi
+# terminar sempre com status 0 — o entrypoint roda com set -e e o status
+# deste script propagaria pelo `source`, derrubando o container.
+true

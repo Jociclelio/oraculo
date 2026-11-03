@@ -26,6 +26,11 @@
 #     precedente: K2-Horizon 40k, removido 2026-10-26).
 #   - VRAM validada por carga real (RTX 3060 12 GB, display idle ~900 MiB);
 #     com jogos/desktop pesado (1,8+ GB) entries de MoE híbrido podem OOM.
+#   - TRA (2026-10-30): entries SEM pdcache (PrismML/bonsai-ada, 5 total) usam
+#     `ttl: 0` — nunca descarregam por OCIOSIDADE; só saem via unload manual
+#     (`./manage.sh unload`), swap por request de outro modelo ou liberação
+#     pelo gpu-shim na geração de imagem. Enquanto residentes, o KV/cache de
+#     prompt do slot segue quente (RAM + checkpoints internos).
 
 # Espera máxima pelo healthcheck do modelo ao carregar. 300 s cobre o
 # carregamento a frio dos GGUFs de 21 GB (MoE 35B) a partir do NVMe.
@@ -256,24 +261,9 @@ models:
     cmdStop: ${docker-stop}
     ttl: 1800
 
-  # ---------------------------------------------------------------------
-  # Qwen 3.5 9B Uncensored HauhauCS-Aggressive — variante uncensored da
-  # família Qwen3.5 9B (arch qwen35, DENSA, sem -ncmoe; no lugar da
-  # Ornith1.5_9B_Uncensored, removida 2026-10-19). mmproj BF16 incluso
-  # (visor da família). SEM MTP: header sem tensors/keys nextn (verificado
-  # no GGUF — diferente do Ornith 9B da ornith-ai, que tinha head embutida).
-  # ---------------------------------------------------------------------
-  Qwen3.5_9B_HauhauCS:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/Qwen3.5-9B-Uncensored-HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf
-      --mmproj /models/Qwen3.5-9B-Uncensored-HauhauCS/mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf
-      -c 131072 -ngl 99
-      -b 4096
-      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
-      --presence-penalty 0.0 --repeat-penalty 1.0
-    cmdStop: ${docker-stop}
-    ttl: 1800
+  # Qwen3.5 9B Uncensored HauhauCS REMOVIDA em 2026-10-30 (poda do zoo —
+  # densa, sem MTP, coberto por Ornith1.5_9B/MiMo2.6 no mesmo nicho).
+  # GGUFs ~6,5 GB apagados; re-instalável via MODELS_INSTALL.md.
 
   # ---------------------------------------------------------------------
   # MiMo-V2.6 Distill Qwen 9B (XiaomiMiMo — distill do MiMo-V2.6 em base
@@ -295,46 +285,11 @@ models:
     cmdStop: ${docker-stop}
     ttl: 1800
 
-  # ---------------------------------------------------------------------
-  # NVIDIA Nemotron 3.5 Bolt 74B-A9B (24GB, IQ2-XXS QAD) — MoE híbrido
-  # Mamba-2 + LatentMoE (arch nemotron_h_moe: 88 blocos = 8 attention
-  # [KV heads 2] + 40 SSM + 40 MoE [496 experts totais, 9 ativos]).
-  # VLM: mmproj C-RADIO v4-H (1,7 GB). Ctx nativo 262144.
-  # Requer llama.cpp >= PR ggml-org#30520 (merge 2026-10-15) — imagem
-  # stock atualizada p/ build 11681 (0.7.0-dev 5e03a1ff).
-  # Experts IQ2: 431 MiB/camada; -ncmoe 32 deixa ~7 GiB de pesos na GPU.
-  # MoE híbrido: --load-mode none (regra 2). DFlash drafter LiLiCorr
-  # (1 GB, draft separado → -ctkd/-ctvd f16, regra 5).
-  # Sampling do model card: temp 1.0 / top-p 0.95.
-  # ---------------------------------------------------------------------
-  # ---------------------------------------------------------------------
-  # Nemotron-3.5-Bolt 74B-A9B (NVIDIA) — arch nemotron_h_moe (88 blocos
-  # híbridos Mamba/atenção; KV pequeno → 128k ok). GGUF "24GB" + mmproj
-  # + draft DFlash LiLiCorr.
-  # Receita VALIDADA 2026-10-26 (serving real):
-  # - ncmoe 74/88: com o ncmoe 32 original a carga OOMava (experts de ~56
-  #   blocos ficavam na GPU). mmproj na CPU (--no-mmproj-offload, -1,7 GB)
-  #   para caber tudo @128k.
-  # - SEM draft: o DFlash medido com aceitação ~27% dava decode 9,2 tok/s
-  #   (overhead > ganho); sem draft: decode ~19 tok/s, prefill ~560 tok/s.
-  #   GGUF do draft (952 MB) segue em disco para reteste.
-  # - ub 2048 (com draft era ub 1024 — compute buffer).
-  # decode ~19 tok/s, prefill ~560 tok/s @2k; VRAM ~11060 MiB
-  # (~1,2 GB de folga). temp 1.0 / top-p 0.95 (model card).
-  # ---------------------------------------------------------------------
-  Nemotron3.5_Bolt_74B:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/Nemotron3.5-Bolt-74B-A9B-24GB/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB.gguf
-      --mmproj /models/Nemotron3.5-Bolt-74B-A9B-24GB/mmproj-NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB.gguf
-      --no-mmproj-offload
-      --load-mode none
-      -c 131072 -ngl 99 -ncmoe 74
-      -b 4096 -ub 2048
-      --temp 1.0 --top-p 0.95
-    cmdStop: ${docker-stop}
-    ttl: 1800
-
+  # Nemotron-3.5-Bolt 74B AVALIADO E REMOVIDO em 2026-10-30 (escolha
+  # manual do owner — menor decode do zoo ~19 t/s, prefill ~560 t/s, GGUF
+  # 24 GB). Pesos + mmproj + draft DFlash (~24,8 GB) apagados. Arch
+  # `nemotron_h_moe` requer build ≥ PR ggml-org#30520 (imagem stock atual
+  # tem). Re-instalável via MODELS_INSTALL.md.
   # ---------------------------------------------------------------------
   # Qwen 3.6 35B Uncensored Aggressive (HauhauCS) — multimodal,
   # MoE (28 camadas na CPU). Otimizado 2026-10-14 p/ teto de 10 GB:
@@ -369,77 +324,10 @@ models:
   # (48 camadas full-attention + MoVA fixo na GPU) limitava o ctx a 40k
   # — abaixo do floor de 128k (política: modelo que não atende 128k sai
   # do zoo).
+  # TODAS as entries do batch — Sage-A1.5, Apodex-1.1, Nex-N2.5,
+  # BigBang v1 — REMOVIDAS em 2026-10-30 (poda do zoo; GGUFs ~130 GB
+  # apagados; re-instaláveis via MODELS_INSTALL.md).
   # =====================================================================
-
-  # ---------------------------------------------------------------------
-  # Sage-A1.5 35B-A3B (InternScience) — qwen3_5_moe multimodal (visor
-  # SigLIP-ish 27 camadas). GGUF oficial Q4_K_M + mmproj. Sampling do
-  # model card: temp 1.0 / top-p 0.95 / top-k 20 / min-p 0.0 /
-  # presence-penalty 1.5 / rep 1.0.
-  # ---------------------------------------------------------------------
-  SageA1.5_35B:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/Sage-A1.5-Q4_K_M/Sage-A1.5-Q4_K_M.gguf
-      --mmproj /models/Sage-A1.5-Q4_K_M/Sage-A1.5-mmproj.gguf
-      --load-mode none
-      -c 131072 -ngl 99 -ncmoe 31
-      -b 4096 -ub 2048
-      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
-      --presence-penalty 1.5 --repeat-penalty 1.0
-    cmdStop: ${docker-stop}
-    ttl: 1800
-
-  # ---------------------------------------------------------------------
-  # Apodex 1.1 mini 35B-A3B (apodex) — qwen3_5_moe multimodal. GGUF
-  # convertido pelo abenzerps (o repo oficial publica NVFP4, sem GGUF).
-  # Sampling do generation_config oficial: temp 1.0 / top-k 20 / top-p 0.95.
-  # ---------------------------------------------------------------------
-  Apodex1.1_35B:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/Apodex-1.1-mini-Q4_K_M/Apodex-1.1-mini-Q4_K_M.gguf
-      --mmproj /models/Apodex-1.1-mini-Q4_K_M/mmproj-Apodex-1.1-mini-F16.gguf
-      --load-mode none
-      -c 131072 -ngl 99 -ncmoe 31
-      -b 4096 -ub 2048
-      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
-    cmdStop: ${docker-stop}
-    ttl: 1800
-
-  # ---------------------------------------------------------------------
-  # Nex-N2.5 mini 35B (nex-agi) — qwen3_5_moe multimodal, thinking com
-  # reasoning_effort (chat_template_kwargs). GGUF bartowski Q4_K_M +
-  # mmproj f16. Sampling do model card: temp 0.7 / top-p 0.95 / top-k 40.
-  # ---------------------------------------------------------------------
-  NexN2.5_35B:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/Nex-N2.5-mini-Q4_K_M/nex-agi_Nex-N2.5-mini-Q4_K_M.gguf
-      --mmproj /models/Nex-N2.5-mini-Q4_K_M/mmproj-nex-agi_Nex-N2.5-mini-f16.gguf
-      --load-mode none
-      -c 131072 -ngl 99 -ncmoe 31
-      -b 4096 -ub 2048
-      --temp 0.7 --top-p 0.95 --top-k 40
-    cmdStop: ${docker-stop}
-    ttl: 1800
-
-  # ---------------------------------------------------------------------
-  # BigBang v1 35B-A3B (endless-frontier) — qwen3_5_moe multimodal. GGUF
-  # mradermacher Q4_K_M + mmproj f16. Sampling do generation_config
-  # oficial: temp 1.0 / top-k 20 / top-p 0.95.
-  # ---------------------------------------------------------------------
-  BigBangv1_35B:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/BigBang-v1-Q4_K_M/BigBang-v1.Q4_K_M.gguf
-      --mmproj /models/BigBang-v1-Q4_K_M/BigBang-v1.mmproj-f16.gguf
-      --load-mode none
-      -c 131072 -ngl 99 -ncmoe 31
-      -b 4096 -ub 2048
-      --temp 1.0 --top-p 0.95 --top-k 20
-    cmdStop: ${docker-stop}
-    ttl: 1800
 
   # ---------------------------------------------------------------------
   # Bonsai 2 27B (PrismML fork) — GGUF ternário PTQ1_0 (PQ2_0 removida em
@@ -448,23 +336,16 @@ models:
   # llama.cpp-prismml:latest (commit pinado 84445367f) — NUNCA stock.
   # Sem temp/top-p/top-k: os defaults de sampling (thinking: temp 1.0,
   # top_p 0.95, top_k 20) vivem nos metadados do GGUF.
-  # Sem MTP (não baixado — fora de escopo).
+  # Sem MTP (não baixado — fora de escopo). A engine PrismML segue em uso
+  # pelos 9B; o serving do 27B migrou para a engine ada (abaixo).
   # ---------------------------------------------------------------------
+  # bonsai-27b (base, PrismML) REMOVIDA em 2026-10-30: a engine llama.cpp-bonsai-ada
+  # (bonsai-27b-ada / -uncensored) substituiu o serving do 27B há duas
+  # semanas e a base virou fallback redundante (~2x menos decode,
+  # ~27 vs ~43-52 tok/s). GGUF trunk PTQ1_0 apagado (~5,9 GB); o mmproj
+  # Q8_0 permanece no disco (compartilhado com as entries ada).
+  # Re-instalável via MODELS_INSTALL.md.
 
-  # Entry primária — PTQ1_0 (~5,6 GB) + mmproj (visão).
-  # ctx 131072 validado na RTX 3060 12GB (2026-10-15, KV q5_1/iq4_nl):
-  # carga OK, VRAM total observada 10162 MiB / 12288 (inclui ~890 MiB do
-  # display Hyprland/Wayland; mmproj carregado). Sem OOM; denso, sem
-  # alavanca de -ncmoe — se a VRAM do display crescer, fallback de ctx.
-  bonsai-27b:
-    cmd: |
-      ${docker-prismml}
-      -m /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-PTQ1_0.gguf
-      --mmproj /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf
-      -c 131072 -ngl 99
-      -ctk q4_0 -ctv q4_0
-    cmdStop: ${docker-stop}
-    ttl: 300
 
   # ---------------------------------------------------------------------
   # bonsai-27b-heretic REMOVIDA em 2026-10-28: redundante — a entry
@@ -521,7 +402,7 @@ models:
       --reasoning-budget-message "Now produce the complete answer."
       --ctx-checkpoints 16
     cmdStop: ${docker-stop}
-    ttl: 300
+    ttl: 0
 
   # ---------------------------------------------------------------------
   # Bonsai 2 27B "ada" Uncensored (AtomicChat) — MESMA receita da
@@ -558,7 +439,67 @@ models:
       --reasoning-budget-message "Now produce the complete answer."
       --ctx-checkpoints 16
     cmdStop: ${docker-stop}
-    ttl: 300
+    ttl: 0
+
+  # ---------------------------------------------------------------------
+  # bonsai-27b-ada-8g-2u — variante da bonsai-27b-ada para PC alvo com
+  # 8 GB de VRAM dedicados ao modelo (headless), 2 usuários em paralelo,
+  # visão na GPU. MESMOS GGUFs/engine da ada; o que muda:
+  #   -c 262144 (janela treinada compartilhada) + -np 2 + --kv-unified:
+  #   o KV tiered do fork SÓ ativa com n_stream == 1 (llama-kv-cache.cpp:235,
+  #   verificado no commit pinado 2cadbfb) — com -np 2 no modo padrão
+  #   (não-unificado) o tier desativa SILTENCIOSAMENTE e o KV inteiro teria
+  #   de caber em VRAM (~8k tokens no total). Com --kv-unified, n_stream=1,
+  #   o tier funciona e a janela estende para RAM pinneada (VMM).
+  #   --kv-vram-cells 12288: ~216 MiB de KV em VRAM (~6k tokens residentes,
+  #   compartilhados pelos 2 usuários); o resto da janela (até 262k) lê do
+  #   rabo pinneado via PCIe — degradação de decode proporcional à
+  #   profundidade (medido na 3060: 38→32 t/s @174k com linha 155k).
+  #   Conforto prático: ~20-30k por usuário (30-50k combinados).
+  # VALIDAÇÃO 2026-11-03 (3060 12 GB, -lv 5, registro completo no AGENTS.md):
+  #   (a) MTP REMOVIDO: o draft-mtp exige buffer de rollback dos estados GDN
+  #       (llama_memory_recurrent, n_rows = mem_size × (1 + n_rs_seq),
+  #       n_rs_seq = draft.n_max): 48 camadas × 3,127 MiB × 2 seqs × (1+n_rs_seq)
+  #       = 898 MiB @n_rs_seq 2 (1496 @4) POR CONTEXTO — e o draft cria um
+  #       SEGUNDO contexto com o mesmo RS (~1,66 GB no total c/ draft). Com
+  #       visão + 2 usuários não cabe em 8 GB. Decode cai (~26 t/s single no
+  #       lugar de 43-50), mas o lookup n-gram mantém o boost em rewrites/edits.
+  #   (b) --image-max-tokens 1024: pools reais do ViT são PEQUENOS (spike
+  #       medido +126 MiB numa imagem 1500×1500; a estimativa worst-case de
+  #       873 MiB do loader é conservadora) — o flag é seguro p/ qualidade.
+  #   (c) --kv-vram-cells 24576: ~432 MiB de KV residente (~12k tokens por
+  #       usuário); resto da janela (até 131k)
+  #       no rabo pinneado via PCIe (degradação proporcional à profundidade,
+  #       medido na 3060: 38→32 t/s @174k com linha 155k). 32768 também
+  #       cabe (7836 MiB medido c/ imagem alta) mas deixa só ~360 MiB de
+  #       folga na placa de 8 GB — linha final escolhida p/ folga ~500.
+  #   (d) Checkpoints (--ctx-checkpoints) vivem em RAM host, não custam VRAM.
+  # VRAM medida na 3060 12 GB: 7836 MiB de processo com linha 32768 + imagem
+  # alta processada (c/ linha 24576: ~7690 esperado). Folga ~500 MiB na
+  # placa de 8 GB.
+  # Requisitos do PC alvo: GPU Turing+ (CC ≥ 7.0 — VMM; Pascal desativa o
+  # tier silenciosamente), RAM ≥ 16 GB (spill pinneado até ~4 GB + page
+  # cache 6 GB), Docker + nvidia-container-toolkit, display fora da placa.
+  # ---------------------------------------------------------------------
+  bonsai-27b-ada-8g-2u:
+    cmd: |
+      ${docker-bonsai-ada}
+      -m /models/Ternary-Bonsai-2-27B-262k-GGUF/Ternary-Bonsai-2-27B-PTQ1_0-mtp-procreations.gguf
+      --mmproj /models/Ternary-Bonsai-2-27B-gguf/Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf
+      -c 262144 -np 2 --kv-unified -ngl 99
+      -ctk q4_0 -ctv q4_0 -ctkd q4_0 -ctvd q4_0
+      --kv-vram-cells 24576
+      --image-max-tokens 1024
+      --spec-type ngram-mod
+      --spec-lookup-n-max 32
+      --backend-sampling
+      --reasoning-effort-allow medium --reasoning-effort-fallback medium
+      --reasoning-max-tokens-floor 24576
+      --reasoning-budget 20480
+      --reasoning-budget-message "Now produce the complete answer."
+      --ctx-checkpoints 16
+    cmdStop: ${docker-stop}
+    ttl: 0
 
   # ---------------------------------------------------------------------
   # Bonsai 2 9B (variante edge da família, denso — instalado 2026-10-20,
@@ -575,7 +516,7 @@ models:
       -c 196608 -ngl 99
       -ctk bf16 -ctv bf16
     cmdStop: ${docker-stop}
-    ttl: 300
+    ttl: 0
 
   # ---------------------------------------------------------------------
   # Bonsai 2 9B Uncensored (AtomicChat) — LoRA rank-1 de 3,2 MB que remove
@@ -596,7 +537,7 @@ models:
       -c 196608 -ngl 99
       -ctk bf16 -ctv bf16
     cmdStop: ${docker-stop}
-    ttl: 300
+    ttl: 0
 
   # ---------------------------------------------------------------------
   # Strata REMOVIDA em 2026-10-14 (pesos 86G apagados do disco na limpeza
@@ -666,32 +607,42 @@ models:
     ttl: 1800
 
   # ---------------------------------------------------------------------
-  # LFM 3 1.7B (LiquidAI) — texto puro, DENSO, edge (no lugar do LFM2.5-8B
-  # Hermes removido). Tri-híbrido leve: 24 camadas = 13 conv gated + 5 SWA
-  # + 6 atenção global (KV minúsculo) — ctx nativo 256k, floor 128k folga.
-  # Agêntico (post-train OpenClaw/Hermes/Pi/OpenCode); tool calling.
-  # SEM MTP/draft (não publica head nextn). SEM mmproj (texto apenas).
-  # Requer llama.cpp >= b11960 v0.8.0 (arch lfm3) — imagem stock +
-  # engine pdcache atualizadas para o build 11960 (commit 8642541b2).
-  # GGUF oficial LiquidAI Q4_K_M (1,1 GB); alternativa no mesmo repo:
-  # LFM3-1.7B-QAD-Q4_0.gguf (QAD, distilação p/ recuperar perda do Q4_0).
-  # Sampling do model card (general): temp 0.1 / top-k 50 / rep 1.1
-  # (math/STEM: temp 1.0 / top-p 0.95 / top-k 20).
-  # --reasoning-budget 2048: bateria 2026-10-28 achou loop de reasoning em
-  #   prompts triviais/ambíguos (1/5 rodadas >10k chars sem concluir —
-  #   análogo ao known issue do Flint Heretic); com budget 8/8 respondem e
-  #   o thinking normal (< 2k tok, ex. math ~150-270) fica intacto.
+  # LFM 2.5 24B-A2B "2G" (Q4_K_M) — variante para PC headless com alvo de
+  # ~2 GB de VRAM (criada 2026-11-03 a pedido do owner). MESMO GGUF Q4_K_M
+  # da LFM2.5_24B_A2B; o que muda:
+  # - -ncmoe 40: TODOS os experts na CPU/RAM (--load-mode none, regra 2).
+  #   Pesos Q4_K_M: 13,3 GB de experts ficam na RAM; na GPU sobra só
+  #   ~615 MiB (attn 57,5 + conv/GDN 270,7 + embd/output 205 + dense-FFN
+  #   dos blocos 0-1 ~81 + norms — medido dos tensors do GGUF).
+  # - -c 131072 (janela treinada inteira) com o KV q4_0 do macro:
+  #   10 camadas GQA × (512+512) × 4,5 bits = 5,6 KiB/token → 720 MiB @131k.
+  # - -b 1024 -ub 256: compute buffers mínimos (o orçamento de 2 GB é
+  #   apertado). Custo: prefill lento (experts lidos da RAM a cada ubatch,
+  #   regra 7 — ub maior amortizaria, +~60 MiB por passo de ub). Decode
+  #   ~CPU-bound (2,45B ativos na CPU): esperar single-digit t/s dependendo
+  #   do CPU do PC alvo. Sem MTP (sem draft para este modelo).
+  # - Sem visão (LFM2.5 é texto puro). Sem MTP/draft → n_rs_seq 0, sem
+  #   buffer de rollback.
+  # VRAM medida na 3060 (2026-11-03): ver registro no AGENTS.md.
+  # PC alvo: headless (sem display na placa); RAM ≥ 16 GB (13,3 GB de
+  # experts fixados + prompt cache + SO). 2 usuários: trocar -np 1 → 2
+  # (KV por slot cai p/ 65k; estados GDN dobram, ~+30 MiB).
   # ---------------------------------------------------------------------
-  LFM3_1.7B:
+  LFM2.5_24B_A2B_2G:
     cmd: |
       ${docker-pdcache}
-      -m /models/LFM3-1.7B-GGUF/LFM3-1.7B-Q4_K_M.gguf
-      -c 131072 -ngl 99
-      -b 4096
-      --temp 0.1 --top-k 50 --repeat-penalty 1.1
-      --reasoning-budget 2048 --reasoning-budget-message "I have thought enough. I will now answer directly."
+      -m /models/LFM2.5-24B-A2B-GGUF/LFM2.5-24B-A2B-Q4_K_M.gguf
+      --load-mode none
+      -c 131072 -ngl 99 -ncmoe 40
+      -b 1024 -ub 256
+      --temp 0.1 --top-k 50 --repeat-penalty 1.05
     cmdStop: ${docker-stop}
     ttl: 1800
+
+  # LFM3-1.7B REMOVIDA em 2026-10-30 (escolha manual do owner — menor
+  # modelo do zoo, ~3,1 GB de VRAM; needle FAIL ≥ ~90k benchado). GGUFs
+  # Q4_K_M + QAD-Q4_0 (~2,1 GB) apagados; re-instalável via
+  # MODELS_INSTALL.md. Arch `lfm3` segue suportada no build 11960.
 
   # ---------------------------------------------------------------------
   # MiniCPM-V 4.7 35B-A3B (OpenBMB) — primeiro MoE multimodal da série
@@ -786,49 +737,17 @@ models:
     cmdStop: ${docker-stop}
     ttl: 1800
 
-  # ---------------------------------------------------------------------
-  # Flint 40B-A2.5B Uncensored (Heretic) — mesmo Flint de cima, decensurado
-  # pelo electroglyph (abliterated: recusas 98/100 -> 5/100; custo de
-  # benchmark não divulgado; GGUF do Octopusman388, Q4_K_M 22,5 GiB).
-  # Mesma arch `flint`/receita da entry base (ncmoe 38, ub 2048, sampling
-  # do model card). TEXTO apenas, SEM MTP/draft.
-  # - KNOWN ISSUE do autor: reasoning descontrolado ("looping") em prompts
-  #   sensíveis — rambling de 10k+ chars sem resposta; NÃO é repetição de
-  #   token nem problema de template. Mitigação validada pelo autor:
-  #   --reasoning-budget 4096 + mensagem de fechamento (limita o drift,
-  #   não o elimina). Presença-penalty NÃO ajuda.
-  # ---------------------------------------------------------------------
-  Flint_40B_A2.5B_Uncensored:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/Flint-Uncensored-GGUF/flint-uncensored-Q4_K_M.gguf
-      --load-mode none
-      -c 131072 -ngl 99 -ncmoe 38
-      -b 4096 -ub 2048
-      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
-      --reasoning-budget 4096 --reasoning-budget-message "I have thought enough. I will now answer directly."
-    cmdStop: ${docker-stop}
-    ttl: 1800
+  # Flint Heretic (Uncensored) REMOVIDA em 2026-10-30 (escolha manual do
+  # owner — GGUF do Octopusman388, ~22,5 GiB apagados). Known issue do
+  # autor (reasoning em loop em prompts sensíveis) ficava com o
+  # --reasoning-budget 4096. Reinstalação: GGUF do Octopusman388 Q4_K_M +
+  # mesma receita da entry base. A entry base Flint_40B_A2.5B permanece.
 
-  # ---------------------------------------------------------------------
-  # MiniCPM-V 4.7 1B (OpenBMB) — variante edge da série, DENSA (arch
-  # qwen35, sem experts → sem -ncmoe/--load-mode none), ctx nativo 262144.
-  # Mesmo visor LLaVA-UHD v4 da 35B (mesma imagem stock build 11561).
-  # DSpark draft disponível no repo (dspark-MiniCPM-V-4_7-1B-F16.gguf) mas
-  # NÃO instalado — precedente da 35B: aceitação ~10%.
-  # ---------------------------------------------------------------------
-  MiniCPM-V_4.7_1B:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/MiniCPM-V-4.7-1B-Q4_K_M/MiniCPM-V-4_7-1B-Q4_K_M.gguf
-      --mmproj /models/MiniCPM-V-4.7-1B-Q4_K_M/mmproj-model-f16.gguf
-      -c 131072 -ngl 99
-      -b 4096
-      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
-      --presence-penalty 0.0 --repeat-penalty 1.0
-    cmdStop: ${docker-stop}
-    ttl: 1800
-
+  # MiniCPM-V 4.7 1B REMOVIDA em 2026-10-30 (escolha manual do owner —
+  # edge da série, decode recorde 248 t/s mas nicho coberto pela
+  # 35B multimodal; GGUF + mmproj ~1,8 GB apagados). Re-instalável via
+  # MODELS_INSTALL.md (openbmb/MiniCPM-V-4.7-1B-gguf). Nota: a 35B
+  # continua na build 11561 (visor minicpmv4_7) — nada muda lá.
 
 
   # Variantes de contexto longo (_96k/_128k) REMOVIDAS em 2026-10-15: o floor

@@ -324,7 +324,19 @@ PY
   (c) `python3` no PATH é um **3.12 base** sem torch — a imagem roda o core e
   o pre-start em **`python3.13`**; (d) a slim cu130 NÃO traz `aiohttp`
   (necessário ao gpu-shim) — o `pre-start.sh` auto-instala em `/root/.local`
-  (persiste no volume).
+  (persiste no volume; no pin 20261027 o aiohttp já vem no python3.13 da
+  imagem — o auto-heal ficou como rede de segurança);
+  (e) o 3.12 do pin 20261027 PERDEU o Pillow que a cu126 antiga trazia —
+  a criação do `placeholder.png` no pre-start usava `python3` e o import de
+  PIL falhava; o status do `if` propagava pelo `source` e o `set -e` do
+  entrypoint derrubava o container em crash loop (corrigido 2026-10-31:
+  pre-start usa `python3.13` e termina com `true`; sempre avaliar qualquer
+  comando novo do pre-start no python certo — o erro só aparece no
+  `docker logs comfyui`, não no log do compose).
+  Cuidado extra: o `/tmp/oraculo-comfyui` é volátil e, se recriado por um
+  processo root, o bind fica inacessível ao uid 1000 (`PermissionError` no
+  placeholder e no `input/3d`) — corrigir com container efêmero root:
+  `docker run --rm --user 0 -v /tmp/oraculo-comfyui:/fix <imagem> chown -R 1000:1000 /fix`.
 - **`/root` em volume nomeado `comfyui-root`** (migrado do anônimo em
   2026-10-31; sobrevive a `docker compose down` e recriação). O entrypoint SÓ
   copia o bundle da imagem para `/root/ComfyUI` se `main.py` não existir —
@@ -354,7 +366,15 @@ PY
 
 O `int8_convrot` é nativo do ComfyUI (sem custom node) e mais rápido que
 GGUF em Ampere — decisão validada: os GGUFs de difusão foram removidos
-(`ComfyUI-GGUF` nem é instalado).
+(`ComfyUI-GGUF` nem é instalado). **Exceção 2026-11-02**: o fork
+`ComfyUI-GGUF-Loader` (ChrisColeTech, CCTech Suite — city96 com PRs
+backportados, incl. Qwen3-VL text encoder) instalado em
+`./comfyui/custom_nodes/` p/ carregar DiT/CLIP em GGUF quando útil.
+Dep `gguf` instalada com `docker exec -u root comfyui pip install gguf`
+(cai no site-packages do python3.13 — recriar o container exige repetir;
+o `python3` do PATH é o 3.12 do sistema, sem relação). 101 nodes
+registrados; os opcionais (TTS etc.) ficam desabilitados sem suas deps —
+esperado.
 
 **Volumes**: `./models/comfyui → /root/ComfyUI/models`;
 `./comfyui/{custom_nodes,user}` → idem no container; caches de

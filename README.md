@@ -26,6 +26,8 @@ Docker efêmero por modelo** (`docker run --rm`, nome `ls-<Modelo>`):
 - **Swap automático**: pedir um modelo descarrega o anterior (só 1 carregado
   por vez — equivalente ao antigo `--models-max 1`);
 - **Descarga por ociosidade**: `ttl: 300` s (substitui o `sleep-idle-seconds`);
+  exceção: entries sem pdcache (bonsai/PrismML) ficam carregadas indefinidamente
+  (`ttl: 0` — saem só por unload manual, swap ou liberação do gpu-shim);
 - **Configuração por modelo**: entries em [`llama-swap/config.yaml`](llama-swap/config.yaml)
   (substitui o `models/models.ini`, agora histórico/desativado).
 
@@ -379,7 +381,7 @@ carregado (ttl de 5 min). Também funciona sem `watch`, para consulta única.
 ## Modelos Disponíveis
 
 Fonte de verdade: [`llama-swap/config.yaml`](llama-swap/config.yaml)
-(23 entries: 18 stock/pdcache + 4 bonsai PrismML + 1 Xing).
+(16 entries em 2026-10-30: 12 stock/pdcache + 2 bonsai PrismML + 2 bonsai-ada).
 
 Medições **pós-unlock** (2026-10-26, gpu-unlock BF16 ativo): decode = 200
 tokens gerados com ctx ~0; prefill = prompt sintético @2k (`n_predict=1`);
@@ -394,23 +396,23 @@ VRAM = pico `nvidia-smi` (total, incl. ~800 MiB do display) na carga real
 | LFM2.5_24B_A2B | 131072 | ~46 tok/s | ~1640 tok/s | 10602 MiB | SmallMoE | raciocínio agêntico; temp 0.1/top-k 50/rep 1.05 |
 | LFM2.5_24B_A2B_IQ2_M | 131072 | **~106 tok/s** | ~2960 tok/s | 10632 MiB | SmallMoE + SuperCompressed | 100% GPU (7,5 GB); **o mais rápido do zoo** |
 | MiniCPM-V_4.7_35B | 131072 | ~36 tok/s | ~1150-1620 tok/s | 10598 MiB | SmallMoE | multimodal; visão validada; ncmoe 32 + ub 4096 |
-| SageA1.5_35B | 131072 | ~34 tok/s | ~1000 tok/s | 9849 MiB | SmallMoE | multimodal; thinking (consome max_tokens) |
-| Apodex1.1_35B | 131072 | ~39 tok/s | ~940 tok/s | 9849 MiB | SmallMoE | multimodal; o mais rápido do zoo 35B |
-| NexN2.5_35B | 131072 | ~36 tok/s | ~900 tok/s | 10609 MiB | SmallMoE | multimodal; thinking via reasoning_effort |
-| BigBangv1_35B | 131072 | ~37 tok/s | ~970 tok/s | 10625 MiB | SmallMoE | multimodal; thinking |
+| MiniCPM-V_4.7_35B_Uncensored | 131072 | — | — | ~10455 MiB | SmallMoE + Uncensored | MESMA receita da 35B + LoRA AtomicChat rank-1 (106 MB); visão intacta |
+| LFM2.5_24B_A2B_Uncensored | 131072 | ~29-31 tok/s | — | ~10600 MiB | SmallMoE + Uncensored | MESMA receita da base + LoRA AtomicChat rank-1 (24 MB) |
 | Ornith1.5_35B_MTP | 131072 | ~32 tok/s | ~1140 tok/s | 11564 MiB | SmallMoE | multimodal; MTP self-draft (aceitação ~38%); agêntico |
 | Flint_40B_A2.5B | 131072 | ~41 tok/s | ~1300 tok/s | 10734 MiB | SmallMoE | código agêntico; texto puro; ub 4096 (calibração) |
-| Flint_40B_A2.5B_Uncensored | 131072 | ~43 tok/s | ~880 tok/s | 10764 MiB | SmallMoE + Uncensored | texto puro; reasoning-budget ativo |
-| Nemotron3.5_Bolt_74B | 131072 | ~16-19 tok/s | ~560 tok/s | ~11100 MiB | SmallMoE | híbrido Mamba (arch `nemotron_h_moe`); ncmoe 74 + mmproj na CPU; sem draft |
-| Xing4.0_29B_A4B | 131072 | ~28 tok/s | ~580 tok/s | 10916 MiB | SmallMoE | MLA + mHC; engine Xing dedicada (fork pinado) |
 | Gemma4_12B | 131072 | ~40 tok/s | ~1250 tok/s | 9314 MiB | Tiny | multimodal (visão + áudio nativo); QAT; thinking |
-| MiniCPM-V_4.7_1B | 131072 | **~248 tok/s** | **~10,4k tok/s** | 10620 MiB | Tiny | multimodal; visão validada; recorde de prefill do zoo |
 | Ornith1.5_9B | 131072 | ~58 tok/s | ~1600 tok/s | 10244 MiB | Tiny | multimodal; MTP self-draft n=2; agêntico |
-| Qwen3.5_9B_HauhauCS | 131072 | ~55 tok/s | ~1800 tok/s | 10255 MiB | Tiny + Uncensored | multimodal |
 | MiMo2.6_9B | 131072 | ~53 tok/s | ~1615 tok/s | 9508 MiB | Tiny | multimodal; reasoning separado |
-| bonsai-27b | 131072 | ~27 tok/s | ~530 tok/s | 10538 MiB | SuperCompressed | PTQ1_0 ternário; engine PrismML; KV q4_0; visão validada |
+| bonsai-27b-ada | 262144 | ~38-52 tok/s | ~205-500 tok/s | ~10,7 GB | SuperCompressed | PTQ1_0 ternário; engine bonsai-ada (MTP ~69-91% + KV tiered, janela 262k) |
+| bonsai-27b-ada-uncensored | 262144 | ~43-50 tok/s | — | 11194 MiB | SuperCompressed + Uncensored | MESMA receita da ada + LoRA AtomicChat rank-1 (9,7 MB; refusals 0%) |
 | bonsai-9b | 196608 | ~84 tok/s | ~1530 tok/s | 10870 MiB | SuperCompressed | PTQ1_0 ternário; KV bf16 @192k; visão validada |
 | bonsai-9b-uncensored | 196608 | ~78 tok/s | ~1560 tok/s | 10886 MiB | SuperCompressed + Uncensored | LoRA AtomicChat rank-1 (3,2 MB); thinking pesado |
+
+> Podados em 2026-10-30 a pedido do owner (~156 GB liberados): batch
+> qwen3_5_moe (Sage-A1.5/Apodex/Nex-N2.5/BigBang), Nemotron-3.5-Bolt-74B,
+> Flint Heretic, Qwen3.5-9B HauhauCS, LFM3-1.7B, MiniCPM-V 4.7 1B e
+> bonsai-27b (entry PrismML — serving do 27B na ada). Re-instaláveis via
+> [`models/MODELS_INSTALL.md`](models/MODELS_INSTALL.md).
 
 ### Categorias
 
@@ -418,23 +420,25 @@ Por **modelo** (não por entry); um modelo pode ter mais de uma categoria.
 Detalhes e justificativas em [`AGENTS.md`](AGENTS.md#categorias-de-modelos-por-modelo-não-por-entry).
 
 - **SmallMoE** (MoE com offload de experts p/ RAM): LFM2.5-24B-A2B,
-  MiniCPM-V 4.7 35B, Qwen3.6-35B, Ornith-1.5-35B, Nemotron-3.5-Bolt-74B,
-  Flint-40B, Xing4.0-29B, Sage-A1.5 35B, Apodex-1.1 mini, Nex-N2.5 mini,
-  BigBang v1 (Raon-1 mini bloqueado: sem suporte no llama.cpp; K2-Horizon
-  removido: contexto máx. 40k < floor 128k)
-- **Tiny** (cabem 100% na VRAM em ~4-bit): Gemma4-12B, MiniCPM-V 4.7 1B,
-  Ornith-1.5-9B, Qwen3.5-9B, MiMo-V2.6-9B
+  MiniCPM-V 4.7 35B, Qwen3.6-35B, Ornith-1.5-35B, Flint-40B
+  (Sage/Apodex/Nex/BigBang/Nemotron/Xing removidos — ver AGENTS.md;
+  Raon-1 mini bloqueado: sem suporte no llama.cpp; K2-Horizon removido:
+  contexto máx. 40k < floor 128k)
+- **Tiny** (cabem 100% na VRAM em ~4-bit): Gemma4-12B, Ornith-1.5-9B,
+  MiMo-V2.6-9B
 - **SuperCompressed** (sub-Q4_K_M e 100% VRAM): LFM2.5-24B-A2B (IQ2_M),
-  Bonsai 2 27B, Bonsai 2 9B (PTQ1_0 ternários)
-- **Uncensored**: Qwen3.6-35B Hauhau, Qwen3.5-9B HauhauCS, Flint-40B Heretic,
-  Bonsai 27B Heretic, Bonsai 9B Uncensored
+  Bonsai 2 27B (na engine ada), Bonsai 2 9B (PTQ1_0 ternários)
+- **Uncensored**: Qwen3.6-35B Hauhau, LFM2.5-24B Uncensored,
+  MiniCPM-V 4.7 35B Uncensored, Bonsai 27B Uncensored (ada), Bonsai 9B Uncensored
 
 ### IZ — Índice Zoo (métrica de desempenho, 0-100+)
 
 Nota de desempenho que combina decode e ingestão da janela pelo **elo mais
 fraco** (`min` dos fatores): um modelo é tão usável quanto o pior dos dois.
 Cada fator vira uma nota 0-1+ por interpolação piecewise com 3 âncoras de
-usabilidade, e a IZ extrapola acima do "excelente" (notas >100 = superior):
+usabilidade, e a IZ extrapola acima do "excelente" (notas >100 = superior).
+⚠️ Tabela abaixo é o **snapshot 2026-10-27** — inclui modelos já podados do
+zoo (só valores de referência; a lista atual está na tabela de cima):
 
 | Ancoragem | Decode | Tempo p/ ler a janela toda |
 |---|---|---|
