@@ -23,15 +23,17 @@
 # prompt_disk_save; hunks de prefix-only descartados — modo desabilitado).
 #
 # Fonte: https://github.com/ggml-org/llama.cpp, commit PINADO = o MESMO commit
-# da imagem stock ghcr.io/ggml-org/llama.cpp:full-cuda em uso (build 11960).
+# da imagem stock ghcr.io/ggml-org/llama.cpp:full-cuda em uso (build 12063).
 # LIMITAÇÃO: nenhuma esperada — mesma base do stock, mesmos modelos servidos.
 FROM nvidia/cuda:13.4.2-devel-ubuntu24.04
 
 ARG STOCK_REPO="https://github.com/ggml-org/llama.cpp"
 # Commit PINADO — igual ao da imagem stock em uso:
-#   version: 0.8.0-dev (build 11960, commit 8642541b2; traz a arch lfm3 —
-#   LiquidAI LFM3, mínimo exigido pelo GGUF oficial)
-ARG STOCK_COMMIT="8642541b255bfb5dc39cd351a178be09013a55d6"
+#   version: 0.8.0-dev (build 12063, commit 2cbca389f; traz fusão CUDA de MoE
+#   gate/up+GLU em MMQ (#31188), constantes de rotação do KV na GPU (#31073),
+#   batched tensor reads mapeados em host memory (#31391), fix de rotação em
+#   camadas com KV compartilhado (#31406), save/restore de hidden state MTP)
+ARG STOCK_COMMIT="2cbca389f515df455412dafa07e2b1359cc72a6d"
 # Alvo: RTX 3060 (Ampere) — mesma arquitetura do build nativo de referência.
 ARG CUDA_ARCH="86"
 

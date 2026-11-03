@@ -22,6 +22,23 @@ do mkinitcpio escreve MODULES verbatim) e o unlock não roda. Se atualizar o
 pacote, reaplicar o sed. `default @saved` no loader.conf memoriza a entry do
 boot anterior.
 
+**Imagem stock (2026-11-03)**: `ghcr.io/ggml-org/llama.cpp:full-cuda`
+build **12063**, commit **`2cbca389f`** (2026-11-03), fingerprint `b1-2cbca38`.
+Traz (vs 11960 de 2026-10-28): fusão CUDA de MoE gate/up+GLU em MMQ
+(ggml-org#31188 — decode do Qwen3.6 curto mediu ~47 t/s vs ~38-42 antes),
+constantes de rotação do KV na GPU (#31073), batched tensor reads mapeados em
+host memory (#31391), fix de rotação em camadas com KV compartilhado (#31406),
+save/restore de hidden state MTP (#30141). Engine pdcache repinada no MESMO
+commit (build limpo, patch aplicado sem conflito; snapshots `.centry` antigos
+descartados pelo guard — reescritos on-demand).
+**Cache de experts MoE em VRAM (`--moe-cache-mib`, merged 2026-10-07 + SLRU
+10-19) TESTADO E REJEITADO de novo no build 12063** (A/B no Qwen3.6_35B_A3B,
+ctx 8k, decode 256 tok): OFF 36,7 t/s → ON 1024 MiB 31,1 t/s (**-15%**) →
+ON 256 MiB 19,4 t/s (**-47%** — quanto menor o budget, pior: thrash). Em
+GPU single de 12 GB com folga curta de VRAM, o overhead do caminho de cache
+domina — NÃO usar em nenhuma entry. O PR alternativo por slots
+(`--moe-expert-cache`, ggml-org#27861) segue DRAFT/não-mesclado — não usar.
+
 **Regra do repo**: toda mudança deve ser refletida na documentação —
 `docker-compose.yml` → `DOCKER.md`; `llama-swap/config.yaml` ou modelos →
 `AGENTS.md`; `manage.sh`/fluxo de uso → `README.md`; requisitos → `README.md`.
