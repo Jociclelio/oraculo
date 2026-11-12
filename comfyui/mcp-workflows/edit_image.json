@@ -1,0 +1,255 @@
+{
+  "1": {
+    "inputs": {
+      "unet_name": "qwen_image_2.1_turbo_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Difusão Qwen-Image 2.1 Turbo INT8"
+    }
+  },
+  "2": {
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "device": "auto",
+      "dtype": "default"
+    },
+    "class_type": "QwenImage21Cache",
+    "_meta": {
+      "title": "Cache prefixo KV"
+    }
+  },
+  "3": {
+    "inputs": {
+      "clip_name": "qwen3vl_8b_w4a8.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Text encoder Qwen3-VL 8B w4a8"
+    }
+  },
+  "4": {
+    "inputs": {
+      "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAE"
+    }
+  },
+  "5": {
+    "inputs": {
+      "image": "PARAM_STR_IMAGE"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem a editar"
+    }
+  },
+  "6": {
+    "inputs": {
+      "clip": [
+        "3",
+        0
+      ],
+      "prompt": "PARAM_PROMPT",
+      "negative_prompt": "PARAM_STR_NEGATIVE_PROMPT",
+      "max_length": 1024,
+      "resolution": 0,
+      "vae": [
+        "4",
+        0
+      ],
+      "images.image_1": [
+        "5",
+        0
+      ],
+      "images.image_2": [
+        "10",
+        0
+      ],
+      "images.image_3": [
+        "11",
+        0
+      ],
+      "images.image_4": [
+        "12",
+        0
+      ],
+      "images.image_5": [
+        "13",
+        0
+      ],
+      "images.image_6": [
+        "14",
+        0
+      ],
+      "images.image_7": [
+        "15",
+        0
+      ],
+      "images.image_8": [
+        "16",
+        0
+      ],
+      "images.image_9": [
+        "17",
+        0
+      ],
+      "images.image_10": [
+        "18",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImage21",
+    "_meta": {
+      "title": "Encode instrução + referência"
+    }
+  },
+  "7": {
+    "inputs": {
+      "seed": "PARAM_INT_SEED",
+      "steps": "PARAM_INT_STEPS",
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "2",
+        0
+      ],
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "6",
+        1
+      ],
+      "latent_image": [
+        "6",
+        2
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler (latente vem do encoder)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "7",
+        0
+      ],
+      "vae": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "Decode"
+    }
+  },
+  "9": {
+    "inputs": {
+      "images": [
+        "8",
+        0
+      ],
+      "filename_prefix": "oraculo/mcp-edit"
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Salvar imagem"
+    }
+  },
+  "10": {
+    "inputs": {
+      "image": "PARAM_STR_IMAGE_REF_2"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 2"
+    }
+  },
+  "11": {
+    "inputs": {
+      "image": "PARAM_STR_IMAGE_REF_3"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 3"
+    }
+  },
+  "12": {
+    "inputs": {
+      "image": "PARAM_STR_IMAGE_REF_4"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 4"
+    }
+  },
+  "13": {
+    "inputs": {
+      "image": "PARAM_STR_IMAGE_REF_5"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 5"
+    }
+  },
+  "14": {
+    "inputs": {
+      "image": "PARAM_STR_IMAGE_REF_6"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 6"
+    }
+  },
+  "15": {
+    "inputs": {
+      "image": "PARAM_STR_IMAGE_REF_7"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 7"
+    }
+  },
+  "16": {
+    "inputs": {
+      "image": "PARAM_STR_IMAGE_REF_8"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 8"
+    }
+  },
+  "17": {
+    "inputs": {
+      "image": "PARAM_STR_IMAGE_REF_9"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 9"
+    }
+  },
+  "18": {
+    "inputs": {
+      "image": "PARAM_STR_IMAGE_REF_10"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Imagem de referência 10"
+    }
+  }
+}

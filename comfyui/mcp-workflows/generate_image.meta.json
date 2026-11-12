@@ -1,0 +1,7 @@
+{
+  "name": "Gerar imagem (Qwen-Image 2.1 Turbo)",
+  "description": "Gera uma imagem do zero a partir de um prompt de texto (t2i). Passe apenas 'prompt'; os demais parâmetros são opcionais (defaults: 1024x1024, 8 steps). Retorna asset_id, filename e asset_url.",
+  "defaults": {
+    "steps": 8
+  }
+}

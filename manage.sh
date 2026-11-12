@@ -2,7 +2,7 @@
 # manage.sh — gerencia a stack inteira:
 #   1. llama-swap (proxy de modelos em 127.0.0.1:8081, processo de HOST)
 #   2. serviços auxiliares via docker compose (webui, terminal, searxng,
-#      comfyui, mcp-playwright, mcp-memory, openwa + docker-proxy)
+#      comfyui, mcp-playwright, mcp-memory, mcp-comfyui, openwa + docker-proxy)
 #
 # start = llama-swap + docker compose up -d | stop = llama-swap + compose down
 
@@ -180,20 +180,74 @@ stop_llama_swap() {
   echo "llama-swap parado."
 }
 
+# Relatório de VRAM: total/usado/livre + processos compute ordenados por uso.
+# Origem das medidas (2026-11-09, GPU idle): LLM ~10,4 GiB; ComfyUI 100-220
+# MiB de contexto CUDA (piso que /free NÃO derruba); desktop
+# (Hyprland+firefox+vesktop+terminais+ashell) ~540 MiB; reserva do driver
+# ~320 MiB (só sai com `rmmod nvidia*`, isto é, sessão headless).
+print_vram_report() {
+  local total used free
+  IFS=, read -r total used free < <(nvidia-smi --query-gpu=memory.total,memory.used,memory.free \
+    --format=csv,noheader,nounits | head -1)
+  total=${total// /}; used=${used// /}; free=${free// /}
+  echo "VRAM: ${used} MiB usados / ${total} total — ${free} MiB livres"
+  echo ""
+  printf '  %-8s %10s  %s\n' PID MIB PROCESSO
+  # pmon lista TODOS os processos da GPU (compute + gráficos). --query-compute-apps
+  # omite Hyprland/browsers/terminais, que também consomem VRAM.
+  local rows
+  rows=$(nvidia-smi pmon -c 1 -s m 2>/dev/null \
+    | awk '$1 ~ /^[0-9]+$/ {print $4, $2, $6}' | sort -rn)
+  if [ -n "$rows" ]; then
+    echo "$rows" | while read -r mib pid name; do
+      printf '  %-8s %10s  %s\n' "$pid" "$mib" "$name"
+    done
+  else
+    nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits \
+      | sort -t, -k2 -rn \
+      | while IFS=, read -r pid mib; do
+          [ -n "$pid" ] || continue
+          printf '  %-8s %10s  %s\n' "${pid// /}" "${mib// /}" \
+            "$(ps -p "${pid// /}" -o comm= 2>/dev/null || echo '?')"
+        done
+  fi
+}
+
+do_vram() {
+  print_vram_report
+}
+
 do_unload() {
+  local hard="${1:-}"
   # Libera a VRAM dos modelos LLM antes de gerar imagens no ComfyUI.
   # Preferência: GET /unload do llama-swap (síncrono, ~0,5 s; o gpu-shim do
   # ComfyUI chama o mesmo endpoint a cada request). Fallback: docker rm -f.
   if curl -fsS --max-time 60 "http://127.0.0.1:$PORT/unload" >/dev/null 2>&1; then
     echo "llama-swap descarregou os modelos; VRAM liberada."
-    return 0
-  fi
-  if [ -z "$(docker ps --format "{{.Names}}" | grep "^ls-" || true)" ]; then
+  elif [ -z "$(docker ps --format "{{.Names}}" | grep "^ls-" || true)" ]; then
     echo "Nenhum container de modelo (ls-*) em execução — VRAM já livre."
-    return 0
+  else
+    remove_model_containers
+    echo "Containers de modelo removidos; VRAM liberada."
   fi
-  remove_model_containers
-  echo "Containers de modelo removidos; VRAM liberada."
+
+  [ "$hard" = "--hard" ] || return 0
+
+  # --hard: derruba TAMBÉM o piso do ComfyUI. POST /free (com free_memory)
+  # só devolve os pesos ao caching allocator — o contexto CUDA (~100-220
+  # MiB) permanece; a única forma de zerar é matar o processo torch.
+  echo ""
+  echo "Modo --hard: parando o ComfyUI para liberar o contexto CUDA..."
+  docker stop comfyui >/dev/null 2>&1 \
+    && echo "ComfyUI parado (religar com: ./manage.sh services start)." \
+    || echo "Aviso: ComfyUI já estava parado ou falhou ao parar."
+  sleep 2
+  echo ""
+  print_vram_report
+  echo ""
+  echo "Restante não liberável em runtime: desktop (~540 MiB) + reserva do"
+  echo "driver (~320 MiB). Teto prático sem o desktop: ~11,9 GiB de 12 GiB."
+  echo "Para chegar lá, sair da sessão gráfica (TTY/SSH): systemctl isolate multi-user.target"
 }
 
 do_status() {
@@ -225,7 +279,10 @@ case "$1" in
     do_status
     ;;
   unload)
-    do_unload
+    do_unload "$2"
+    ;;
+  vram)
+    do_vram
     ;;
   swap)
     # Controle fino: só o llama-swap (não toca no compose).
@@ -245,13 +302,15 @@ case "$1" in
     esac
     ;;
   *)
-    echo "Uso: $0 {start|stop|restart|status|unload|swap|services}"
+    echo "Uso: $0 {start|stop|restart|status|unload|vram|swap|services}"
     echo ""
     echo "  start            Inicia TUDO: llama-swap + docker compose up -d"
     echo "  stop             Desliga TUDO: llama-swap + docker compose down"
     echo "  restart          Para e inicia novamente (tudo)"
     echo "  status           llama-swap + docker compose ps"
     echo "  unload           Descarrega modelos ls-* (libera VRAM p/ ComfyUI)"
+    echo "  unload --hard    + para o ComfyUI (zera também o contexto CUDA ~150 MiB)"
+    echo "  vram             Relatório de VRAM (total/usado/livre + processos)"
     echo "  swap <sub>       Só o llama-swap: start|stop|restart"
     echo "  services <sub>   Só o compose (webui/terminal/searxng/comfyui/mcp/openwa): start|stop"
     exit 1

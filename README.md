@@ -325,6 +325,7 @@ que tem precedência sobre o env):
 | `context7` | `https://mcp.context7.com/mcp` | documentação atualizada de libs/APIs |
 | `playwright` | `http://localhost:8931/mcp` | navegador real: abrir, clicar, preencher, screenshot |
 | `memory` | `http://localhost:8932/mcp` | grafo de conhecimento persistente (compartilhado com o opencode via `mcp-data/memory.json`) |
+| `comfyui` | `http://localhost:8933/mcp` | geração/edição de imagens (Qwen-Image 2.1 Turbo; substituiu a integração nativa ComfyUI em 2026-11-09) |
 | `openwa` | `http://localhost:2785/mcp` | WhatsApp (ver acima) |
 
 No chat, ativar a ferramenta no seletor de ferramentas. Detalhes e gotchas:
@@ -345,8 +346,18 @@ mudança. A UI nativa do ComfyUI fica em `http://localhost:8188`.
 **VRAM compartilhada, liberação automática nos dois sentidos**: ao pedir
 uma imagem com um LLM carregado, o gpu-shim (na frente do ComfyUI) avalia a
 VRAM e descarrega o llama-swap (`GET /unload`) antes de gerar; ao terminar,
-o ComfyUI devolve a VRAM (`--disable-smart-memory`, sobra ~190 MiB) e o
-próximo chat recarrega o LLM sozinho. Liberação manual: `./manage.sh unload`.
+o ComfyUI devolve a VRAM (`--disable-smart-memory`; sobram 100-220 MiB de
+contexto CUDA) e o próximo chat recarrega o LLM sozinho.
+
+Liberação manual: `./manage.sh unload` (só o LLM) ou `./manage.sh unload
+--hard` (para também o ComfyUI e zera os ~150 MiB de contexto CUDA).
+`./manage.sh vram` mostra o mapa: total/usado/livre + todos os processos da
+GPU. **Nunca dá para chegar a 12 GiB**: o desktop (Hyprland + browsers +
+terminais, ~540 MiB) só sai parando a sessão gráfica (`systemctl isolate
+multi-user.target`) e o driver reserva ~320 MiB permanentes — teto medido:
+~10,8 GiB livres com o desktop ativo e ~11,6 GiB headless. Medições de
+2026-11-09 (12288 MiB totais): LLM 10460, desktop 540, reserva do driver
+~320, ComfyUI 104-220.
 
 Detalhes (modelos, workflows, mapeamento de nós): `DOCKER.md` e
 `models/MODELS_INSTALL.md`.
@@ -367,6 +378,8 @@ Detalhes (modelos, workflows, mapeamento de nós): `DOCKER.md` e
 | `docker logs ls-<Modelo>` | Logs do container do modelo carregado no momento |
 | `docker logs open-webui` | Ver logs do open-webui |
 | `./manage.sh unload` | Descarregar modelos `ls-*` (libera VRAM p/ ComfyUI) |
+| `./manage.sh unload --hard` | + parar o ComfyUI (zera o contexto CUDA ~104-220 MiB); religar com `docker start comfyui` |
+| `./manage.sh vram` | Mapa da VRAM: total/usado/livre + todos os processos da GPU (compute + gráficos) |
 | `watch -n 2 ./bin/dashboard.sh` | Dashboard de terminal: modelo ativo, prefill/decode (último request), VRAM da GPU |
 
 O `bin/dashboard.sh` é one-shot (sem dependências além de `docker`,

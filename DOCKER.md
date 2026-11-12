@@ -44,8 +44,8 @@ cp .env.example .env   # ou criar manualmente
 > compose. O serving passou a ser o **llama-swap, processo de host** (seção
 > abaixo). `docker compose config --services` → `open-webui`,
 > `open-terminal`, `searxng`, `comfyui`, `mcp-playwright`, `mcp-memory`,
-> `9router`, `openwa`, `openwa-docker-proxy` — e `hermes` (profile
-> `hermes`, fora do `up -d` default; ver seção própria abaixo).
+> `mcp-comfyui`, `9router`, `openwa`, `openwa-docker-proxy` — e `hermes`
+> (profile `hermes`, fora do `up -d` default; ver seção própria abaixo).
 
 ### open-webui — Interface Web
 
@@ -113,7 +113,7 @@ curl "http://localhost:8888/search?q=teste&format=json"
 - **Auth**: header `X-API-Key` ou `Authorization: Bearer <key>` — a key é gerada na primeira inicialização e salva em `data/openwa/.api-key`
 - **Estado (bind)**: `./data/openwa → /app/data`, `./data/openwa/sessions → /app/data/sessions`
 
-Gateway WhatsApp com MCP habilitado. Sessões não iniciam automaticamente (`AUTO_START_SESSIONS=false`).
+Gateway WhatsApp com MCP habilitado. Sessões persistidas (sqlite + `data/openwa/sessions`) iniciam automaticamente no boot do container (`AUTO_START_SESSIONS=true`).
 
 ### 9router — Proxy de roteamento para providers cloud de LLM
 
@@ -199,6 +199,65 @@ seja, um único grafo compartilhado entre os dois clientes.
 > `root:root` e o opencode (uid 1000) não conseguia escrever — daí o
 > `user: "1000:1000"` com cache do npm em diretório do próprio usuário.
 
+### mcp-comfyui — ComfyUI MCP (tools de imagem p/ os modelos)
+
+- **Imagem**: `mcp-comfyui:latest` (build local — `./mcp/comfyui-mcp-server/`)
+- **Container**: `mcp-comfyui` (`network_mode: host`)
+- **Porta**: `127.0.0.1:8933`
+- **MCP Streamable HTTP**: `http://localhost:8933/mcp`
+- **Upstream**: `joenorton/comfyui-mcp-server` pinado em
+  `e0101b2312f30501664dabe4a74c1283c4268eb8` + `patches/oraculo.patch`
+  (ver Dockerfile para os 5 hunks: refs de edição opcionais, host/porta
+  via env, polling 300 s, skip de `.meta.json` no loader, previews em JPEG)
+
+Substituiu (2026-11-09) a integração nativa do Open WebUI (`ComfyUIWorkflow`
+no `webui.db`), cujos params de workflow vazavam na interface das tools e
+confundiam os modelos. O servidor descobre workflows de
+`comfyui/mcp-workflows/` (bind `:ro`) e deriva o **schema tipado da tool dos
+placeholders `PARAM_*`** nos inputs do JSON:
+
+| Tool | Params (obrigatório em **negrito**) | Workflow |
+|------|--------------------------------------|----------|
+| `generate_image` | **prompt**, width, height, negative_prompt, seed, steps | `generate_image.json` (t2i) |
+| `edit_image` | **image**, **prompt**, negative_prompt, seed, steps, image_ref_2..10 | `edit_image.json` (edição) |
+
+- **Defaults** (`mcp/comfyui-mcp-server/config.json` →
+  `/root/.config/comfy-mcp/config.json`): 1024x1024, 8 steps,
+  `negative_prompt ""`, `image_ref_2..10 = "placeholder.png"`. Precedência:
+  por-chamada > `set_defaults` (runtime) > config file > env > hardcoded.
+- **Upload para edição**: o servidor não tem tool de upload — o arquivo tem
+  de existir no `input/` do ComfyUI (`/tmp/oraculo-comfyui/input`). O agente
+  faz via open-terminal: `curl -s -F "image=@arquivo.png"
+  http://localhost:8188/upload/image` e usa o `"name"` da resposta. Isso
+  está escrito na **descrição da tool** (o `.meta.json` ao lado do workflow
+  vira a description do schema — patch oraculo).
+- **Editação multi-referência**: `image` é o canvas; `image_ref_2..10`
+  (opcionais, default `placeholder.png` — set estendido no patch) entram no
+  prompt como `<image2>`..`<image10>`. **Seed**: nunca reutilizar a da
+  geração original (artefatos — ver nota na seção comfyui).
+- **Regra 8 intacta**: `COMFYUI_URL=http://127.0.0.1:8188` (gpu-shim, NUNCA
+  `:8189`) — o POST `/prompt` do MCP chega sem `Origin` e dispara a
+  liberação de VRAM do LLM antes de gerar, igual aos scripts.
+- **Conexão no Open WebUI**: registrada na chave `tool_server.connections`
+  do `webui.db` como `comfyui` (`http://localhost:8933/mcp`, sem auth) —
+  ver seção "Conexões MCP".
+
+> **Previews em JPEG (patch hunk 5, 2026-11-09)**: `view_image` e o inline
+> preview de `generate_image` (`return_inline_preview`) devolvem **JPEG**,
+> não WebP. O llama.cpp (mtmd/stb_image) não decodifica WebP — a imagem
+> voltava no request seguinte como tool result e derrubava o stream com 400
+> `Failed to load image or audio file` (`failed to decode webp buffer`), ou
+> segfault (exit 139) no fork bonsai-ada → pi mostrava
+> `Stream ended without finish_reason`. Alpha é achatado em branco e a
+> escada de quality é mantida. Qualquer tool MCP nova que devolva imagem
+> ao modelo deve seguir a mesma regra (PNG/JPEG apenas).
+
+> **Rollback da integração nativa**: ela não foi removida, só desligada —
+> `image_generation.enable=false` e `images.edit.enable=false` no
+> `webui.db` (workflow/nodes/base_url preservados no banco). Reverter é
+> religar as duas chaves (e desabilitar a conexão `comfyui` se quiser
+> evitar tools duplicadas).
+
 ### hermes — Hermes Agent (porteiro `hermes-gate`)
 
 Agente autônomo pessoal (Nous Research, MIT) — **exceção controlada** ao
@@ -282,6 +341,7 @@ inicialização (mesma regra do `WEBSEARCH_ENGINE`). Registradas (admin-only,
 | `context7` | `https://mcp.context7.com/mcp` | SaaS (sem auth) |
 | `playwright` | `http://localhost:8931/mcp` | compose |
 | `memory` | `http://localhost:8932/mcp` | compose |
+| `comfyui` | `http://localhost:8933/mcp` | compose (geração/edição de imagem — 2026-11-09) |
 
 No chat, as tools entram pelo seletor de ferramentas (o request leva
 `tool_ids: ["server:mcp:<id>"]`). Verificar de fora da UI, com o próprio
@@ -428,6 +488,13 @@ latente vem de `EmptyLatentImage`; na edição vem da **saída 2 do encoder**
 **Configuração no Open WebUI** (gravada em `webui.db` — banco tem precedência
 sobre env, regra 6; reconfigurável em Admin > Settings > Images):
 
+> **DESATIVADA em 2026-11-09** em favor do MCP (`mcp-comfyui`, seção acima):
+> `image_generation.enable=false` + `images.edit.enable=false` — os params
+> de workflow vazando na interface das tools confundiam os modelos. A
+> receita abaixo (workflow + nodes + base_url) está PRESERVADA no banco
+> para rollback; religar as duas chaves `enable` (e desabilitar a conexão
+> MCP `comfyui` p/ não duplicar tools) restaura o comportamento antigo.
+
 | Chave | Valor |
 |-------|-------|
 | `image_generation.enable` / `engine` | `true` / `comfyui` |
@@ -517,8 +584,10 @@ ou ficar lenta, é o tamanho delas, não o engine.
 liberação é bidirecional e automática, sem job em background:
 
 - **DiT → LLM**: `CLI_ARGS=--disable-smart-memory` descarrega os pesos para
-  RAM ao fim de cada geração; a VRAM cai para **~190 MiB** (só contexto
-  CUDA). O próximo request de chat recarrega o LLM normalmente.
+  RAM ao fim de cada geração; a VRAM cai para **~104-220 MiB** (só contexto
+  CUDA — medido 2026-11-09; `POST /free` não derruba esse piso, só
+  `docker stop comfyui`). O próximo request de chat recarrega o LLM
+  normalmente.
 - **LLM → DiT**: o ComfyUI escuta em `127.0.0.1:8189` atrás do **gpu-shim**
   (`comfyui/user-scripts/gpu-shim.py`, sobe via `pre-start.sh` na porta
   canônica 8188). O shim repassa HTTP e WebSocket e, no caminho de geração
@@ -539,6 +608,12 @@ liberação é bidirecional e automática, sem job em background:
   jogos no desktop (ex.: CS2 ~2,2 GB), a geração ainda cabe (medido).
 - `./manage.sh unload` usa o mesmo endpoint `GET /unload` para liberação
   manual (fallback `docker rm -f` se o llama-swap estiver fora).
+  `./manage.sh unload --hard` para também o ComfyUI (zera o contexto CUDA;
+  religar com `docker start comfyui`), e `./manage.sh vram` imprime o mapa
+  completo — medido 2026-11-09: LLM 10460 MiB, desktop ~540, ComfyUI
+  104-220, reserva do driver ~320 **não liberável** (só com `rmmod
+  nvidia*`, headless). Teto medido: ~10,8 GiB livres com o desktop ativo,
+  ~11,6 GiB headless (`systemctl isolate multi-user.target`).
 - O "aborted" no log do llama-swap durante carga de modelo é esperado se
   algo chamar `/unload` no meio de um health check — o gate por VRAM evita
   isso no fluxo normal.

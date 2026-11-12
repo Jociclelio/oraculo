@@ -1,0 +1,231 @@
+diff --git a/asset_processor.py b/asset_processor.py
+index 0ba8b1e..d7cfb0c 100644
+--- a/asset_processor.py
++++ b/asset_processor.py
+@@ -127,7 +127,7 @@ def strip_metadata(image_bytes: bytes) -> bytes:
+ class EncodedImage:
+     """Encoded image result with all metrics"""
+     b64: str  # Base64 string (without data URI prefix)
+-    mime_type: str  # image/webp
++    mime_type: str  # image/jpeg (oraculo: era webp)
+     size_px: Tuple[int, int]  # Final dimensions
+     bytes_len: int  # Raw byte size before base64
+     b64_chars: int  # Base64 character count (what matters for serialized response)
+@@ -136,7 +136,7 @@ class EncodedImage:
+ 
+ def get_cache_key(asset_id: str, max_dim: int, quality: int) -> str:
+     """Generate cache key for processed preview"""
+-    return f"{asset_id}:{max_dim}:webp:{quality}"
++    return f"{asset_id}:{max_dim}:jpeg:{quality}"
+ 
+ 
+ def _get_cached_preview(cache_key: str) -> Optional[EncodedImage]:
+@@ -159,7 +159,7 @@ def estimate_response_chars(b64_chars: int, json_overhead: int = 200) -> int:
+ 
+ def mcp_image_content(encoded: EncodedImage) -> dict:
+     """Convert EncodedImage to MCP ImageContent structure"""
+-    # MCP ImageContent expects data URI format: "data:image/webp;base64,<base64>"
++    # MCP ImageContent expects data URI format: "data:image/jpeg;base64,<base64>"
+     return {
+         "type": "image",
+         "data": f"data:{encoded.mime_type};base64,{encoded.b64}",
+@@ -238,12 +238,16 @@ def encode_preview_for_mcp(
+         im = ImageOps.exif_transpose(loaded_im)
+         src_w, src_h = im.size
+         
+-        # WebP alpha handling: keep alpha for WebP, flatten for JPEG (if we add it later)
+-        # For now, WebP only - keep alpha if present
+-        if im.mode in ("RGBA", "LA"):
+-            # Keep alpha for WebP
+-            pass
+-        elif im.mode not in ("RGB", "L"):
++        # oraculo: previews em JPEG, nao WebP — o llama.cpp (mtmd/stb_image) NAO
++        # decodifica WebP; o modelo recebia a imagem do tool result e falhava
++        # com "Failed to load image or audio file" (400) ou segfault (exit 139).
++        # Achata alfa sobre fundo branco (JPEG nao tem canal alfa).
++        if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
++            rgba = im.convert("RGBA")
++            background = Image.new("RGB", rgba.size, (255, 255, 255))
++            background.paste(rgba, mask=rgba.getchannel("A"))
++            im = background
++        elif im.mode != "RGB":
+             # Convert other modes to RGB (returns new Image object)
+             im = im.convert("RGB")
+     
+@@ -271,25 +275,21 @@ def encode_preview_for_mcp(
+         for q in quality_levels:
+             buf = BytesIO()
+             
+-            # Save as WebP
++            # Save as JPEG (oraculo: ver nota no topo — WebP nao decodifica no llama.cpp)
+             save_kwargs = {
+-                "format": "WEBP",
++                "format": "JPEG",
+                 "quality": q,
+-                "method": 5,  # Method 5 trades CPU for size (good balance)
++                "optimize": True,
+             }
+-            
+-            # Preserve alpha for WebP if present
+-            if im_resized.mode in ("RGBA", "LA"):
+-                save_kwargs["lossless"] = False  # Use lossy compression
+-            
++
+             im_resized.save(buf, **save_kwargs)
+             encoded_bytes = buf.getvalue()
+             b64_string = base64.b64encode(encoded_bytes).decode("ascii")
+             b64_chars = len(b64_string)
+             
+             # Account for data URI prefix in budget check
+-            # "data:image/webp;base64," adds ~23 chars
+-            data_uri_prefix_len = len("data:image/webp;base64,")
++            # "data:image/jpeg;base64," adds ~23 chars
++            data_uri_prefix_len = len("data:image/jpeg;base64,")
+             total_payload_chars = b64_chars + data_uri_prefix_len
+             
+             # Check if within budget (including prefix)
+@@ -315,13 +315,13 @@ def encode_preview_for_mcp(
+             im_resized = im
+         
+         buf = BytesIO()
+-        im_resized.save(buf, format="WEBP", quality=35, method=5)
++        im_resized.save(buf, format="JPEG", quality=35, optimize=True)
+         encoded_bytes = buf.getvalue()
+         b64_string = base64.b64encode(encoded_bytes).decode("ascii")
+         b64_chars = len(b64_string)
+         
+         # Account for data URI prefix
+-        data_uri_prefix_len = len("data:image/webp;base64,")
++        data_uri_prefix_len = len("data:image/jpeg;base64,")
+         total_payload_chars = b64_chars + data_uri_prefix_len
+         
+         if total_payload_chars <= max_b64_chars:
+@@ -340,8 +340,8 @@ def encode_preview_for_mcp(
+     b64_chars = len(b64_string)
+     
+     # Account for data URI prefix in final payload size
+-    # "data:image/webp;base64," adds ~23 chars, so check total payload
+-    data_uri_prefix_len = len(f"data:image/webp;base64,")
++    # "data:image/jpeg;base64," adds ~23 chars, so check total payload
++    data_uri_prefix_len = len(f"data:image/jpeg;base64,")
+     total_payload_chars = b64_chars + data_uri_prefix_len
+     
+     # If total payload exceeds budget, refuse to inline
+@@ -353,7 +353,7 @@ def encode_preview_for_mcp(
+     
+     result = EncodedImage(
+         b64=b64_string,
+-        mime_type="image/webp",
++        mime_type="image/jpeg",
+         size_px=final_dim,
+         bytes_len=len(final_encoded),
+         b64_chars=b64_chars,
+@@ -367,7 +367,7 @@ def encode_preview_for_mcp(
+     # Log telemetry
+     logger.info(
+         f"view_asset encoding: src={src_bytes}B src_dims={src_w}x{src_h} "
+-        f"preview_dims={final_dim[0]}x{final_dim[1]} format=webp quality={final_q} "
++        f"preview_dims={final_dim[0]}x{final_dim[1]} format=jpeg quality={final_q} "
+         f"encoded={len(final_encoded)}B b64_chars={b64_chars} total_payload={total_payload_chars} "
+         f"response_est={estimate_response_chars(total_payload_chars)}chars"
+     )
+diff --git a/comfyui_client.py b/comfyui_client.py
+index 48abf1f..4bb2399 100644
+--- a/comfyui_client.py
++++ b/comfyui_client.py
+@@ -55,7 +55,7 @@ class ComfyUIClient:
+             logger.warning(f"Error fetching models: {e}")
+             return []
+ 
+-    def run_custom_workflow(self, workflow: Dict[str, Any], preferred_output_keys: Sequence[str] | None = None, max_attempts: int = 30):
++    def run_custom_workflow(self, workflow: Dict[str, Any], preferred_output_keys: Sequence[str] | None = None, max_attempts: int = 300):
+         if preferred_output_keys is None:
+             preferred_output_keys = ("images", "image", "gifs", "gif", "audio", "audios", "files")
+ 
+@@ -264,7 +264,7 @@ class ComfyUIClient:
+ 
+         return "; ".join(parts)
+ 
+-    def _wait_for_prompt(self, prompt_id: str, max_attempts: int = 30):
++    def _wait_for_prompt(self, prompt_id: str, max_attempts: int = 300):
+         for attempt in range(max_attempts):
+             try:
+                 # Try both the specific prompt_id endpoint and the full history endpoint
+diff --git a/managers/workflow_manager.py b/managers/workflow_manager.py
+index ba195e5..e57855d 100644
+--- a/managers/workflow_manager.py
++++ b/managers/workflow_manager.py
+@@ -289,6 +289,10 @@ class WorkflowManager:
+             return definitions
+ 
+         for workflow_path in sorted(self.workflows_dir.glob("*.json")):
++            # oraculo: pular sidecars de metadata (upstream só pula em
++            # get_workflow_catalog; _load_workflows crashava neles)
++            if workflow_path.name.endswith(".meta.json"):
++                continue
+             try:
+                 with open(workflow_path, "r", encoding="utf-8") as handle:
+                     workflow = json.load(handle)
+@@ -305,11 +309,16 @@ class WorkflowManager:
+                 )
+                 continue
+ 
++            # oraculo: descrição da tool vem do .meta.json quando presente
++            # (permite documentar o uso — ex. upload prévio p/ edição —
++            # direto no schema que o modelo enxerga)
++            _metadata = self._load_workflow_metadata(workflow_path)
++
+             tool_name = self._dedupe_tool_name(self._derive_tool_name(workflow_path.stem))
+             definition = WorkflowToolDefinition(
+                 workflow_id=workflow_path.stem,
+                 tool_name=tool_name,
+-                description=self._derive_description(workflow_path.stem),
++                description=_metadata.get("description") or self._derive_description(workflow_path.stem),
+                 template=workflow,
+                 parameters=parameters,
+                 output_preferences=self._guess_output_preferences(workflow),
+@@ -395,6 +404,9 @@ class WorkflowManager:
+                         "seconds", "lyrics_strength",  # Audio-specific optional params
+                         "duration", "fps"  # Video-specific optional params
+                     }
++                    # oraculo: referências do workflow de edição são opcionais
++                    # (default "placeholder.png" via config defaults)
++                    optional_params |= {f"image_ref_{i}" for i in range(2, 11)}
+                     is_required = param_name not in optional_params
+                     parameter = WorkflowParameter(
+                         name=param_name,
+diff --git a/server.py b/server.py
+index fdd7413..2347fcb 100644
+--- a/server.py
++++ b/server.py
+@@ -186,7 +186,8 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
+ mcp = FastMCP(
+     "ComfyUI_MCP_Server",
+     lifespan=app_lifespan,
+-    port=9000,
++    host=os.getenv("MCP_HOST", "127.0.0.1"),
++    port=int(os.getenv("MCP_PORT", "8933")),
+     stateless_http=True
+ )
+ 
+diff --git a/tools/asset.py b/tools/asset.py
+index bc3561d..6e6fbb4 100644
+--- a/tools/asset.py
++++ b/tools/asset.py
+@@ -114,14 +114,14 @@ def register_asset_tools(
+             logger.info(
+                 f"view_image success: asset_id={asset_id} "
+                 f"src={asset_record.bytes_size}B src_dims={asset_record.width}x{asset_record.height} "
+-                f"preview_dims={encoded.size_px[0]}x{encoded.size_px[1]} format=webp "
++                f"preview_dims={encoded.size_px[0]}x{encoded.size_px[1]} format=jpeg "
+                 f"encoded={encoded.bytes_len}B b64_chars={encoded.b64_chars} "
+                 f"response_est={estimate_response_chars(encoded.b64_chars)}chars"
+             )
+             
+             # Use FastMCP.Image for inline display (not dict)
+             # FastMCP.Image takes raw bytes and format string
+-            return FastMCPImage(data=encoded.raw_bytes, format="webp")
++            return FastMCPImage(data=encoded.raw_bytes, format="jpeg")
+             
+         except ValueError as e:
+             # Image too large or processing failed - REFUSE-INLINE (non-lethal failure)

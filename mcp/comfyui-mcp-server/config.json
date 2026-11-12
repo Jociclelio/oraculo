@@ -1,0 +1,19 @@
+{
+  "defaults": {
+    "image": {
+      "width": 1024,
+      "height": 1024,
+      "steps": 8,
+      "negative_prompt": "",
+      "image_ref_2": "placeholder.png",
+      "image_ref_3": "placeholder.png",
+      "image_ref_4": "placeholder.png",
+      "image_ref_5": "placeholder.png",
+      "image_ref_6": "placeholder.png",
+      "image_ref_7": "placeholder.png",
+      "image_ref_8": "placeholder.png",
+      "image_ref_9": "placeholder.png",
+      "image_ref_10": "placeholder.png"
+    }
+  }
+}

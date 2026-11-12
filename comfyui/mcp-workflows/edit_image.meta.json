@@ -1,0 +1,7 @@
+{
+  "name": "Editar imagem (Qwen-Image 2.1 Turbo)",
+  "description": "Edita uma imagem existente seguindo uma instrução de texto (ex.: 'deixe o fundo azul'). 'image' é o NOME do arquivo já presente no diretório input do ComfyUI — se o arquivo ainda não foi enviado, primeiro faça upload com: curl -s -F \"image=@/caminho/arquivo.png\" http://localhost:8188/upload/image e use o campo \"name\" da resposta. Até 9 imagens extras opcionais (image_ref_2..image_ref_10) entram como referências endereçáveis no prompt como <image2>..<image10>. NUNCA reutilize a seed da geração original da imagem (causa artefatos) — omita 'seed' para sortear aleatório.",
+  "defaults": {
+    "steps": 8
+  }
+}
