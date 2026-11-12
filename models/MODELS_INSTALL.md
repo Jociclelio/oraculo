@@ -827,6 +827,32 @@ docker logs ls-NOME_DO_MODELO
 
 ---
 
+## Qwen3.8-Flash-Next GSQ-RCO (entry `Qwen3.8_Flash_Next_IQ3_S`, 2026-11-12)
+
+GGUFs não-uniformes da ISTA-DASLab (GSQ + RCO) do Qwen3.8-Flash-Next —
+substituto em GGUF padrão llama.cpp do antigo Strata/engine dedicada
+(removida em 2026-10-28). Arch `qwen4exp` no master (presente na imagem
+stock 12063). Quantizações disponíveis no repo: Q2_0 (66,4 GB), IQ2_XS
+(68 GB), IQ3_XXS (75,8 GB), IQ3_S (83,6 GB, **instalada** — melhor
+operating point do card: task avg 93,26 ≥ BF16 93,12).
+
+```bash
+# 83,6 GB em 2 shards + mmproj (visão ainda não usada na entry):
+hf download ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF \
+  --include "IQ3_S/*" --include "mmproj*" \
+  --local-dir models/Qwen3.8-Flash-Next-GSQ-RCO-GGUF
+
+# Requisito de RAM: shard 1 (54,8 GB) fica no page cache — só viável
+# com os 64 GB de RAM (upgrade 2026-11-12). Shard 2 (28,8 GB, tabela
+# n-gram PLE) fica mmap em disco (-lm mmap --lazy-mode on na entry).
+```
+
+Outras quantizações (Q2_0/IQ2_XS/IQ3_XXS): trocar o `--include` e criar
+entry irmã (mesma receita; o card reporta Q2_0 com prefill 3,4× e decode
+1,9× maiores que IQ2_XS).
+
+---
+
 ## Modelos de Difusão (ComfyUI)
 
 Os modelos de imagem do ComfyUI vivem em `models/comfyui/` (montado em

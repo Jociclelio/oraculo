@@ -4,7 +4,7 @@ Servidor local de LLMs: **llama-swap** (proxy multi-engine em `127.0.0.1:8081`,
 sobe um container Docker efêmero de llama.cpp por modelo sob demanda) +
 **Open WebUI** (`:8080`) + Open Terminal (`:8000`), SearXNG (`:8888`), OpenWa
 (`:2785`). Hardware alvo: **RTX 3060 12 GB** (GPU **compartilhada** com o
-desktop pessoal) + 32 GB RAM + NVMe.
+desktop pessoal) + 64 GB RAM (upgrade 2026-11-12, antes 32) + NVMe.
 
 **GPU unlock (2026-10-24)**: kmod `gpu-unlock` 1.0.0 (Zagitta/gpu-unlock,
 pacotes Arch `gpu-unlock-dkms` + `gpu-unlock-firmware` em `/home/jocic/gpu-unlock`)
@@ -80,7 +80,7 @@ O KV do slot fica residente até o `docker rm -f`.
 ## Arquitetura
 
 - **`llama-swap/config.yaml` é a FONTE DA VERDADE** dos parâmetros de cada
-  modelo (16 entries em 2026-10-30: 12 stock/pdcache + 2 PrismML + 2 bonsai-ada).
+  modelo (17 entries em 2026-11-12: 13 stock/pdcache + 2 PrismML + 2 bonsai-ada).
   `models/models.ini` é HISTÓRICO desativado — nada o lê.
   **Convenção de contexto** (VRAM validada por carga real, display idle):
   entry SEM sufixo = **128k** (floor, `-c 131072`), viabilizado pelo KV
@@ -123,6 +123,13 @@ O KV do slot fica residente até o `docker rm -f`.
    mmap + overrides de tensor para CPU o decode desaba silenciosamente
    (medido: Xing 1,2→12,5 tok/s; Qwen3.6 MTP 1,3→27-33 tok/s). O loader
    avisa: `tensor overrides to CPU are used with mmap enabled`.
+   **EXCEÇÃO (2026-11-12): `Qwen3.8_Flash_Next_IQ3_S`** — usa `-lm mmap
+   --lazy-mode on` sem `--load-mode none` porque o shard 2 (tabela n-gram
+   PLE, 28,8 GB) exige mmap lazy; load none copiaria ~81 GB p/ RAM → OOM.
+   Decode validado em ~20 t/s (sem colapso): o page cache dos 64 GB de RAM
+   segura o shard 1 inteiro residente; se o decode desabar após pressão de
+   memória, qualquer leitura re-aquece o cache (ou considerar
+   `-lm mmap+mlock`).
 3. **A GPU é compartilhada com o desktop/jogos.** Antes de diagnosticar
    `exit 125`/falha de carga, rode `nvidia-smi`: um jogo pode estar ocupando
    1-2 GB (causa real já observada: OOM de compute buffer, não flake do
@@ -189,6 +196,24 @@ O KV do slot fica residente até o `docker rm -f`.
     DiT carregou com LLM residente). Desde 2026-10-18 o LLM costuma já estar
     DORMINDO no fluxo típico (regra 9, sleep aos 180 s de idle) — o unload
     fica como fallback para o uso < 3 min antes da imagem.
+    **Mapa da VRAM (medido 2026-11-09, GPU idle, 12288 MiB totais)**:
+    LLM 10460 · desktop (Hyprland 77 + firefox 134-270 + vesktop 89 + 8
+    kitty ~200 + ashell 33 + Xwayland/polkit 7) ~540 · reserva do driver
+    ~320 (não atribuída a processo) · ComfyUI **104-220** de contexto CUDA
+    — `POST /free` com `free_memory:true` devolve pesos ao allocator mas
+    **não derruba esse piso** (A/B: 1070→1070 MiB); só `docker stop comfyui`
+    zera (~-105 MiB medidos). `./manage.sh vram` imprime o mapa
+    (total/usado/livre + todos os processos via `nvidia-smi pmon`, inclui
+    gráficos, que `--query-compute-apps` omite) e
+    `./manage.sh unload --hard` = unload do LLM + para o ComfyUI (religar
+    com `docker start comfyui` ou `./manage.sh services start`).
+    **12 GiB inteiros NÃO são alcançáveis com o driver carregado**: os
+    ~540 MiB do desktop só saem parando a sessão gráfica
+    (`systemctl isolate multi-user.target`, exige TTY/SSH) e os ~320 MiB
+    do driver só com `rmmod nvidia_uvm nvidia_drm nvidia_modeset nvidia`
+    (headless). Teto prático: **~10,8 GiB livres** com desktop ativo
+    (10 900-11 100 MiB medidos, ComfyUI parado; 10 872 com ComfyUI idle) e
+    **~11,6 GiB** headless.
  9. **KV cache NÃO sobrevive ao unload/swap — RESOLVIDO via fork pdcache
     (2026-10-17) nas entries que o suportam.** O KV cache vive no processo do
     `llama-server`: quando o llama-swap remove o container `ls-*` (unload do
@@ -336,6 +361,7 @@ falta de kernel FA dedicado).
 | `LFM2.5_24B_A2B_2G` | stock | 131072 | variante headless p/ PC externo de ~2 GB (2026-11-03): MESMO Q4_K_M da `LFM2.5_24B_A2B` com `-ncmoe 40` (TODOS os experts ~13,3 GB fixados na RAM; GPU fica só c/ ~615 MiB de pesos: attn 57,5 + conv/GDN 270,7 + embd/output 205 + dense-FFN blocos 0-1 ~81) + `-b 1024 -ub 256` (compute buffers mínimos) + KV q4_0 do macro (10 camadas GQA × 512+512 = 5,6 KiB/tok → 720 MiB @131k); **VRAM 1822 MiB medido** (folga 226 MiB @2048); janela 131k INTEIRA (`-np 1`; 2 usuários = `-np 2`, 65k/slot); **decode ~29,5 t/s / prefill ~57 t/s** medidos no i5-9400F (CPU-bound mas viável — o A2B 2,45B ativo é leve); sem MTP/visão. PC alvo: RAM ≥ 16 GB |
 | `bonsai-9b` | PrismML | 196608 | Bonsai 2 9B (variante edge, denso); PTQ1_0 + mmproj Q8_0, mesma engine PrismML pinada; **KV bf16 @192k (2026-10-20 — q5_1 lento no fork, issue PrismML #191)**: **decode ~84 tok/s, prefill ~1530 tok/s** (pós-unlock 2026-10-26); VRAM 10870 MiB; visão validada; SEM MTP/DFlash (drafts no repo HF não baixados) |
 | `bonsai-9b-uncensored` | PrismML | 196608 | Bonsai 2 9B + LoRA uncensored AtomicChat (rank-1, 3,2 MB, `--lora-scaled :1` — remove direção de recusa no grafo; base byte-idêntico; custo ~4,3 MMLU); MESMOS GGUFs/engine/KV bf16 @192k do `bonsai-9b`; **decode ~78 tok/s** (pós-unlock 2026-10-26); VRAM 10886 MiB; aplicação validada por logprobs distintos vs base; modelo thinking consome muitos tokens de raciocínio |
+| `Qwen3.8_Flash_Next_IQ3_S` | stock (pdcache) | 131072 | Qwen3.8-Flash-Next GSQ-RCO IQ3_S (ISTA-DASLab) — o "Strata" de volta em GGUF padrão (arch `qwen4exp` na stock 12063; a engine dedicada Niko1221/Strata continua removida); MoE híbrido 177B: 48 camadas (12 full-attn GQA 24q/2kv a cada 4 + conv/SSM), 512 experts top-10, ctx nativo 262k; GGUF 83,6 GB em 2 shards — shard 2 (28,8 GB, tabela n-gram PLE IQ4_NL) fica mmap em disco via `-lm mmap --lazy-mode on`, **NÃO usa `--load-mode none`** (copiaria ~81 GB p/ RAM → OOM; exceção documentada à regra 2 — shard 1 fica no page cache ~52 GB, viável nos 64 GB de RAM desde 2026-11-12); `-ncmoe 46` (2 camadas de experts na GPU) + ub2048 + `-t 16` (experts rodam na CPU, 32 threads do host); **decode ~20,5 t/s, prefill ~450 t/s @4,4k** (A/B: ncmoe 44+ub512 = 270 t/s, -t 5 = 17,5 t/s); VRAM ~9,8 GiB (folga 2,1); thinking pesado — `enable_thinking:false` via chat_template_kwargs p/ chat casual; SEM mmproj na receita (0,91 GB não cabe — mmproj já baixado no dir; visão a validar) |
 
 > **Removidos em 2026-10-30 — poda do zoo a pedido do owner (10 entries,
 > ~156 GB de GGUFs apagados):**
@@ -358,6 +384,10 @@ falta de kernel FA dedicado).
 > fork; investigação não vale o esforço). Entry, macro `docker-xing`,
 > `engines/llama.cpp-xing/` e imagem removidos; reativável via git history
 > se o fork (PR ggml-org#29012) corrigir o caminho de atenção.
+> **Strata REATIVADO EM OUTRA FORMA em 2026-11-12**: o Qwen3.8-Flash-Next
+> voltou ao zoo como `Qwen3.8_Flash_Next_IQ3_S` em GGUF padrão llama.cpp
+> (arch `qwen4exp` no master; ISTA-DASLab GSQ-RCO) — a engine dedicada
+> Niko1221/Strata e `engines/strata/` continuam removidos.
 >
 > **Removidos em 2026-10-26 — política do floor de contexto**: modelo que
 > não atende o mínimo de 128k é removido do zoo (não mais sufixo `_XXk`).
@@ -410,6 +440,9 @@ ganham a adicional quando aplicável.
   - Qwen3.6-35B-A3B (entries `Qwen3.6_35B_A3B` e Uncensored Hauhau;
     Code/It_* removidas em 2026-10-26 — variante MTP única cobre os casos)
   - Ornith-1.5-35B (APEX Compact)
+  - Qwen3.8-Flash-Next (512 experts top-10; entry `Qwen3.8_Flash_Next_IQ3_S`,
+    2026-11-12 — caso LIMITE da categoria: ~45 GB de experts no page cache
+    via mmap, exigiu o upgrade de RAM p/ 64 GB; exceção à regra 2)
   - Flint-40B-A2.5B (256 experts top-6 + shared; entry base)
   - Sage-A1.5 35B, Apodex-1.1 mini, Nex-N2.5 mini, BigBang v1
     (arch qwen3_5_moe, batch 2026-10-26): REMOVIDOS em 2026-10-30 — ver
@@ -464,8 +497,14 @@ pinado, headless) · `mcp-memory` (`:8932/mcp`, supergateway faz a ponte
 stdio→Streamable HTTP do `@modelcontextprotocol/server-memory`; grafo em
 `mcp-data/memory.json`, **compartilhado com o memory do opencode** —
 `MEMORY_FILE_PATH` aponta para esse caminho) · `comfyui` (`:8188`,
-yanwk/comfyui-boot pinado; Qwen-Image 2.1 Turbo int8, geração + edição,
-integrado ao Open WebUI). Detalhes: `DOCKER.md`.
+yanwk/comfyui-boot pinado; Qwen-Image 2.1 Turbo int8, geração + edição) ·
+`mcp-comfyui` (`:8933/mcp`, build local em `mcp/comfyui-mcp-server` — joenorton
+pinado + patch oraculo; tools `generate_image`/`edit_image` com schema tipado
+derivado dos placeholders `PARAM_*` em `comfyui/mcp-workflows/`;
+**substituiu a integração nativa ComfyUI do Open WebUI em 2026-11-09** —
+`image_generation.enable`/`images.edit.enable` desligados no `webui.db`,
+receita preservada p/ rollback; hit no gpu-shim `:8188`, regra 8 intacta).
+Detalhes: `DOCKER.md`.
 
 > **Estado no repo (2026-10-14)**: os serviços do compose não usam mais
 > volumes nomeados do Docker — tudo em binds `./data/<serviço>/`

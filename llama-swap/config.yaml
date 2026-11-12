@@ -562,6 +562,13 @@ models:
   # (os pesos são re-gerados a partir dos GGUFs originais do HF).
   # ---------------------------------------------------------------------
 
+  # =====================================================================
+  # NOTA 2026-11-12: a engine Strata e a entry Strata NÃO voltaram — o
+  # Qwen3.8-Flash-Next agora roda em GGUF padrão llama.cpp (arch
+  # `qwen4exp` no master/stock) na entry `Qwen3.8_Flash_Next_IQ3_S`,
+  # abaixo. Engines/strata/ e a imagem permanecem removidos.
+  # =====================================================================
+
   # ---------------------------------------------------------------------
   # LFM 2.5 24B-A2B (LiquidAI, Q4_K_M) — raciocínio puro (sempre pensa),
   # MoE 24B/2,45B ativo (64 experts top-4, 40 camadas = 30 conv + 10 GQA),
@@ -777,6 +784,49 @@ models:
   # 35B multimodal; GGUF + mmproj ~1,8 GB apagados). Re-instalável via
   # MODELS_INSTALL.md (openbmb/MiniCPM-V-4.7-1B-gguf). Nota: a 35B
   # continua na build 11561 (visor minicpmv4_7) — nada muda lá.
+
+  # ---------------------------------------------------------------------
+  # Qwen3.8-Flash-Next GSQ-RCO IQ3_S (ISTA-DASLab) — o "Strata" voltou ao
+  # zoo, agora em GGUF padrão llama.cpp (a engine dedicada
+  # Niko1221/Strata + engines/strata/ foram removidas em 2026-10-28;
+  # a arch `qwen4exp` está no master e na imagem stock 12063 — strings
+  # conferidas na libllama.so). MoE híbrido: 48 camadas, atenção total a
+  # cada 4 (12 full-attn GQA 24q/2kv, key/value 256) + conv/SSM; 512
+  # experts top-10 por camada (ff 640); hyper-connections 4; PLE n-gram
+  # (ple.layers=[1]) no shard 2. Ctx nativo 262144.
+  # - GGUF 83,6 GB em 2 shards: shard 1 (54,8 GB, pesos; dense ~2,6 GB +
+  #   experts ~49,5 GB) + shard 2 (28,8 GB = per_layer_token_embd IQ4_NL,
+  #   tabela de LOOKUP lida esparsamente — 1 linha/token).
+  # - SHARD 2 nunca vai para a RAM residente: -lm mmap --lazy-mode on
+  #   (lazy-mode exige mmap). POR ISSO esta entry NÃO usa --load-mode none
+  #   (regra 2): load none copiaria os DOIS shards (~81 GB) para a RAM e
+  #   daria OOM nos 62 GiB do host (upgrade 2026-11-12). O shard 1 fica no
+  #   page cache (~52 GB — cabe na RAM com o host ocioso; se o decode
+  #   desabar por thrash, trocar para -lm mmap+mlock).
+  # - -ncmoe 46: 2 camadas de experts (~2 GB) na GPU + dense ~2,6 GB + KV
+  #   ~0,9 GB @131k (12 camadas × 2 heads × 256 → ~6,9 KiB/tok em q4_0)
+  #   + buffers ub2048 → VRAM serving ~9,8 GiB (folga 2,1 GiB). A/B 2026-11-12:
+  #   ncmoe 44 + ub512 dava prefill 270 t/s; ncmoe 46 + ub2048 → 450 t/s
+  #   (regra 7 — ubatch amortiza a re-leitura dos experts via mmap),
+  #   decode ~20 t/s nos dois casos. -t 16: decode 17,5→20,5 t/s (experts
+  #   rodam na CPU — 32 threads no host; -t 5 do macro era o gargalo).
+  # - SEM mmproj nesta receita inicial (0,91 GB de ViT não caberia com
+  #   folga) — visão a validar depois; mmproj já baixado no dir do modelo.
+  # - Sampling: sem generation_config oficial publicado — defaults.
+  # - Medição de referência (2026-11-12, prompt 4,4k): prefill ~450 t/s,
+  #   decode ~20 t/s; pdcache restaurando cache entre restarts (cache_n
+  #   4414, prompt_n 4). Modelo thinking — max_tokens curto = resposta
+  #   vazia (morre dentro do <think/>); orçar tokens generosos.
+  # ---------------------------------------------------------------------
+  Qwen3.8_Flash_Next_IQ3_S:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/Qwen3.8-Flash-Next-GSQ-RCO-GGUF/IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf
+      -lm mmap --lazy-mode on
+      -c 131072 -ngl 99 -ncmoe 46
+      -b 4096 -ub 2048 -t 16
+    cmdStop: ${docker-stop}
+    ttl: 1800
 
 
   # Variantes de contexto longo (_96k/_128k) REMOVIDAS em 2026-10-15: o floor
