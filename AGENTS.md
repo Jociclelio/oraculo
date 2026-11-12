@@ -322,7 +322,13 @@ O KV do slot fica residente até o `docker rm -f`.
     precisão do KV importa e houver folga (+41% de KV vs q4_0; validar
     carga por entry). Sempre que apertar VRAM, a alavanca é subir
     `-ncmoe` (mais experts na RAM, ~0,5 GB/camada no Qwen3.6), não mudar
-    o KV. EXCEÇÕES bonsai no fork PrismML: bf16 nos 9B (medido — teto de
+    o KV. **Nuance 2026-11-12**: no Qwen3.6 Hauhau (KV mínimo — só 10/41 camadas
+    têm KV, ~10,6 KiB/tok), q5_1/q5_1 = q4_0/q4_0 medidos e2e (decode curto
+    49,9 vs 49,3 t/s; prefill @3,5k 1527 vs 1526 t/s) — o castigo do q5_1
+    aparece em modelos de KV/token alto (MiniCPM/MiMo/Gemma4) e em ctx
+    profundo; no A/B o log ainda mostra `no FlashAttention vector kernel
+    ... q5_1-q5_1, converting to f16 (slow)`, mas o impacto é ruído nesse
+    footprint. EXCEÇÕES bonsai no fork PrismML: bf16 nos 9B (medido — teto de
     performance; @192k), q4_0 nos 27B (= novo default, validado antes).
 
 ---
@@ -346,7 +352,7 @@ falta de kernel FA dedicado).
 | `LFM2.5_24B_A2B` | stock | 131072 | LiquidAI raciocínio puro agêntico, MoE 24B/2,45B (64 experts top-4); **rework 2026-11-03 (build 12063) — cache de experts quentes**: `ncmoe 20→99` (TODOS os experts na RAM, ~1,95 GB de pesos na GPU) + `--moe-cache-mib 7168` (máximo no envelope @131k) — **decode ~52,7 t/s curto / ~32,9 @129k (baseline 47,4 / 29,4 = +11-13%), prefill @129k ~1449 t/s (baseline ~1732, -16% — custo do streaming de todos os experts)**; VRAM pico 10292 MiB (baseline 9941); A/B @8k da curva de cobertura: sem cache 27,5 → 6 GiB 44,7 → 8 GiB 62,1 t/s (joelho ~70-75% de cobertura); ub2048; sampling temp 0.1 / top-k 50 / rep 1.05; sem MTP (draft DSpark não publicado); custo de RAM: ~13,5 GB fixados (+~5 GB) |
 | `LFM2.5_24B_A2B_IQ2_M` | stock | 131072 | unsloth UD IQ2_M (7,5 GB) — a mesma LFM2.5 em **100% GPU** (sem `--load-mode none`/`-ncmoe`); **decode ~106 tok/s, prefill ~2960 tok/s** (pós-unlock 2026-10-26 — o mais rápido do zoo); 128k validado de ponta a ponta (VRAM 9940 MiB @130k pré-unlock); sem MTP; sampling temp 0.1 / top-k 50 / rep 1.05 |
 | `LFM2.5_24B_A2B_Uncensored` | stock | 131072 | MESMA receita da `LFM2.5_24B_A2B` (incl. rework 2026-11-03: ncmoe 99 + `--moe-cache-mib 7168` — ver entry base) + LoRA rank-1 AtomicChat (24 MB, `--lora-scaled :1.75` — blocos 14-39: mixers + ffn_down dos 64 experts; sites verificados em CPU: 52/52 no Q4_K_M; autor: refusals 96,3%→1,2%, MMLU 64,4→65,6); **validado 2026-11-03 no serving**: carga OK c/ cache de experts + LoRA, decode ~46,4 t/s curto, VRAM 10103 MiB (c/ display) |
-| `Qwen3.6_35B_A3B_Hauhau_Aggressive` | stock | 131072 | Uncensored Aggressive, multimodal; ncmoe 29; ub2048 + `--load-mode none`; **decode ~41 tok/s, prefill ~1100 tok/s** (pós-unlock 2026-10-26); VRAM 11240 MiB; SEM MTP (GGUF sem tensors nextn — spec inaplicável; `--moe-cache-mib` testado e rejeitado: decode -21%). Entry BASE `Qwen3.6_35B_A3B` removida em 2026-11-12 (ver removidos) |
+| `Qwen3.6_35B_A3B_Hauhau_Aggressive` | stock | 131072 | Uncensored Aggressive, multimodal; ncmoe 29; ub2048 + `--load-mode none`; **re-medido 2026-11-12 pós-troca de CPU + RAM 64 GB**: decode curto **~49,3 t/s** (+20% vs 41 de 2026-10-26), decode @47k ~36 t/s, prefill @3,5k **~1526 t/s** (+39% vs ~1100), prefill @48k ~1422 t/s; VRAM 10714 MiB; **A/B KV q5_1 vs q4_0: PARIDADE** (decode 49,9 vs 49,3; prefill @3,5k 1527 vs 1526 — todo o ganho é hardware, ver nuance na regra 10); SEM MTP (GGUF sem tensors nextn — spec inaplicável; `--moe-cache-mib` testado e rejeitado: decode -21%). Entry BASE `Qwen3.6_35B_A3B` removida em 2026-11-12 (ver removidos) |
 | `Ornith1.5_9B` | stock | 131072 | Ornith-1.5-9B Q4_K_M + mmproj BF16 (ornith-ai); variante edge DENSA da família (arch qwen35), raciocínio agêntico `<think/tool_call>`; head MTP embutida (nextn=1) → draft-mtp self-draft n=2 (aceitação ~50% pós-unlock); **decode ~58 tok/s, prefill ~1600 tok/s** (2026-10-26); VRAM 10244 MiB |
 | `MiMo2.6_9B` | stock | 131072 | MiMo-V2.6-Distill-Qwen-9B (XiaomiMiMo, distill em base Qwen3.5; arch qwen35, denso) Q4_K_M bartowski + mmproj f16; reasoning separado; **SEM MTP** (header sem nextn); **decode ~53 tok/s, prefill ~1615 tok/s** (pós-unlock 2026-10-26); VRAM 9508 MiB; visão validada; sampling temp 0.6 / top-p 0.95 / top-k 20 (generation_config oficial) |
 | `bonsai-27b-heretic` | PrismML | — | **REMOVIDA em 2026-10-28** (GGUF apagado, ~6,2 GB): redundante com a `bonsai-27b-ada-uncensored` (LoRA AtomicChat na ada: refusals 99%→0% validado, decode ~43-50 t/s vs ~26, janela 262k). Medido antes da remoção: decode ~26 tok/s, prefill ~530 tok/s, VRAM 10544 MiB (2026-10-26) |
