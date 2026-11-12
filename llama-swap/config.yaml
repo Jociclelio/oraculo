@@ -157,6 +157,7 @@ macros:
   #   prefill de MoE na CPU 20x mais lento, ver regra 9).
   "docker-pdcache": >
     docker run --rm --name ls-${MODEL_ID} --gpus all
+    --ulimit memlock=-1
     --entrypoint /usr/local/bin/llama-server
     -p 127.0.0.1:${PORT}:8080
     -v ./models:/models
@@ -703,13 +704,21 @@ models:
   # de decode mas só 578 MiB de VRAM livres — 44 mantém o decode e devolve
   # 2 GB de folga, mesmo envelope da IQ3_S).
   # Medido 2026-11-12 (prompt 4,4k, display idle): decode ~26 t/s,
-  # prefill ~573 t/s (+30% vs IQ3_S nos dois).
+  # prefill ~573-577 t/s (+30% vs IQ3_S nos dois).
+  # - -lm mmap+mlock (não mmap puro): pina o shard 1 inteiro na RAM
+  #   (~37,6 GB — estilo Strata "all weights resident"; exigiu
+  #   --ulimit memlock=-1 no macro pdcache). Throughput IGUAL ao mmap puro
+  #   (o page cache já segurava tudo) — o valor é proteção contra eviction
+  #   (o caso IQ3_S@13 t/s). Custo: RAM disponível 54→22 GiB e cold load
+  #   lê o shard inteiro (antes era lazy). A/B de threads: -t 16 (físicos)
+  #   26 t/s > -t 24 25,1 > -t 32 20,1 (SMT atrapalha). --moe-cache-mib
+  #   1536 REJEITADO: 22,2 t/s (-14%, cobertura 4,5% << joelho 20-30%).
   # ---------------------------------------------------------------------
   Qwen3.8_Flash_Next_IQ2_0:
     cmd: |
       ${docker-pdcache}
       -m /models/Qwen3.8-Flash-Next-GSQ-RCO-GGUF/Q2_0/Qwen3.8-Flash-Next-GSQ-RCO-Q2_0-00001-of-00002.gguf
-      -lm mmap --lazy-mode on
+      -lm mmap+mlock --lazy-mode on
       -c 131072 -ngl 99 -ncmoe 44
       -b 4096 -ub 2048 -t 16
     cmdStop: ${docker-stop}
