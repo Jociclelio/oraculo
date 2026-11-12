@@ -80,7 +80,7 @@ O KV do slot fica residente até o `docker rm -f`.
 ## Arquitetura
 
 - **`llama-swap/config.yaml` é a FONTE DA VERDADE** dos parâmetros de cada
-  modelo (17 entries em 2026-11-12: 13 stock/pdcache + 2 PrismML + 2 bonsai-ada).
+  modelo (15 entries em 2026-11-12: 10 stock/pdcache + 2 PrismML + 3 bonsai-ada).
   `models/models.ini` é HISTÓRICO desativado — nada o lê.
   **Convenção de contexto** (VRAM validada por carga real, display idle):
   entry SEM sufixo = **128k** (floor, `-c 131072`), viabilizado pelo KV
@@ -346,14 +346,9 @@ falta de kernel FA dedicado).
 | `LFM2.5_24B_A2B` | stock | 131072 | LiquidAI raciocínio puro agêntico, MoE 24B/2,45B (64 experts top-4); **rework 2026-11-03 (build 12063) — cache de experts quentes**: `ncmoe 20→99` (TODOS os experts na RAM, ~1,95 GB de pesos na GPU) + `--moe-cache-mib 7168` (máximo no envelope @131k) — **decode ~52,7 t/s curto / ~32,9 @129k (baseline 47,4 / 29,4 = +11-13%), prefill @129k ~1449 t/s (baseline ~1732, -16% — custo do streaming de todos os experts)**; VRAM pico 10292 MiB (baseline 9941); A/B @8k da curva de cobertura: sem cache 27,5 → 6 GiB 44,7 → 8 GiB 62,1 t/s (joelho ~70-75% de cobertura); ub2048; sampling temp 0.1 / top-k 50 / rep 1.05; sem MTP (draft DSpark não publicado); custo de RAM: ~13,5 GB fixados (+~5 GB) |
 | `LFM2.5_24B_A2B_IQ2_M` | stock | 131072 | unsloth UD IQ2_M (7,5 GB) — a mesma LFM2.5 em **100% GPU** (sem `--load-mode none`/`-ncmoe`); **decode ~106 tok/s, prefill ~2960 tok/s** (pós-unlock 2026-10-26 — o mais rápido do zoo); 128k validado de ponta a ponta (VRAM 9940 MiB @130k pré-unlock); sem MTP; sampling temp 0.1 / top-k 50 / rep 1.05 |
 | `LFM2.5_24B_A2B_Uncensored` | stock | 131072 | MESMA receita da `LFM2.5_24B_A2B` (incl. rework 2026-11-03: ncmoe 99 + `--moe-cache-mib 7168` — ver entry base) + LoRA rank-1 AtomicChat (24 MB, `--lora-scaled :1.75` — blocos 14-39: mixers + ffn_down dos 64 experts; sites verificados em CPU: 52/52 no Q4_K_M; autor: refusals 96,3%→1,2%, MMLU 64,4→65,6); **validado 2026-11-03 no serving**: carga OK c/ cache de experts + LoRA, decode ~46,4 t/s curto, VRAM 10103 MiB (c/ display) |
-| `MiniCPM-V_4.7_35B` | stock | 131072 | MiniCPM-V 4.7 35B-A3B multimodal Q4_K_M + mmproj f16 (openbmb `-gguf`); backbone Qwen3.6 (arch qwen35moe, 256 experts/8 ativos, GDN); **SEM MTP** (header declara nextn=1 mas sem tensors; draft DSpark testado e descartado: aceitação ~10%, decode 9,5 tok/s, buffer ~3,9 GB não cabe — GGUF do draft APAGADO em 2026-10-26, re-baixável via MODELS_INSTALL.md); ncmoe 32 + `--load-mode none` + **ub 4096** (calibração 2026-10-26: prefill ~1383→1619 tok/s; VRAM serving 10359 MiB); requer llama.cpp ≥ PR #29416 (imagem stock atualizada p/ build 11561, fingerprint `b11561-e937b17a2`); **~32-35 tok/s, prefill ~1040→~1600 tok/s**; visão validada |
-| `MiniCPM-V_4.7_35B_Uncensored` | stock | 131072 | MESMA receita da `MiniCPM-V_4.7_35B` + LoRA rank-1 AtomicChat (106 MB, `--lora-scaled :1.0` — 120 sites: attn/linear outputs + ffn_down dos 256 experts + 40 shared experts; sites verificados em CPU: 120/120 no Q4_K_M; embedding NÃO editado — o vision projector copia linhas dele; autor: refusals 96,3%→0%, MMLU +0,25); **validado 2026-10-28**: 2/2 probes sem recusa (lockpicking; harmless OK), thinking intacto; VRAM ~10455 MiB c/ display |
-| `Qwen3.6_35B_A3B` | stock | 131072 | thinking + head MTP; **tuning de planura 2026-10-28** (probe de profundidade, `benchmarks/probe_depth.py`): `--spec-draft-n-max 3 --spec-draft-p-min 0.5` + `-ncmoe 32` — decode ~38-42 tok/s curto, **~31,5 @130k** (era 23 com n-max 2/p-min 0/ncmoe 33; planura 0,57→0,76, acc@130k 0,80→0,92), prefill ~980-1094 curto / ~624 @130k; VRAM ~11190 MiB (c/ mmproj); IZ 36-58 em toda a janela (antes caía a 23 = "não usável"); ngram empilhado ao MTP testado e REJEITADO (acc 0,60). **Rework 2026-11-03 (build 12063) — cache de experts quentes**: `-ncmoe 99` (TODOS os experts na RAM, ~3,4 GB de pesos na GPU) + `--moe-cache-mib 4096` (LRU em VRAM; 6144 só cabe @ctx curto) — **decode ~44,3 t/s curto / ~32,4-32,8 @124k, prefill ~850 t/s @124k (+36%)**, VRAM pico 11023 MiB @124k (mesmo envelope do config antigo); com MTP compõe (55-56 t/s @8k); custo: ~+4 GB de RAM fixada (22,7 GiB no container, ~2 GB disponíveis — apertado) e re-aquecimento do LRU após o sleep de 180 s — única entry do Qwen3.6 desde 2026-10-26 (Code/It_* removidas; uncensored na entry Hauhau) |
-| `Qwen3.6_35B_A3B_Hauhau_Aggressive` | stock | 131072 | Uncensored Aggressive, multimodal; ncmoe 29; ub2048 + `--load-mode none`; **decode ~41 tok/s, prefill ~1100 tok/s** (pós-unlock 2026-10-26); VRAM 11240 MiB; SEM MTP (GGUF sem tensors nextn — spec inaplicável; `--moe-cache-mib` testado e rejeitado: decode -21%) |
-| `Ornith1.5_35B_MTP` | stock | 131072 | agêntico (APEX Compact), ncmoe 29 + `--load-mode none`; ub2048; MTP self-draft (aceitação ~38% pós-unlock); **decode ~32 tok/s, prefill ~1140 tok/s** (2026-10-26); VRAM 11564 MiB (c/ mmproj, visão confirmada — Baseten/Atomic Chat/repo mudler) |
+| `Qwen3.6_35B_A3B_Hauhau_Aggressive` | stock | 131072 | Uncensored Aggressive, multimodal; ncmoe 29; ub2048 + `--load-mode none`; **decode ~41 tok/s, prefill ~1100 tok/s** (pós-unlock 2026-10-26); VRAM 11240 MiB; SEM MTP (GGUF sem tensors nextn — spec inaplicável; `--moe-cache-mib` testado e rejeitado: decode -21%). Entry BASE `Qwen3.6_35B_A3B` removida em 2026-11-12 (ver removidos) |
 | `Ornith1.5_9B` | stock | 131072 | Ornith-1.5-9B Q4_K_M + mmproj BF16 (ornith-ai); variante edge DENSA da família (arch qwen35), raciocínio agêntico `<think/tool_call>`; head MTP embutida (nextn=1) → draft-mtp self-draft n=2 (aceitação ~50% pós-unlock); **decode ~58 tok/s, prefill ~1600 tok/s** (2026-10-26); VRAM 10244 MiB |
 | `MiMo2.6_9B` | stock | 131072 | MiMo-V2.6-Distill-Qwen-9B (XiaomiMiMo, distill em base Qwen3.5; arch qwen35, denso) Q4_K_M bartowski + mmproj f16; reasoning separado; **SEM MTP** (header sem nextn); **decode ~53 tok/s, prefill ~1615 tok/s** (pós-unlock 2026-10-26); VRAM 9508 MiB; visão validada; sampling temp 0.6 / top-p 0.95 / top-k 20 (generation_config oficial) |
-| `Flint_40B_A2.5B` | stock | 131072 | Recursive Flint (RecursiveSI) MoE 40B/2,5B agêntico de código (arch `flint`: 49 camadas = 2 densas + 47 MoE, 256 experts top-6 + shared, 35 SWA janela 513 + 14 full-attention); **texto puro — sem mmproj, SEM MTP/draft**; GGUF oficial ggml-org Q4_K_M (23,4 GB); ncmoe 38 + `--load-mode none` + **ub 4096** (calibração 2026-10-26: prefill ~1097→1300 tok/s; VRAM serving 10567 MiB; sem draft o ub4096 cabe); requer build ≥ PR ggml-org#30928 (imagem stock atualizada p/ 11804/c7fc50941 + pdcache repinada no mesmo commit); sampling temp 1.0 / top-p 0.95 / top-k 20; workaround de scaling de ativações custa 10-30% (nota do PR); **decode ~42 tok/s curto / ~38 @1,7k, prefill ~1300 tok/s @8k** (fingerprint `b1-c7fc509`) (2026-10-22; ub4096 em 2026-10-26) |
 | `bonsai-27b-heretic` | PrismML | — | **REMOVIDA em 2026-10-28** (GGUF apagado, ~6,2 GB): redundante com a `bonsai-27b-ada-uncensored` (LoRA AtomicChat na ada: refusals 99%→0% validado, decode ~43-50 t/s vs ~26, janela 262k). Medido antes da remoção: decode ~26 tok/s, prefill ~530 tok/s, VRAM 10544 MiB (2026-10-26) |
 | `bonsai-27b-ada` | bonsai-ada | 262144 | MESMOS pesos PTQ1_0 do `bonsai-27b`, runtime alternativo (fork ada-ternary `2cadbfb6` = PrismML `adfffbe` + 71 patches do projeto bonsai-ada-surgery; engine `llama.cpp-bonsai-ada`). GGUF com head MTP ProCreations enxertada (trunk byte-idêntico, CaryPalmer HF); KV q4_0 TIERED (`--kv-vram-cells 131072` em VRAM, resto em RAM pinneada — bit-idêntico, janela 262k inteira); MTP self-draft (aceitação ~69-91%) + lookup n-gram; mmproj na GPU (+346 MiB — ViT na CPU com -t 5 levava ~60 s/img); harness-proofing (budget thinking 20480 c/ fechamento, effort "high" dos clients normalizado); **decode ~52 tok/s @5,5k, ~49 @45k, ~38 @130k, ~32 @175k** vs stock prism 23/16 nos mesmos prompts (2026-10-26); prefill igual ao stock (~500 curto, ~205-315 profundo); VRAM ~10,7 GB total (folga ~1,5 GB c/ display — linha KV conservadora de propósito, subir com dedicação exclusiva); SEM pdcache/sleep; cache de prompt em RAM cobre follow-up no slot (medido cache_n 129k). **Substitui o serving PrismML do 27B** (entry `bonsai-27b` removida 2026-10-30 — ver removidos) |
 | `bonsai-27b-ada-uncensored` | bonsai-ada | 262144 | MESMA receita da `bonsai-27b-ada` + LoRA rank-1 AtomicChat (9,7 MB, `--lora-scaled :1.5` — remove direção de recusa no grafo; sites verificados em CPU: os 129 alvos existem no GGUF 262k c/ MTP; refusals 99%→0% e MMLU 73.2→73.0 medidos pelo autor em prism-b10709); **validado 2026-10-28**: 3/3 probes sem recusa (lockpicking + phishing; sanidade harmless intacta — sem dano de sobre-recusa), **decode 43-50 tok/s em ctx curto** (paridade da base ada ~52), draft-mtp aceita com LoRA ativa; VRAM total 11194 MiB c/ display |
@@ -361,7 +356,15 @@ falta de kernel FA dedicado).
 | `LFM2.5_24B_A2B_2G` | stock | 131072 | variante headless p/ PC externo de ~2 GB (2026-11-03): MESMO Q4_K_M da `LFM2.5_24B_A2B` com `-ncmoe 40` (TODOS os experts ~13,3 GB fixados na RAM; GPU fica só c/ ~615 MiB de pesos: attn 57,5 + conv/GDN 270,7 + embd/output 205 + dense-FFN blocos 0-1 ~81) + `-b 1024 -ub 256` (compute buffers mínimos) + KV q4_0 do macro (10 camadas GQA × 512+512 = 5,6 KiB/tok → 720 MiB @131k); **VRAM 1822 MiB medido** (folga 226 MiB @2048); janela 131k INTEIRA (`-np 1`; 2 usuários = `-np 2`, 65k/slot); **decode ~29,5 t/s / prefill ~57 t/s** medidos no i5-9400F (CPU-bound mas viável — o A2B 2,45B ativo é leve); sem MTP/visão. PC alvo: RAM ≥ 16 GB |
 | `bonsai-9b` | PrismML | 196608 | Bonsai 2 9B (variante edge, denso); PTQ1_0 + mmproj Q8_0, mesma engine PrismML pinada; **KV bf16 @192k (2026-10-20 — q5_1 lento no fork, issue PrismML #191)**: **decode ~84 tok/s, prefill ~1530 tok/s** (pós-unlock 2026-10-26); VRAM 10870 MiB; visão validada; SEM MTP/DFlash (drafts no repo HF não baixados) |
 | `bonsai-9b-uncensored` | PrismML | 196608 | Bonsai 2 9B + LoRA uncensored AtomicChat (rank-1, 3,2 MB, `--lora-scaled :1` — remove direção de recusa no grafo; base byte-idêntico; custo ~4,3 MMLU); MESMOS GGUFs/engine/KV bf16 @192k do `bonsai-9b`; **decode ~78 tok/s** (pós-unlock 2026-10-26); VRAM 10886 MiB; aplicação validada por logprobs distintos vs base; modelo thinking consome muitos tokens de raciocínio |
-| `Qwen3.8_Flash_Next_IQ3_S` | stock (pdcache) | 131072 | Qwen3.8-Flash-Next GSQ-RCO IQ3_S (ISTA-DASLab) — o "Strata" de volta em GGUF padrão (arch `qwen4exp` na stock 12063; a engine dedicada Niko1221/Strata continua removida); MoE híbrido 177B: 48 camadas (12 full-attn GQA 24q/2kv a cada 4 + conv/SSM), 512 experts top-10, ctx nativo 262k; GGUF 83,6 GB em 2 shards — shard 2 (28,8 GB, tabela n-gram PLE IQ4_NL) fica mmap em disco via `-lm mmap --lazy-mode on`, **NÃO usa `--load-mode none`** (copiaria ~81 GB p/ RAM → OOM; exceção documentada à regra 2 — shard 1 fica no page cache ~52 GB, viável nos 64 GB de RAM desde 2026-11-12); `-ncmoe 46` (2 camadas de experts na GPU) + ub2048 + `-t 16` (experts rodam na CPU, 32 threads do host); **decode ~20,5 t/s, prefill ~450 t/s @4,4k** (A/B: ncmoe 44+ub512 = 270 t/s, -t 5 = 17,5 t/s); VRAM ~9,8 GiB (folga 2,1); thinking pesado — `enable_thinking:false` via chat_template_kwargs p/ chat casual; SEM mmproj na receita (0,91 GB não cabe — mmproj já baixado no dir; visão a validar) |
+| `Qwen3.8_Flash_Next_IQ3_S` | stock (pdcache) | 131072 | Qwen3.8-Flash-Next GSQ-RCO IQ3_S (ISTA-DASLab) — o "Strata" de volta em GGUF padrão (arch `qwen4exp` na stock 12063; a engine dedicada Niko1221/Strata continua removida); MoE híbrido 177B: 48 camadas (12 full-attn GQA 24q/2kv a cada 4 + conv/SSM), 512 experts top-10, ctx nativo 262k; GGUF 83,6 GB em 2 shards — shard 2 (28,8 GB, tabela n-gram PLE IQ4_NL) fica mmap em disco via `-lm mmap --lazy-mode on`, **NÃO usa `--load-mode none`** (copiaria ~81 GB p/ RAM → OOM; exceção documentada à regra 2 — shard 1 fica no page cache ~52 GB, viável nos 64 GB de RAM desde 2026-11-12); `-ncmoe 46` (2 camadas de experts na GPU) + ub2048 + `-t 16` (experts rodam na CPU, 32 threads do host); **decode ~18,6-20,5 t/s, prefill ~425-450 t/s @4,4k** (A/B: ncmoe 44+ub512 = 270 t/s, -t 5 = 17,5 t/s); VRAM ~9,8-10,3 GiB (folga ~2); thinking pesado — `enable_thinking:false` via chat_template_kwargs p/ chat casual; SEM mmproj na receita (0,91 GB não cabe — mmproj já baixado no dir; visão a validar). ATENÇÃO page cache: coexistir com outro modelo grande no cache evicta o shard 1 e derruba decode p/ ~13 t/s — resolver com `posix_fadvise(DONTNEED)` no GGUF do outro modelo |
+| `Qwen3.8_Flash_Next_IQ2_0` | stock (pdcache) | 131072 | MESMA arch/receita da IQ3_S na quant **Q2_0** (66,4 GB: shard 1 37,6 GB + shard 2 hardlinkado da IQ3_S — byte-idênto, ver MODELS_INSTALL.md); evita os formatos de lookup table — **decode ~26 t/s e prefill ~573 t/s @4,4k (+30% vs IQ3_S nos dois)**, decode estável entre runs (26,0-26,5); `-ncmoe 44` (A/B: ncmoe 42 = mesmos 26 t/s mas só 578 MiB de VRAM livre); VRAM ~10,0 GiB (folga 2,0); page cache ~36 GB (mais folga de RAM que a IQ3_S); qualidade: task avg 89,07 vs 93,26 da IQ3_S (card ISTA) — o trade 4 pontos por +30% de velocidade; mesmas ressalvas de thinking/mmap da IQ3_S |
+
+> **Removidos em 2026-11-12 — consolidação em torno do Qwen3.8-Flash-Next
+> (4 modelos, ~98 GB de GGUFs apagados):** `Qwen3.6_35B_A3B` (MTP; 21,9 GB —
+> a variante uncensored segue na entry Hauhau_Aggressive),
+> `Ornith1.5_35B_MTP` (17,0 GB), `MiniCPM-V_4.7_35B` + `_Uncensored` (20,8 GB
+> c/ mmproj + LoRA) e `Flint_40B_A2.5B` (21,8 GB). Todos re-instaláveis via
+> `MODELS_INSTALL.md`.
 
 > **Removidos em 2026-10-30 — poda do zoo a pedido do owner (10 entries,
 > ~156 GB de GGUFs apagados):**
@@ -369,7 +372,8 @@ falta de kernel FA dedicado).
 > qwen3_5_moe inteiro — redundantes com Qwen3.6/MiMo/Ornith; ~91 GB),
 > `Nemotron3.5_Bolt_74B` (decode mínimo do zoo ~19 t/s; pesos + mmproj +
 > draft DFlash LiLiCorr ~24,8 GB),
-> `Flint_40B_A2.5B_Uncensored` (Heretic; entry base Flint mantida; ~24,2 GB),
+> `Flint_40B_A2.5B_Uncensored` (Heretic; entry base Flint removida em
+> 2026-11-12; ~24,2 GB),
 > `Qwen3.5_9B_HauhauCS` (~6,5 GB), `LFM3_1.7B` (inclui a alternativa
 > QAD-Q4_0; ~2,1 GB), `MiniCPM-V_4.7_1B` (~1,8 GB) e `bonsai-27b`
 > (trunk PTQ1_0 ~5,9 GB; o mmproj Q8_0 permanece — compartilhado com as
@@ -436,14 +440,11 @@ ganham a adicional quando aplicável.
 - **SmallMoE** — MoE que PRECISA de offload de experts p/ RAM (`--load-mode
   none` + `-ncmoe`, regra 2); não cabem inteiras na VRAM:
   - LFM2.5-24B-A2B (64 experts top-4)
-  - MiniCPM-V 4.7 35B-A3B (256 experts top-8, GDN)
-  - Qwen3.6-35B-A3B (entries `Qwen3.6_35B_A3B` e Uncensored Hauhau;
-    Code/It_* removidas em 2026-10-26 — variante MTP única cobre os casos)
-  - Ornith-1.5-35B (APEX Compact)
-  - Qwen3.8-Flash-Next (512 experts top-10; entry `Qwen3.8_Flash_Next_IQ3_S`,
-    2026-11-12 — caso LIMITE da categoria: ~45 GB de experts no page cache
-    via mmap, exigiu o upgrade de RAM p/ 64 GB; exceção à regra 2)
-  - Flint-40B-A2.5B (256 experts top-6 + shared; entry base)
+  - Qwen3.6-35B-A3B (entry base MTP REMOVIDA em 2026-11-12; resta a
+    Uncensored Hauhau)
+  - Qwen3.8-Flash-Next (512 experts top-10; entries `Qwen3.8_Flash_Next_IQ3_S`
+    e `_IQ2_0`, 2026-11-12 — caso LIMITE da categoria: 36-52 GB de experts no
+    page cache via mmap, exigiu o upgrade de RAM p/ 64 GB; exceção à regra 2)
   - Sage-A1.5 35B, Apodex-1.1 mini, Nex-N2.5 mini, BigBang v1
     (arch qwen3_5_moe, batch 2026-10-26): REMOVIDOS em 2026-10-30 — ver
     "Removidos".
@@ -470,7 +471,6 @@ ganham a adicional quando aplicável.
 - **Uncensored** — sem censura (orthogonal às outras categorias):
   - Qwen3.6-35B-A3B Uncensored Hauhau Aggressive (também SmallMoE)
   - LFM2.5-24B-A2B Uncensored LoRA AtomicChat (também SmallMoE)
-  - MiniCPM-V 4.7 35B Uncensored LoRA AtomicChat (também SmallMoE)
   - Bonsai 2 27B Uncensored LoRA AtomicChat sobre a entry ada (também
     SuperCompressed; rank-1 9,7 MB, scale 1,5)
   - Bonsai 2 9B Uncensored LoRA AtomicChat (também SuperCompressed)
@@ -479,8 +479,8 @@ ganham a adicional quando aplicável.
 
 Relevância para servir (uso agêntico/opencode): **alta** = Qwen3.6_35B_A3B,
 bonsai-27b-ada,
-MiniCPM-V_4.7_35B, Gemma4_12B, LFM2.5_24B_A2B; **média** =
-Ornith 35B; Flint_40B_A2.5B (agêntico de código).
+Gemma4_12B, LFM2.5_24B_A2B; **média** =
+Ornith1.5_9B / MiMo2.6_9B (edge).
 
 ---
 
@@ -546,6 +546,14 @@ Detalhes: `DOCKER.md`.
   concorrentes). Alavanca disponível se um dia valer a pena:
   `filters.setParamsByID` funde variants que diferem só em sampling num
   único entry (mesmo processo, zero swap) — não aplicada.
+  **UPGRADE 2026-11-12: v263 → v272** (`llama-swap/install.sh` baixa o
+  latest). Motivo: o capcompat do v263 quebrava com os Qwen3.8-Flash-Next —
+  o /props do llama.cpp reporta `chat_template_caps.reasoning_effort_levels`
+  como ARRAY e o v263 esperava bool; a falha de discovery desregistrava o
+  modelo do router e TODA request posterior dava 404 "no router for
+  requested model" (as 1-2 primeiras passavam pelo fast-path antes do
+  probe). O v272 ainda loga a falha no 1º probe mas re-probeia com sucesso
+  e o router se mantém — sleep/wake e swaps validados.
 - **YAML inválido**: `./manage.sh restart` morre na inicialização — o erro
   aparece no fim de `logs/llama-swap.log` (ex.: chave duplicada no entry).
 - **Storage**: `du -sh models/*/` — repo agora no **NVMe** (`/home/jocic/oraculo`,

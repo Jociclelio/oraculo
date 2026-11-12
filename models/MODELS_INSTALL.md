@@ -827,7 +827,16 @@ docker logs ls-NOME_DO_MODELO
 
 ---
 
-## Qwen3.8-Flash-Next GSQ-RCO (entry `Qwen3.8_Flash_Next_IQ3_S`, 2026-11-12)
+## Removidos em 2026-11-12 (poda — re-instaláveis com os comandos abaixo)
+
+`Qwen3.6_35B_A3B` (unsloth MTP Q4_K_M, 21,1 GB + mmproj), `Ornith1.5_35B_MTP`
+(Baseten APEX Compact, 16,2 GB + mmproj), `MiniCPM-V_4.7_35B`/`_Uncensored`
+(openbmb Q4_K_M 19,7 GB + mmproj + LoRA AtomicChat 106 MB) e `Flint_40B_A2.5B`
+(ggml-org Q4_K_M, 21,8 GB). Motivo: consolidação em torno do
+Qwen3.8-Flash-Next. Os comandos de instalação de cada um continuam neste
+arquivo (seções correspondentes).
+
+## Qwen3.8-Flash-Next GSQ-RCO (entries `Qwen3.8_Flash_Next_IQ3_S` / `_IQ2_0`, 2026-11-12)
 
 GGUFs não-uniformes da ISTA-DASLab (GSQ + RCO) do Qwen3.8-Flash-Next —
 substituto em GGUF padrão llama.cpp do antigo Strata/engine dedicada
@@ -850,6 +859,20 @@ hf download ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF \
 Outras quantizações (Q2_0/IQ2_XS/IQ3_XXS): trocar o `--include` e criar
 entry irmã (mesma receita; o card reporta Q2_0 com prefill 3,4× e decode
 1,9× maiores que IQ2_XS).
+
+**Q2_0 instalada em 2026-11-12** (entry `Qwen3.8_Flash_Next_IQ2_0`): o
+shard 2 é BYTE-IDÊNTO entre as 4 variantes do card — em vez de re-baixar
+28,8 GB, foi feito hardlink do shard 2 da IQ3_S:
+
+```bash
+hf download ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF \
+  "Q2_0/Qwen3.8-Flash-Next-GSQ-RCO-Q2_0-00001-of-00002.gguf" \
+  --local-dir models/Qwen3.8-Flash-Next-GSQ-RCO-GGUF
+ln models/Qwen3.8-Flash-Next-GSQ-RCO-GGUF/IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf \
+   models/Qwen3.8-Flash-Next-GSQ-RCO-GGUF/Q2_0/Qwen3.8-Flash-Next-GSQ-RCO-Q2_0-00002-of-00002.gguf
+# ATENÇÃO: o hardlink quebra se um dos shards for re-baixado/substituído
+# pelo hf (ele grava em temp + rename). Após qualquer re-download, refazer o ln.
+```
 
 ---
 

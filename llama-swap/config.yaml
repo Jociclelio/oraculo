@@ -35,7 +35,6 @@
 # Espera máxima pelo healthcheck do modelo ao carregar. 300 s cobre o
 # carregamento a frio dos GGUFs de 21 GB (MoE 35B) a partir do NVMe.
 healthCheckTimeout: 300
-
 macros:
   # Macro stock — comando Docker reutilizável por modelo.
   # - manage.sh inicia o llama-swap a partir da raiz do repo, então o mount
@@ -193,68 +192,18 @@ models:
     cmdStop: ${docker-stop}
     ttl: 1800
 
-  # ---------------------------------------------------------------------
-  # Qwen 3.6 35B-A3B Thinking (Q4_K_M + head MTP embutido) — MoE
-  # GGUF: variante -MTP (tensors nextn validados no header) — speculative
-  # decoding self-draft via --spec-type draft-mtp (sem --model-draft).
-  # Única entry do Qwen3.6 desde 2026-10-26 (General assumiu o zoo;
-  # Code/It_* removidas — variante MTP única cobre os casos; uncensored
-  # continua na entry Hauhau_Aggressive).
-  # ---------------------------------------------------------------------
-  Qwen3.6_35B_A3B:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/unsloth_Qwen3.6_35B_A3B_MTP/Qwen3.6-35B-A3B-MTP-Q4_K_M.gguf
-      --mmproj /models/unsloth_Qwen3.6_35B_A3B_MTP/mmproj-F16.gguf
-      --load-mode none
-      --spec-type draft-mtp --spec-draft-n-max 3 --spec-draft-p-min 0.5
-      -c 131072 -ngl 99 -ncmoe 99
-      --moe-cache-mib 4096
-      -b 4096 -ub 2048
-      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
-      --presence-penalty 1.5 --repeat-penalty 1.0
-    cmdStop: ${docker-stop}
-    ttl: 1800
-    # Tuning de planura 2026-10-28 (probe de profundidade, benchmarks/
-    # probe_depth.py + bateria completa no benchmarks/README.md): n-max 2→3,
-    # --spec-draft-p-min 0.5 (filtra drafts fracos na cauda) e ncmoe 33→32.
-    # Decode @130k 23→31,5 tok/s; planura dec@130k/dec@8k 0,57→0,76.
-    # VALIDADA em 2026-10-18 (prompt 21k, qwen35moe/GDN, como Qwen3.6_35B_Code):
-    # unload (docker rm -f) + re-request → cache_n 21213/21217 (99,98%),
-    # prompt_n 4, prefill ~0,5 s (era 33 s); snapshot .centry 638 MiB.
-    # Rollout do macro para todas as entries stock no mesmo dia — ver regra 9.
-    # Cache de experts quentes 2026-11-03 (build 12063): ncmoe 32→99 (TODOS os
-    # experts na RAM — só 3,4 GB de pesos na GPU) + --moe-cache-mib 4096 (LRU
-    # de experts quentes em VRAM). A/B direto (ctx 8k, decode 256 tok, sem
-    # mmproj/MTP): ncmoe 32 sem cache 36,7 t/s → ncmoe 99 + cache 6 GiB
-    # 48,3 t/s (+32%; com MTP 55-56 t/s). COM mmproj+MTP @ctx 131072 validado:
-    # VRAM pico 11023 MiB @124k (vs 11190 do config antigo — mesmo envelope),
-    # decode curto ~44,3 t/s (vs ~38-42), decode @124k 32,4-32,8 t/s (vs 31,5),
-    # prefill @124k ~850 t/s (vs ~624, +36%). NOTA: o budget NÃO é o mesmo do
-    # A/B @8k (6144 MiB não cabe a 131k — 4096 é o máximo no envelope ~11 GB).
-    # Custos: ~+4 GB de RAM fixada (container 22,7 GiB; disponível ~2 GB com
-    # o modelo carregado — apertado, guard do pdcache degrada p/ re-prefill);
-    # cache LRU esvazia no sleep/destroy() (180 s idle) — 1º request pós-sleep
-    # paga re-aquecimento. A rejeição de 2026-10-26 vale para o regime antigo
-    # (experts parcialmente na GPU): com cobertura alta de VRAM o cache vira
-    # ganho — ver seção "Imagem stock (2026-11-03)" no topo.
+  # Qwen3.6 35B-A3B (Thinking MTP) REMOVIDA em 2026-11-12 (escolha manual
+  # do owner — consolidação em torno do Qwen3.8-Flash-Next, que supera o
+  # Qwen3.6 em benchmarks; GGUF 21,1 GB + mmproj 0,8 GB apagados).
+  # Re-instalável via MODELS_INSTALL.md (unsloth/Qwen3.6-35B-A3B-MTP-GGUF
+  # Q4_K_M). A variante uncensored segue na entry Hauhau_Aggressive.
+  # Histórico de tuning da entry: ver git (cache de experts 4096 MiB,
+  # planura spec-draft-n-max 3 / p-min 0,5, ncmoe 99).
 
-  # ---------------------------------------------------------------------
-  # Ornith 1.5 35B-A3B MTP (APEX Compact, mudler) — acceptance ~0.80,
-  # MoE (28 experts CPU)
-  # ---------------------------------------------------------------------
-  Ornith1.5_35B_MTP:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/Ornith-1.5-35B-MTP-APEX-Compact/Ornith-1.5-35B-A3B-APEX-MTP-Compact.gguf
-      --mmproj /models/Ornith-1.5-35B-MTP-APEX-Compact/mmproj.gguf
-      --load-mode none
-      --spec-type draft-mtp --spec-draft-n-max 1
-      -c 131072 -ngl 99 -ncmoe 29
-      -b 4096 -ub 2048
-      --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0
-    cmdStop: ${docker-stop}
-    ttl: 1800
+  # Ornith 1.5 35B MTP (APEX Compact) REMOVIDA em 2026-11-12 (escolha
+  # manual do owner — redundante com Qwen3.8-Flash-Next/9B; GGUF 16,2 GB
+  # + mmproj 0,8 GB apagados). Re-instalável via MODELS_INSTALL.md
+  # (Baseten/Ornith-1.5-35B-A3B-APEX-MTP-Compact).
 
   # ---------------------------------------------------------------------
   # Ornith 1.5 9B (ornith-ai) — variante edge DENSA da família (arch
@@ -680,110 +629,25 @@ models:
   # Q4_K_M + QAD-Q4_0 (~2,1 GB) apagados; re-instalável via
   # MODELS_INSTALL.md. Arch `lfm3` segue suportada no build 11960.
 
-  # ---------------------------------------------------------------------
-  # MiniCPM-V 4.7 35B-A3B (OpenBMB) — primeiro MoE multimodal da série
-  # MiniCPM-V; backbone Qwen3.6-35B-A3B (arch qwen35moe: 41 camadas, 256
-  # experts, 8 ativos, GDN + full attention a cada 4; ctx nativo 262144) +
-  # visor SigLIP2 (LLaVA-UHD v4, compressão de tokens 4x/16x). GGUF oficial
-  # em openbmb/MiniCPM-V-4.7-35B-A3B-gguf (Q4_K_M 21,2 GB + mmproj f16).
-  # SEM MTP: o GGUF declara nextn_predict_layers=1 mas não contém tensors
-  # nextn (verificado no header). Speculação via draft DSpark foi testada e
-  # DESCARTADA (medido 2026-10-12): aceitação ~10% e decode 9,5 tok/s
-  # (vs 32-35 sem draft) — o compute buffer do draft (~3,9 GB, logits
-  # 248k vocab × ubatch) também não cabe na VRAM junto do target. O GGUF
-  # do draft (413 MB) foi APAGADO em 2026-10-26 (limpeza de disco; para
-  # reteste, refazer a conversão convert_hf_to_gguf.py --target-model-dir
-  # <dir com config/tokenizer do target>).
-  # Requer llama.cpp >= PR #29416 (merge 2026-10-10): visor minicpmv4_7 +
-  # rope.section_order zyxt — imagem stock atualizada p/ build 11561
-  # (0.6.0-dev e937b17a). MoE híbrido: --load-mode none + -ncmoe (regra 2)
-  # + -ub 4096 (calibração 2026-10-26, calibrate.sh: prefill ~1383→1619
-  # tok/s; VRAM serving 10359 MiB — sem draft MTP o ub4096 cabe, regra 7).
-  # Sampling do model card: temp 1.0 / top-p 0.95 /
-  # top-k 20. Medido (RTX 3060 12GB, display idle): decode ~32-35 tok/s,
-  # prefill ~1040→~1600 tok/s; visão validada.
-  # ---------------------------------------------------------------------
-  MiniCPM-V_4.7_35B:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/MiniCPM-V-4.7-35B-A3B-Q4_K_M/MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf
-      --mmproj /models/MiniCPM-V-4.7-35B-A3B-Q4_K_M/mmproj-model-f16.gguf
-      --load-mode none
-      -c 131072 -ngl 99 -ncmoe 32
-      -b 4096 -ub 4096
-      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
-      --presence-penalty 0.0 --repeat-penalty 1.0
-    cmdStop: ${docker-stop}
-    ttl: 1800
+  # MiniCPM-V 4.7 35B-A3B (+ Uncensored LoRA) REMOVIDAS em 2026-11-12
+  # (escolha manual do owner — consolidação em torno do Qwen3.8-Flash-Next;
+  # GGUF 19,7 GB + mmproj 1,0 GB + LoRA 106 MB apagados). Re-instalável via
+  # MODELS_INSTALL.md (openbmb/MiniCPM-V-4.7-35B-A3B-gguf + AtomicChat LoRA).
+  # Histórico: build 11561 introduziu o visor minicpmv4_7; DSpark descartado;
+  # ub4096 calibrado; LoRA rank-1 120 sites scale 1.0.
 
-  # ---------------------------------------------------------------------
-  # MiniCPM-V 4.7 35B Uncensored (AtomicChat) — MESMA receita da
-  # MiniCPM-V_4.7_35B + LoRA rank-1 de 106 MB (120 sites: 40 attn/linear
-  # outputs + ffn_down dos 256 experts + 40 shared experts; sites
-  # verificados em CPU 2026-10-28: 120/120 presentes no Q4_K_M).
-  # --lora-scaled 1.0: escala validada pelo autor (refusals 96,3%→0%,
-  # thinking 43%→0%, MMLU 84,25→84,50). Embedding NÃO é editado de
-  # propósito (o vision projector copia linhas dele) — visão segue igual
-  # à base. NCMOE: experts na RAM, LoRA aplica no grafo onde o tensor
-  # está. Requer build ≥ PR ggml-org#29416 (a stock 11561 tem).
-  # ---------------------------------------------------------------------
-  MiniCPM-V_4.7_35B_Uncensored:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/MiniCPM-V-4.7-35B-A3B-Q4_K_M/MiniCPM-V-4_7-35B-A3B-Q4_K_M.gguf
-      --mmproj /models/MiniCPM-V-4.7-35B-A3B-Q4_K_M/mmproj-model-f16.gguf
-      --lora-scaled /models/MiniCPM-V-4.7-35B-A3B-Uncensored-LoRA/lora/MiniCPM-V-4.7-35B-A3B-Uncensored-LoRA.gguf:1.0
-      --load-mode none
-      -c 131072 -ngl 99 -ncmoe 32
-      -b 4096 -ub 4096
-      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
-      --presence-penalty 0.0 --repeat-penalty 1.0
-    cmdStop: ${docker-stop}
-    ttl: 1800
-
-  # ---------------------------------------------------------------------
-  # Recursive Flint 40B-A2.5B (RecursiveSI) — MoE agêntico de código,
-  # TEXTO apenas (sem mmproj, sem MTP/draft). Arquitetura `flint`: 49
-  # camadas (2 densas + 47 MoE), 256 experts top-6 + 1 shared (sigmoid),
-  # 35 camadas SWA (janela 513, RoPE) + 14 full-attention (sem pos.
-  # encoding; só elas guardam KV completo — ~28 KiB/tok em f16, o KV
-  # quantizado q5_1 deixa o floor 128k leve). Attention sinks aprendidos,
-  # GQA 32q/4kv, vocab 150144. Ctx nativo 262144.
-  # Requer llama.cpp >= PR ggml-org#30928 (merge 2026-10-21) — imagem
-  # stock atualizada p/ build 11804 (c7fc50941) + engine pdcache
-  # reconstruída no MESMO commit (pin acompanhado).
-  # - GGUF oficial ggml-org/Flint-GGUF Q4_K_M (23,4 GB). MoE híbrido:
-  #   --load-mode none + -ncmoe 38/47 (regra 2); NOTA do PR: workaround
-  #   de scaling de ativações custa 10-30% de performance (upstream).
-  # - SEM MTP/draft (o Flint não publica head nextn — spec inaplicável).
-  # -ub 4096: calibração 2026-10-26 (benchmarks/calibrate.sh) — prefill
-  #   ~1097→1300 tok/s; VRAM serving 10567 MiB. Sem draft o ub4096 cabe
-  #   (regra 7); batch irrelevante acima de 4096.
-  # - Sampling do model card: temp 1.0 / top-p 0.95 / top-k 20. Orçar
-  #   max_tokens generoso: modelo reasoning (usa ~32k em problemas difíceis).
-  # ---------------------------------------------------------------------
-  Flint_40B_A2.5B:
-    cmd: |
-      ${docker-pdcache}
-      -m /models/Flint-GGUF/Flint-Q4_K_M.gguf
-      --load-mode none
-      -c 131072 -ngl 99 -ncmoe 38
-      -b 4096 -ub 4096
-      --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0
-    cmdStop: ${docker-stop}
-    ttl: 1800
-
-  # Flint Heretic (Uncensored) REMOVIDA em 2026-10-30 (escolha manual do
-  # owner — GGUF do Octopusman388, ~22,5 GiB apagados). Known issue do
-  # autor (reasoning em loop em prompts sensíveis) ficava com o
-  # --reasoning-budget 4096. Reinstalação: GGUF do Octopusman388 Q4_K_M +
-  # mesma receita da entry base. A entry base Flint_40B_A2.5B permanece.
+  # Flint 40B-A2.5B REMOVIDA em 2026-11-12 (escolha manual do owner —
+  # agêntico de código coberto pelo Qwen3.8-Flash-Next; GGUF 21,8 GB
+  # apagado). Re-instalável via MODELS_INSTALL.md (ggml-org/Flint-GGUF
+  # Q4_K_M; requer build ≥ PR ggml-org#30928). A Heretic já tinha sido
+  # removida em 2026-10-30.
 
   # MiniCPM-V 4.7 1B REMOVIDA em 2026-10-30 (escolha manual do owner —
   # edge da série, decode recorde 248 t/s mas nicho coberto pela
   # 35B multimodal; GGUF + mmproj ~1,8 GB apagados). Re-instalável via
-  # MODELS_INSTALL.md (openbmb/MiniCPM-V-4.7-1B-gguf). Nota: a 35B
-  # continua na build 11561 (visor minicpmv4_7) — nada muda lá.
+  # MODELS_INSTALL.md (openbmb/MiniCPM-V-4.7-1B-gguf). Nota: o visor
+  # minicpmv4_7 entrou na build 11561 e segue na stock (a 35B foi removida
+  # em 2026-11-12).
 
   # ---------------------------------------------------------------------
   # Qwen3.8-Flash-Next GSQ-RCO IQ3_S (ISTA-DASLab) — o "Strata" voltou ao
@@ -824,6 +688,29 @@ models:
       -m /models/Qwen3.8-Flash-Next-GSQ-RCO-GGUF/IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf
       -lm mmap --lazy-mode on
       -c 131072 -ngl 99 -ncmoe 46
+      -b 4096 -ub 2048 -t 16
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
+  # Qwen3.8-Flash-Next GSQ-RCO Q2_0 (ISTA-DASLab) — irmã da IQ3_S, mesma
+  # arch/receita; 66,4 GB (shard 1 37,6 GB + shard 2 28,8 GB, que é
+  # BYTE-IDÊNTO ao da IQ3_S — hardlink, ver MODELS_INSTALL.md). Construída
+  # para VELOCIDADE: evita os formatos de lookup table — card: 3,4× prompt
+  # throughput e 1,9× decode estável vs IQ2_XS (89,07 task avg, -4,2 vs
+  # IQ3_S). Pesos menores → mais camadas de experts na GPU: -ncmoe 44
+  # (4 camadas ~3 GB na GPU; A/B 2026-11-12: ncmoe 42 dava os mesmos 26 t/s
+  # de decode mas só 578 MiB de VRAM livres — 44 mantém o decode e devolve
+  # 2 GB de folga, mesmo envelope da IQ3_S).
+  # Medido 2026-11-12 (prompt 4,4k, display idle): decode ~26 t/s,
+  # prefill ~573 t/s (+30% vs IQ3_S nos dois).
+  # ---------------------------------------------------------------------
+  Qwen3.8_Flash_Next_IQ2_0:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/Qwen3.8-Flash-Next-GSQ-RCO-GGUF/Q2_0/Qwen3.8-Flash-Next-GSQ-RCO-Q2_0-00001-of-00002.gguf
+      -lm mmap --lazy-mode on
+      -c 131072 -ngl 99 -ncmoe 44
       -b 4096 -ub 2048 -t 16
     cmdStop: ${docker-stop}
     ttl: 1800
