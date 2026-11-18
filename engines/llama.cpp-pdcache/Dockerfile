@@ -29,11 +29,9 @@ FROM nvidia/cuda:13.4.2-devel-ubuntu24.04
 
 ARG STOCK_REPO="https://github.com/ggml-org/llama.cpp"
 # Commit PINADO — igual ao da imagem stock em uso:
-#   version: 0.8.0-dev (build 12063, commit 2cbca389f; traz fusão CUDA de MoE
-#   gate/up+GLU em MMQ (#31188), constantes de rotação do KV na GPU (#31073),
-#   batched tensor reads mapeados em host memory (#31391), fix de rotação em
-#   camadas com KV compartilhado (#31406), save/restore de hidden state MTP)
-ARG STOCK_COMMIT="2cbca389f515df455412dafa07e2b1359cc72a6d"
+#   version: 1.0.0-dev (build 12464, commit d3c3e242c; imagem atualizada
+#   2026-11-17, antes build 12063 / 2cbca389f)
+ARG STOCK_COMMIT="d3c3e242c16b8cbf51400fad410cd69b22d64f35"
 # Alvo: RTX 3060 (Ampere) — mesma arquitetura do build nativo de referência.
 ARG CUDA_ARCH="86"
 
@@ -61,12 +59,18 @@ RUN git apply --check /tmp/0001-pdcache-stock-port.patch \
 # Build apenas do `llama-server`, Release, com CUDA para a arquitetura alvo.
 # BUILD_SHARED_LIBS=OFF embute o ggml no binário (autossuficiente, sem RUNPATH
 # dependente do diretório de build). Não requer GPU no build (arquitetura fixa).
+# LLAMA_UI_HF_BUCKET inválido: a UI "latest" do bucket ggml-org não passa na
+# validação do ui-assets.cmake (asset workbox[hash].js removido do bucket
+# depois do build 12464) e o build morre em FATAL_ERROR. Com bucket inválido o
+# download falha e o script segue o fallback OFICIAL ("building without an
+# embedded UI") — irrelevante para serving por API (llama-swap), sem UI web.
 RUN cmake -S . -B build \
       -DCMAKE_BUILD_TYPE=Release \
       -DGGML_CUDA=ON \
       -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH}" \
       -DBUILD_SHARED_LIBS=OFF \
       -DLLAMA_CURL=ON \
+      -DLLAMA_UI_HF_BUCKET=invalid/sem-ui \
  && cmake --build build --config Release --target llama-server -j"$(nproc)" \
  && cp build/bin/llama-server /usr/local/bin/llama-server \
  && chmod +x /usr/local/bin/llama-server

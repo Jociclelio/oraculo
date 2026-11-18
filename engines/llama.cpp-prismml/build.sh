@@ -10,8 +10,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 # Deve espelhar o ARG PRISMML_COMMIT do Dockerfile (commit pinado, nunca HEAD).
-PRISMML_COMMIT="84445367fbaf79c00ff64bc93a0689cdb3eee54d"
-PRISMML_COMMIT_SHORT="84445367f"
+PRISMML_COMMIT="3f035ba664f8f08c3d9432b6421f8f1a0da1f37a"
+PRISMML_COMMIT_SHORT="3f035ba66"
 IMAGE="llama.cpp-prismml"
 
 docker build \
