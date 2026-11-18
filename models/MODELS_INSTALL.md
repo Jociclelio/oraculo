@@ -942,6 +942,7 @@ máquina (RTX 3060 12 GB + 64 GB RAM, prompt real 3,7k):
 | Engine | Decode | Prefill (1º req) |
 |---|---|---|
 | **Strata 0.1.59 (container)** | **~55-58 t/s** | **~930-1000 t/s** |
+| Strata 0.1.59 (container) IQ3_S | **30,9 t/s** | **~807 t/s** |
 | Strata 0.1.60 (nativo, MTP) | 62-71 t/s | ~1000 t/s |
 | llama.cpp 12464 | ~23,6 t/s | ~425 t/s |
 
