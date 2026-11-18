@@ -876,6 +876,62 @@ ln models/Qwen3.8-Flash-Next-GSQ-RCO-GGUF/IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S
 
 ---
 
+## Qwen3.8-Flash-Next GSQ-RCO ABLITERATED (SC117 — entries `Qwen3.8_Flash_Next_Abl_IQ3_S` / `_Abl_Q2_0`, 2026-11-17)
+
+Variante **uncensored** dos mesmos GGUFs GSQ-RCO: o SC117 fez TRANSPLANTE
+byte-a-byte de 144 tensors (famílias `ssm_out`/`attn_output`/
+`ffn_down_shexp`/`ffn_down_exps`, todas as 48 camadas) a partir de uma
+release abliterated — **sem re-quantizar nada**: a atribuição de tipos por
+tensor é IDÊNTICA à upstream (verificação blake2b por tensor do autor; +0,25
+GB no shard 1 da IQ3_S, +0,40 na Q2_0 — os 96 tensors pequenos só existem em
+Q8_0 na fonte). GGUF padrão llama.cpp, carrega na stock sem fork. O shard 2
+(tabela n-gram PLE) é BYTE-IDÊNTO ao da ISTA-DASLab — hardlink local.
+
+```bash
+# baixar SÓ os shards 1 (o shard 2 é hardlink do dir ISTA — ver hash abaixo)
+hf download SC117/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-GGUF \
+  "IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-IQ3_S-00001-of-00002.gguf" \
+  "Q2_0/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-Q2_0-00001-of-00002.gguf" \
+  "mtp-Qwen3.8-Flash-Next-Q4_0.gguf" \
+  --local-dir models/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-GGUF
+
+# hardlink do shard 2 (é o MESMO arquivo dos 4 packs; ~93 GB poupados no total)
+ln models/Qwen3.8-Flash-Next-GSQ-RCO-GGUF/IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf \
+   models/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-GGUF/IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-IQ3_S-00002-of-00002.gguf
+ln models/Qwen3.8-Flash-Next-GSQ-RCO-GGUF/IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf \
+   models/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-GGUF/Q2_0/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-Q2_0-00002-of-00002.gguf
+
+# verificar integridade (deve bater com os oids LFS do repo):
+#   IQ3_S shard 1: 40f369eca301ec6ea318dbb671b3132c26a2f0b89aa5458a7051b33215ee296c
+#   Q2_0  shard 1: 1620faf21c845524cbe38dcbbaf850b8d155c2299df05d8b7bfb43b642c4647e
+#   shard 2 (ambos): 316b46f3a2dbd68c900f43136ab9449f9dcc3725dfd8c794847c204bc161e113
+sha256sum models/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-GGUF/*/*.gguf
+```
+
+> **ATENÇÃO `hf download` trava**: em downloads de ~40 GB o `hf` pode morrer
+> numa conexão ociosa SEM timeout e, ao religar, IGNORA os `.incomplete`
+> antigos (sufixo aleatório) e recomeça do zero. Retomada confiável: mover o
+> `.incomplete` para o nome final e usar `curl -L -C - -o <arquivo> "<URL
+> resolve/main/...>?download=true"` — retoma por byte-range do ponto exato.
+
+> `mtp-q2_0.gguf` e `strata/rt/` do repo SC117 são EXCLUSIVOS da engine
+> Strata (arch `qwen4exp-mtp`, não reconhecida pelo llama.cpp) — não baixar
+> (o `mtp-Qwen3.8-Flash-Next-Q4_0.gguf` da raiz é o draft para llama.cpp,
+> mas NÃO usamos: 4,14 GB não cabem na VRAM e com `-ngld 0` a aceitação de
+> 77,5% não paga o draft na CPU — medido 2026-11-17).
+
+> **Benchmark local (2026-11-17, build 12464, prompt real 3,7k, RTX 3060
+> 12 GB)**: Abl Q2_0 decode ~23,6 t/s / prefill ~425 t/s (1º request — mlock
+> segura o shard 1 na RAM); Abl IQ3_S decode ~18 t/s / prefill dominado por
+> disco no 1º request (7,5-10,5 t/s; shard 1 de 52 GB > page cache). **A Q2_0
+> vence em tudo neste setup** — mesma conclusão da receita ISTA. Paridade
+> abliterado vs ISTA dentro do ruído (a abliteração não muda tipos/footprint).
+> Cache de experts (`--moe-cache-mib` + `--moe-cache-cpu-share`): +27% em
+> prompt sintético mas neutro/negativo em texto real — NÃO aplicado (ver
+> AGENTS.md e `benchmarks/calibrate_moe.sh`).
+
+---
+
 ## Modelos de Difusão (ComfyUI)
 
 Os modelos de imagem do ComfyUI vivem em `models/comfyui/` (montado em

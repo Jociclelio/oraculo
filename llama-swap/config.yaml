@@ -724,6 +724,44 @@ models:
     cmdStop: ${docker-stop}
     ttl: 1800
 
+  # ---------------------------------------------------------------------
+  # Qwen3.8-Flash-Next GSQ-RCO ABLITERATED (SC117) IQ3_S — irmã da
+  # `Qwen3.8_Flash_Next_IQ3_S` (ISTA-DASLab), instalada 2026-11-17.
+  # MESMA receita validada (ver comentário da irmã). A abliteração é um
+  # TRANSPLANTE byte-a-byte de 144 tensors (ssm_out/attn_output/
+  # ffn_down_shexp/ffn_down_exps) sobre o GGUF GSQ-RCO upstream — a
+  # atribuição de tipos por tensor é IDÊNTICA à upstream, logo o custo de
+  # leitura/decode é o mesmo (+0,25 GB no shard 1; autor mede decode
+  # paridade -0,1% na engine Strata). Shard 2 (tabela n-gram PLE) é
+  # BYTE-IDÊNTO ao da ISTA — hardlink local (ver MODELS_INSTALL.md).
+  # Benchmark local 2026-11-17: ver AGENTS.md.
+  # ---------------------------------------------------------------------
+  Qwen3.8_Flash_Next_Abl_IQ3_S:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-GGUF/IQ3_S/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-IQ3_S-00001-of-00002.gguf
+      -lm mmap --lazy-mode on
+      -c 131072 -ngl 99 -ncmoe 46
+      -b 4096 -ub 2048 -t 16
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
+  # Qwen3.8-Flash-Next GSQ-RCO ABLITERATED (SC117) Q2_0 — irmã da
+  # `Qwen3.8_Flash_Next_IQ2_0`, MESMA receita (mmap+mlock pina o shard 1
+  # de 38 GB na RAM; ncmoe 44). Instalada 2026-11-17, sha256 dos 2 shards
+  # verificado contra os oids LFS do repo. Benchmark local: ver AGENTS.md.
+  # ---------------------------------------------------------------------
+  Qwen3.8_Flash_Next_Abl_Q2_0:
+    cmd: |
+      ${docker-pdcache}
+      -m /models/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-GGUF/Q2_0/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-Q2_0-00001-of-00002.gguf
+      -lm mmap+mlock --lazy-mode on
+      -c 131072 -ngl 99 -ncmoe 44
+      -b 4096 -ub 2048 -t 16
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
 
   # Variantes de contexto longo (_96k/_128k) REMOVIDAS em 2026-10-15: o floor
   # subiu para 128k em todas as entries base (KV quantizado q5_1/iq4_nl),

@@ -22,15 +22,21 @@ do mkinitcpio escreve MODULES verbatim) e o unlock não roda. Se atualizar o
 pacote, reaplicar o sed. `default @saved` no loader.conf memoriza a entry do
 boot anterior.
 
-**Imagem stock (2026-11-03)**: `ghcr.io/ggml-org/llama.cpp:full-cuda`
-build **12063**, commit **`2cbca389f`** (2026-11-03), fingerprint `b1-2cbca38`.
-Traz (vs 11960 de 2026-10-28): fusão CUDA de MoE gate/up+GLU em MMQ
-(ggml-org#31188 — decode do Qwen3.6 curto mediu ~47 t/s vs ~38-42 antes),
-constantes de rotação do KV na GPU (#31073), batched tensor reads mapeados em
-host memory (#31391), fix de rotação em camadas com KV compartilhado (#31406),
-save/restore de hidden state MTP (#30141). Engine pdcache repinada no MESMO
-commit (build limpo, patch aplicado sem conflito; snapshots `.centry` antigos
-descartados pelo guard — reescritos on-demand).
+**Imagem stock (2026-11-17)**: `ghcr.io/ggml-org/llama.cpp:full-cuda`
+build **12464**, commit **`d3c3e242c`** (1.0.0-dev; antes 12063/`2cbca389f`).
+Engine pdcache repinada no MESMO commit (patch RE-PORTADO — o master mudou a
+arquitetura de slot scheduling: `server_prompt`/`server_prompt_cache` migraram
+para `server-slot-sched.{h,cpp}`, checkpoints viraram `shared_ptr<const>` e
+`common_state_data` usa allocator no-init; hunks re-mapeados + lambdas
+genéricas nos loops de checkpoint). PrismML repinado ao novo tip do branch
+`prism` (`3f035ba66`, 2026-11-16). Bonsai-ada inalterado (`2cadbfb6` segue tip).
+**ATENÇÃO builds locais**: a UI web "latest" do bucket ggml-org não passa mais
+na validação do `ui-assets.cmake` (asset `workbox[hash].js` removido do bucket)
+e quebra QUALQUER build de engine — fix nas duas engines locais:
+`-DLLAMA_UI_HF_BUCKET=invalid/sem-ui` aciona o fallback oficial "building
+without an embedded UI" (irrelevante: serving é por API). Fingerprint:
+`b1-d3c3e24` (stock/pdcache), `b1-3f035ba` não existe — prism reporta
+`0.7.0-dev (build 1, commit 3f035ba)`.
 **Cache de experts MoE em VRAM (`--moe-cache-mib`, merged 2026-10-07 + SLRU
 10-19) — VALE APENAS com cobertura alta de VRAM.** Rejeitado no regime antigo
 (experts parcialmente na GPU, pouca folga): A/B 2026-11-03 no Qwen3.6 ncmoe 32
@@ -55,9 +61,9 @@ DRAFT/não-mesclado — não usar.
 ## Comandos essenciais
 
 ```bash
-./manage.sh start|stop|restart|status   # TUDO: llama-swap (HOST) + compose (webui, terminal, searxng, comfyui, mcps, openwa)
+./manage.sh start|stop|restart|status   # controle manual do stack (llama-swap + compose)
 ./manage.sh swap|services start|stop    # controle fino: só o proxy, ou só o compose
-tail -f logs/llama-swap.log             # log do proxy (swap, health checks)
+./manage.sh logs                        # log do proxy (docker logs -f llama-swap)
 docker logs ls-<Modelo>                 # log do container do modelo carregado
 
 # Testar modelo (o primeiro request dispara a carga; swap automático entre modelos)
@@ -67,9 +73,15 @@ curl -s http://localhost:8081/v1/chat/completions -H "Content-Type: application/
 # timings no response: prompt_per_token_ms, predicted_per_token_ms, draft_n_accepted
 ```
 
-Após editar `llama-swap/config.yaml`: `./manage.sh restart`. Não há
+Após editar `llama-swap/config.yaml`: `./manage.sh restart` (o config é
+montado por bind — o container relê no start, sem rebuild de imagem). Não há
 load/unload manual — apontar o request para outro `model` faz o swap
 (`docker rm -f ls-<Anterior>`); descarrega sozinho após 5 min ocioso (`ttl: 300`).
+
+**Boot**: llama-swap é container do compose desde 2026-11-16
+(`restart: unless-stopped`) — sobe SOZINHO no boot junto com o
+`docker.service` (enabled), como os serviços auxiliares. `./manage.sh start`
+só é necessário após um `stop` manual (o que foi parado na mão não volta).
 **Exceção (2026-10-30)**: as entries sem pdcache (PrismML/bonsai-ada) usam
 `ttl: 0` — nunca saem por ociosidade; unload é só manual, por swap de outro
 modelo ou pela liberação do gpu-shim antes da geração de imagem (regra 8).
@@ -92,6 +104,21 @@ O KV do slot fica residente até o `docker rm -f`.
   `ghcr.io/ggml-org/llama.cpp:full-cuda`, entrypoint `/app/llama-server`),
   `docker-prismml` (imagem local, entrypoint
   `/usr/local/bin/llama-server`), `docker-stop`.
+- **O llama-swap roda como CONTAINER do compose** (`docker-compose.yml` →
+  serviço `llama-swap`, imagem `docker:cli` + binário Go estático montado de
+  `bin/llama-swap`; antes era processo de HOST com `nohup`/pidfile, até
+  2026-11-16). Precisa de `/var/run/docker.sock` (é ele quem dispara os
+  containers de modelo) e `network_mode: host` (bind em `127.0.0.1:8081` +
+  alcance pelos serviços, que também usam rede host). O repo é montado no
+  **MESMO caminho absoluto** do host com `working_dir` apontando para ele —
+  é isso que faz os mounts relativos do config (`-v ./models`,
+  `-v ./data/llama-pdcache`) resolverem para caminhos do HOST; sem essa
+  simetria os GGUFs não aparecem. `llama-swap/entrypoint.sh` limpa
+  containers `ls-*` órfãos (rodando ou parados) antes de subir (os modelos
+  são IRMÃOS, não filhos: sobrevivem a crash/SIGKILL do proxy e bloqueiam a
+  carga seguinte por conflito de nome) e faz `exec` para o SIGTERM do
+  `docker stop` chegar ao PID 1. Logs: `docker logs llama-swap` /
+  `./manage.sh logs`.
 - **O llama-swap NÃO executa o cmd via shell (shlex)**: nada de `;`, pipes ou
   redirects no `cmd` — um único comando por entry.
 - Engines dedicadas vivem em `engines/<fork>/` (Dockerfile + build.sh),
@@ -364,6 +391,8 @@ falta de kernel FA dedicado).
 | `bonsai-9b-uncensored` | PrismML | 196608 | Bonsai 2 9B + LoRA uncensored AtomicChat (rank-1, 3,2 MB, `--lora-scaled :1` — remove direção de recusa no grafo; base byte-idêntico; custo ~4,3 MMLU); MESMOS GGUFs/engine/KV bf16 @192k do `bonsai-9b`; **decode ~78 tok/s** (pós-unlock 2026-10-26); VRAM 10886 MiB; aplicação validada por logprobs distintos vs base; modelo thinking consome muitos tokens de raciocínio |
 | `Qwen3.8_Flash_Next_IQ3_S` | stock (pdcache) | 131072 | Qwen3.8-Flash-Next GSQ-RCO IQ3_S (ISTA-DASLab) — o "Strata" de volta em GGUF padrão (arch `qwen4exp` na stock 12063; a engine dedicada Niko1221/Strata continua removida); MoE híbrido 177B: 48 camadas (12 full-attn GQA 24q/2kv a cada 4 + conv/SSM), 512 experts top-10, ctx nativo 262k; GGUF 83,6 GB em 2 shards — shard 2 (28,8 GB, tabela n-gram PLE IQ4_NL) fica mmap em disco via `-lm mmap --lazy-mode on`, **NÃO usa `--load-mode none`** (copiaria ~81 GB p/ RAM → OOM; exceção documentada à regra 2 — shard 1 fica no page cache ~52 GB, viável nos 64 GB de RAM desde 2026-11-12); `-ncmoe 46` (2 camadas de experts na GPU) + ub2048 + `-t 16` (experts rodam na CPU, 32 threads do host); **decode ~18,6-20,5 t/s, prefill ~425-450 t/s @4,4k** (A/B: ncmoe 44+ub512 = 270 t/s, -t 5 = 17,5 t/s); VRAM ~9,8-10,3 GiB (folga ~2); thinking pesado — `enable_thinking:false` via chat_template_kwargs p/ chat casual; SEM mmproj na receita (0,91 GB não cabe — mmproj já baixado no dir; visão a validar). ATENÇÃO page cache: coexistir com outro modelo grande no cache evicta o shard 1 e derruba decode p/ ~13 t/s — resolver com `posix_fadvise(DONTNEED)` no GGUF do outro modelo |
 | `Qwen3.8_Flash_Next_IQ2_0` | stock (pdcache) | 131072 | MESMA arch/receita da IQ3_S na quant **Q2_0** (66,4 GB: shard 1 37,6 GB + shard 2 hardlinkado da IQ3_S — byte-idênto, ver MODELS_INSTALL.md); evita os formatos de lookup table — **decode ~26 t/s e prefill ~573-577 t/s @4,4k (+30% vs IQ3_S nos dois)**, decode estável entre runs (25,9-26,5); `-lm mmap+mlock` (shard 1 PINADO na RAM, estilo Strata all-resident — throughput igual ao mmap puro, o valor é imunidade a eviction; exigiu `--ulimit memlock=-1` no macro; RAM disponível 54→22 GiB); `-ncmoe 44` (A/B: ncmoe 42 = mesmos 26 t/s mas só 578 MiB de VRAM livre); `-t 16` (físicos do 5900XT: 16→26 t/s, 24→25,1, 32→20,1 — SMT atrapalha); `--moe-cache-mib 1536` rejeitado (-14%); VRAM ~10,0 GiB (folga 2,0); qualidade: task avg 89,07 vs 93,26 da IQ3_S (card ISTA) — o trade 4 pontos por +30% de velocidade; PARIDADE com a engine Strata sem drafter na mesma máquina (bench comunidade 2026-10-09: Q2_0 com MTP+lookup 42-45 t/s, IQ2_XS sem MTP 35,9, IQ3_S sem MTP 17,0 — nossa IQ3_S 18,6-20,5 já supera; o gap restante deles é o drafter MTP+lookup, sem GGUF p/ llama.cpp) |
+| `Qwen3.8_Flash_Next_Abl_Q2_0` | stock (pdcache) | 131072 | **Abliterated (SC117)** — MESMA receita da `Qwen3.8_Flash_Next_IQ2_0` (mmap+mlock, ncmoe 44, t 16); sha256 dos 2 shards verificado vs oids LFS. Medido 2026-11-17 (build 12464, prompt real 3,7k): **decode ~23,6 t/s, prefill ~425 t/s no 1º request (mlock segura o shard 1 na RAM — sem dependência de page cache)**; VENCEDORA entre as quants deste modelo NESTE setup. Experimentos 2026-11-17 (NÃO aplicados): `--moe-cache-mib 1024 --moe-cache-cpu-share 0.5` = +27% em prompt SINTÉTICO mas NEUTRO/NEGATIVO em texto real (palavras aleatórias concentram ativação em menos experts e inflacionam o cache — calibrar SEMPRE com texto real; script novo `benchmarks/calibrate_moe.sh`); draft MTP (`mtp-Q4_0` + `-md --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-n-ubatch 256 -ngld 0`): aceitação 77,5% mas os 4,14 GB do draft não cabem na VRAM e com draft na CPU o ganho evapora (20,4-22,5 t/s) — SEM MTP nesta máquina; VRAM ~10,4 GiB |
+| `Qwen3.8_Flash_Next_Abl_IQ3_S` | stock (pdcache) | 131072 | **Abliterated (SC117)** — irmã da IQ3_S ISTA com transplante byte-a-byte de 144 tensors (`ssm_out`/`attn_output`/`ffn_down_shexp`/`ffn_down_exps`); MESMA receita e MESMOS custos (tipo por tensor idêntico ao upstream; shard 2 hardlinkado). Medido 2026-11-17 (build 12464): decode ~18 t/s estável; prefill DOMINADO POR DISK no 1º request após idle (7,5-10,5 t/s — o shard 1 de 52 GB NÃO cabe no page cache de 62 GB; a referência ~450 t/s exige cache quente dedicado) — NESTE setup perde para a Q2_0 em tudo |
 
 > **Removidos em 2026-11-12 — consolidação em torno do Qwen3.8-Flash-Next
 > (4 modelos, ~98 GB de GGUFs apagados):** `Qwen3.6_35B_A3B` (MTP; 21,9 GB —
@@ -490,15 +519,19 @@ Ornith1.5_9B / MiMo2.6_9B (edge).
 
 ---
 
-## docker-compose (serviços auxiliares — sem o serving)
+## docker-compose (llama-swap + serviços auxiliares)
 
-`open-webui` (host `:8080`, conecta ao proxy via `OAI_API_BASE`,
+`llama-swap` (container do proxy — ver "Arquitetura"; `network_mode: host`,
+Docker socket, repo montado no mesmo caminho; `restart: unless-stopped`, então
+sobe no boot) · `open-webui` (host `:8080`, conecta ao proxy via `OAI_API_BASE`,
 `WEBUI_SECRET_KEY` obrigatório p/ persistir tokens OAuth/MCP) ·
 `open-terminal` (execução agêntica `:8000`, requer modelo com Function
 Calling = Native) · `searxng` (`:8888`, JSON habilitado) · `openwa` +
 `openwa-docker-proxy` (WhatsApp/MCP `:2785/mcp`, key em
-`data/openwa/.api-key`; o proxy é o único container com acesso ao Docker
-socket) · `mcp-playwright` (`:8931/mcp`, `mcr.microsoft.com/playwright/mcp`
+`data/openwa/.api-key`; proxy restrito `tecnativa/docker-socket-proxy` — com
+o llama-swap, são os DOIS containers que falam com o Docker socket, por
+motivos distintos: escopo restrito do openwa x orquestração de containers
+de modelo) · `mcp-playwright` (`:8931/mcp`, `mcr.microsoft.com/playwright/mcp`
 pinado, headless) · `mcp-memory` (`:8932/mcp`, supergateway faz a ponte
 stdio→Streamable HTTP do `@modelcontextprotocol/server-memory`; grafo em
 `mcp-data/memory.json`, **compartilhado com o memory do opencode** —
@@ -529,10 +562,11 @@ Detalhes: `DOCKER.md`.
 ## Troubleshooting rápido
 
 - **Modelo não carrega**: GGUF existe em `models/<dir>/`? →
-  `tail -n 50 logs/llama-swap.log` → `docker logs ls-<Modelo>` (enquanto Up).
+  `docker logs --tail 50 llama-swap` → `docker logs ls-<Modelo>` (enquanto Up).
 - **Falha de carga / `exit 125`**: primeiro `nvidia-smi` (jogo/desktop
   ocupando VRAM → OOM de compute buffer); senão, retry ou restart (flake
-  conhecido).
+  conhecido). Container de modelo órfão (`ls-*`) é limpo pelo
+  `llama-swap/entrypoint.sh` no start do proxy; manual: `docker rm -f ls-<Modelo>`.
 - **Modelo some/no responde, log do llama-swap com `read error during body
   copy` + `upstream process exited unexpectedly`**: processo morto por RAM —
   snapshot do prompt cache maior que a memória disponível (ver regra 9,
@@ -560,8 +594,9 @@ Detalhes: `DOCKER.md`.
   requested model" (as 1-2 primeiras passavam pelo fast-path antes do
   probe). O v272 ainda loga a falha no 1º probe mas re-probeia com sucesso
   e o router se mantém — sleep/wake e swaps validados.
-- **YAML inválido**: `./manage.sh restart` morre na inicialização — o erro
-  aparece no fim de `logs/llama-swap.log` (ex.: chave duplicada no entry).
+- **YAML inválido**: o container `llama-swap` entra em crash-loop no start —
+  o erro aparece em `docker logs --tail 30 llama-swap` (ex.: chave duplicada
+  no entry). Corrigido o config, `./manage.sh swap restart`.
 - **Storage**: `du -sh models/*/` — repo agora no **NVMe** (`/home/jocic/oraculo`,
   migrado do SATA 220 GB em 2026-10-14); GGUFs órfãos (sem entry no
   config) são candidatos a remoção.

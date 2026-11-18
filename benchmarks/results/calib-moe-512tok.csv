@@ -1,0 +1,8 @@
+entry,mib,share,decode_tps,decode2_tps,load_s,vram_peak_mib,status
+Qwen3.8_Flash_Next_Abl_Q2_0,0,0,23,24.675514564311214,18,10393,OK
+Qwen3.8_Flash_Next_Abl_Q2_0,1024,0.5,31,28.742615402164425,6,11455,OK
+Qwen3.8_Flash_Next_Abl_Q2_0,1024,1.0,23,23.994844213709186,6,11459,OK
+Qwen3.8_Flash_Next_Abl_Q2_0,1536,0.5,0,0,360,0,FAIL
+Qwen3.8_Flash_Next_Abl_Q2_0,1536,1.0,0,0,361,0,FAIL
+Qwen3.8_Flash_Next_Abl_Q2_0,2048,0.5,0,0,361,0,FAIL
+Qwen3.8_Flash_Next_Abl_Q2_0,2048,1.0,0,0,360,0,FAIL
