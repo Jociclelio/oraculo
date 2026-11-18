@@ -1,35 +1,42 @@
 #!/bin/bash
-# manage.sh — gerencia a stack inteira:
-#   1. llama-swap (proxy de modelos em 127.0.0.1:8081, processo de HOST)
+# manage.sh — gerencia a stack inteira (tudo em Docker):
+#   1. llama-swap (proxy de modelos em 127.0.0.1:8081, container)
 #   2. serviços auxiliares via docker compose (webui, terminal, searxng,
 #      comfyui, mcp-playwright, mcp-memory, mcp-comfyui, openwa + docker-proxy)
 #
-# start = llama-swap + docker compose up -d | stop = llama-swap + compose down
+# start = compose up -d (llama-swap + serviços) | stop = para tudo
+# Os containers têm restart: always/unless-stopped, então o stack sobe
+# SOZINHO no boot junto com o docker.service — este script é para controle
+# manual (start/stop/restart, unload de VRAM, logs).
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 BIN="bin/llama-swap"
 CONFIG="llama-swap/config.yaml"
-LOGDIR="logs"
-PIDFILE="$LOGDIR/llama-swap.pid"
-LOGFILE="$LOGDIR/llama-swap.log"
+SWAP_CONTAINER="llama-swap"
 PORT=8081
 STOP_TIMEOUT=10
 
+# O llama-swap roda como container (docker-compose.yml). O binário é Go
+# estático montado de bin/llama-swap via bind do repo em /home/jocic/oraculo.
 is_running() {
-  [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null
+  [ "$(docker inspect -f '{{.State.Running}}' "$SWAP_CONTAINER" 2>/dev/null)" = "true" ]
 }
 
 # --- serviços auxiliares (docker compose) ---------------------------------
-# O compose tem restart policy própria, mas "desligar tudo" exige down: com
-# restart: always/unless-stopped os containers voltariam sozinhos no boot.
-compose_any_up() {
-  [ -n "$(docker compose ps -q 2>/dev/null)" ]
+# O compose tem restart policy própria, mas "desligar tudo" exige parar os
+# containers: com restart: always/unless-stopped eles voltariam sozinhos no
+# boot. O llama-swap também é um serviço do compose, mas tem controle fino
+# próprio (`swap start|stop`) — por isso as listas abaixo o excluem.
+
+# Serviços auxiliares que existem agora (running), sem llama-swap/hermes.
+aux_services_up() {
+  docker compose ps --services 2>/dev/null | grep -vx -e "$SWAP_CONTAINER" -e hermes || true
 }
 
 compose_up() {
-  echo "Subindo serviços auxiliares (docker compose up -d)..."
+  echo "Subindo o stack (docker compose up -d)..."
   if ! docker compose up -d; then
     echo "Erro: docker compose up -d falhou." >&2
     return 1
@@ -38,14 +45,18 @@ compose_up() {
 }
 
 compose_down() {
-  if ! compose_any_up; then
+  local svcs
+  svcs="$(aux_services_up)"
+  if [ -z "$svcs" ]; then
     echo "Serviços auxiliares já estão parados."
   else
-    echo "Parando serviços auxiliares (docker compose down)..."
-    docker compose down
+    echo "Parando serviços auxiliares (docker compose stop)..."
+    # shellcheck disable=SC2086
+    docker compose stop $svcs
   fi
   # hermes fica fora do compose default (profile "hermes", gerenciado pelo
-  # hermes-gate): down não o alcança — parar explicitamente no "tudo off"
+  # hermes-gate): o stop por lista não o alcança — parar explicitamente no
+  # "tudo off"
   if [ "$(docker inspect -f '{{.State.Running}}' hermes 2>/dev/null)" = "true" ]; then
     echo "Parando hermes (gerenciado pelo hermes-gate)..."
     docker compose --profile hermes stop hermes
@@ -53,19 +64,11 @@ compose_down() {
 }
 
 do_start() {
-  if is_running; then
-    echo "llama-swap já está em execução (PID $(cat "$PIDFILE"))."
-  else
-    start_llama_swap
-  fi
+  start_llama_swap
   compose_up
 }
 
 start_llama_swap() {
-
-  # Pidfile órfão (processo já morreu) — limpar antes de iniciar.
-  rm -f "$PIDFILE"
-
   if [ ! -x "$BIN" ]; then
     echo "Erro: binário não encontrado em $BIN." >&2
     echo "Execute ./llama-swap/install.sh primeiro." >&2
@@ -74,41 +77,41 @@ start_llama_swap() {
 
   if [ ! -f "$CONFIG" ]; then
     echo "Erro: arquivo de configuração não encontrado: $CONFIG" >&2
-    echo "O llama-swap é iniciado com '-config $CONFIG'; crie o arquivo" >&2
-    echo "antes de iniciar (veja a task/config do plano llama-swap-multi-engine)." >&2
+    echo "O container llama-swap é iniciado com '-config /home/jocic/oraculo/llama-swap/config.yaml'." >&2
     exit 1
   fi
 
-  mkdir -p "$LOGDIR"
-  echo "Iniciando llama-swap em background (porta $PORT)..."
-  # O endereço de escuta não vem do config.yaml — é controlado pela flag
-  # -listen (o env LLAMA_SWAP_LISTEN não é honrado na v263). Fixado em
-  # 127.0.0.1:$PORT, porta que a WebUI já usa em OAI_API_BASE=http://localhost:8081/v1.
-  nohup "$BIN" -listen "127.0.0.1:$PORT" -config "$CONFIG" >>"$LOGFILE" 2>&1 &
-  local pid=$!
-  echo "$pid" > "$PIDFILE"
-
-  # Aguardar a porta $PORT responder antes de reportar sucesso. O sucesso só
-  # vale se for o NOSSO processo (PID vivo) — outra coisa pode ocupar a porta.
-  local i
-  for i in $(seq 1 30); do
-    if ! kill -0 "$pid" 2>/dev/null; then
-      echo "Erro: llama-swap (PID $pid) morreu durante a inicialização." >&2
-      echo "Últimas linhas de $LOGFILE:" >&2
-      tail -n 15 "$LOGFILE" >&2 || true
-      rm -f "$PIDFILE"
+  if is_running; then
+    echo "llama-swap já está em execução (container $SWAP_CONTAINER)."
+  else
+    echo "Subindo llama-swap (container $SWAP_CONTAINER, porta $PORT)..."
+    if ! docker compose up -d "$SWAP_CONTAINER"; then
+      echo "Erro: docker compose up -d $SWAP_CONTAINER falhou." >&2
       exit 1
     fi
+  fi
+
+  # Aguardar a porta responder: só então o proxy está realmente servindo
+  # (o container pode estar "Up" antes de o listener abrir).
+  local i
+  for i in $(seq 1 30); do
     if curl -fsS "http://127.0.0.1:$PORT/v1/models" >/dev/null 2>&1; then
-      echo "llama-swap ativo: PID $pid, log em $LOGFILE."
+      echo "llama-swap ativo: container $SWAP_CONTAINER, log em 'docker logs -f $SWAP_CONTAINER'."
       echo "API: http://127.0.0.1:$PORT/v1/models"
       return 0
+    fi
+    # Se o container morreu (ex.: binário removido/corrompido), abortar já.
+    if [ "$i" -ge 3 ] && ! is_running; then
+      echo "Erro: container $SWAP_CONTAINER não está rodando." >&2
+      echo "Últimas linhas do log:" >&2
+      docker logs --tail 20 "$SWAP_CONTAINER" 2>&1 >&2 || true
+      exit 1
     fi
     sleep 1
   done
 
-  echo "Erro: porta $PORT não respondeu em 30 s (PID $pid ainda vivo)." >&2
-  echo "Verifique o log em $LOGFILE." >&2
+  echo "Erro: porta $PORT não respondeu em 30 s (container $SWAP_CONTAINER)." >&2
+  echo "Verifique: docker logs --tail 50 $SWAP_CONTAINER" >&2
   exit 1
 }
 
@@ -126,7 +129,9 @@ do_stop() {
 # não há nenhum. Usado no stop (todo restart/stop) e como fallback no unload.
 remove_model_containers() {
   local names
-  names=$(docker ps --format "{{.Names}}" | grep "^ls-" || true)
+  # -a: pega também os parados (um container ls-* em Exited bloqueia a
+  # próxima carga pelo nome, mesmo sem estar consumindo VRAM).
+  names=$(docker ps -a --format "{{.Names}}" | grep "^ls-" || true)
   if [ -z "$names" ]; then
     return 0
   fi
@@ -137,47 +142,17 @@ remove_model_containers() {
 }
 
 stop_llama_swap() {
-  if [ ! -f "$PIDFILE" ]; then
-    echo "llama-swap não está rodando (pidfile ausente)."
-    return 0
+  if is_running; then
+    echo "Parando llama-swap (container $SWAP_CONTAINER)..."
+    docker compose stop -t "$STOP_TIMEOUT" "$SWAP_CONTAINER" >/dev/null || true
+    echo "llama-swap parado."
+  else
+    echo "llama-swap não está em execução."
   fi
 
-  local pid
-  pid="$(cat "$PIDFILE")"
-
-  if ! kill -0 "$pid" 2>/dev/null; then
-    echo "llama-swap não está rodando (PID $pid inativo; limpando pidfile)."
-    rm -f "$PIDFILE"
-    return 0
-  fi
-
-  # Segurança: só encerrar se o PID pertence ao llama-swap. Não impede o
-  # compose down (desligar tudo continua funcionando).
-  if ! ps -p "$pid" -o comm= 2>/dev/null | grep -q "llama-swap"; then
-    echo "Aviso: PID $pid no pidfile não corresponde ao llama-swap; não será morto." >&2
-    echo "Revise $PIDFILE manualmente." >&2
-    return 0
-  fi
-
-  echo "Parando llama-swap (PID $pid)..."
-  kill -TERM "$pid" 2>/dev/null || true
-
-  local i
-  for i in $(seq 1 "$STOP_TIMEOUT"); do
-    kill -0 "$pid" 2>/dev/null || break
-    sleep 1
-  done
-
-  if kill -0 "$pid" 2>/dev/null; then
-    echo "Processo não encerrou com SIGTERM; enviando SIGKILL..."
-    kill -KILL "$pid" 2>/dev/null || true
-  fi
-
-  rm -f "$PIDFILE"
   # Também derruba containers de modelo: sem o proxy eles viram órfãos
   # retendo VRAM (ver comentário em do_stop). Cobre `swap stop/restart`.
   remove_model_containers
-  echo "llama-swap parado."
 }
 
 # Relatório de VRAM: total/usado/livre + processos compute ordenados por uso.
@@ -253,15 +228,20 @@ do_unload() {
 do_status() {
   local rc=0
   if is_running; then
-    echo "llama-swap em execução (PID $(cat "$PIDFILE")), porta $PORT."
+    echo "llama-swap em execução (container $SWAP_CONTAINER), porta $PORT."
   else
     echo "llama-swap não está em execução."
     rc=1
   fi
   echo ""
-  echo "Serviços auxiliares (docker compose):"
+  echo "Stack (docker compose ps):"
   docker compose ps
   exit "$rc"
+}
+
+do_logs() {
+  # Logs do proxy em tempo real (o container escreve em stdout/stderr).
+  docker logs -f --tail "${1:-200}" "$SWAP_CONTAINER" 2>&1
 }
 
 case "$1" in
@@ -301,16 +281,20 @@ case "$1" in
       *) echo "Uso: $0 services {start|stop}" >&2; exit 1 ;;
     esac
     ;;
+  logs)
+    do_logs "$2"
+    ;;
   *)
-    echo "Uso: $0 {start|stop|restart|status|unload|vram|swap|services}"
+    echo "Uso: $0 {start|stop|restart|status|unload|vram|logs|swap|services}"
     echo ""
     echo "  start            Inicia TUDO: llama-swap + docker compose up -d"
-    echo "  stop             Desliga TUDO: llama-swap + docker compose down"
+    echo "  stop             Desliga TUDO: llama-swap + serviços auxiliares"
     echo "  restart          Para e inicia novamente (tudo)"
     echo "  status           llama-swap + docker compose ps"
     echo "  unload           Descarrega modelos ls-* (libera VRAM p/ ComfyUI)"
     echo "  unload --hard    + para o ComfyUI (zera também o contexto CUDA ~150 MiB)"
     echo "  vram             Relatório de VRAM (total/usado/livre + processos)"
+    echo "  logs [N]         Logs do llama-swap em tempo real (últimas N linhas)"
     echo "  swap <sub>       Só o llama-swap: start|stop|restart"
     echo "  services <sub>   Só o compose (webui/terminal/searxng/comfyui/mcp/openwa): start|stop"
     exit 1

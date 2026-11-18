@@ -11,13 +11,13 @@
 
 ORACULO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIG="$ORACULO_DIR/llama-swap/config.yaml"
-PIDFILE="$ORACULO_DIR/logs/llama-swap.pid"
 
 # --- proxy -----------------------------------------------------------------
-if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+# llama-swap roda como container (docker-compose.yml) desde 2026-11-16.
+if [ "$(docker inspect -f '{{.State.Running}}' llama-swap 2>/dev/null)" = "true" ]; then
     PROXY="no ar (127.0.0.1:8081)"
 else
-    PROXY="PARADO — ./manage.sh start"
+    PROXY="PARADO — ./manage.sh swap start"
 fi
 
 # --- modelo ativo ----------------------------------------------------------

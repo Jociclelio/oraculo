@@ -37,12 +37,13 @@ cp .env.example .env   # ou criar manualmente
 
 ---
 
-## Serviços (10 — sem `llama-cpp`)
+## Serviços (11 — sem `llama-cpp`)
 
 > **Mudança de arquitetura (task 006 do plano llama-swap-multi-engine)**: o
 > serviço `llama-cpp` e o mount do `models.ini` foram **removidos** do
-> compose. O serving passou a ser o **llama-swap, processo de host** (seção
-> abaixo). `docker compose config --services` → `open-webui`,
+> compose. O serving passou a ser o **llama-swap** (seção abaixo), que desde
+> 2026-11-16 também é um **serviço do compose** (antes era processo de host).
+> `docker compose config --services` → `llama-swap`, `open-webui`,
 > `open-terminal`, `searxng`, `comfyui`, `mcp-playwright`, `mcp-memory`,
 > `mcp-comfyui`, `9router`, `openwa`, `openwa-docker-proxy` — e `hermes`
 > (profile `hermes`, fora do `up -d` default; ver seção própria abaixo).
@@ -162,7 +163,7 @@ Prompts que passam pelo proxy saem para os providers cloud.
 - **Container**: `openwa-docker-proxy`
 - **Acesso**: somente leitura ao Docker socket, com operações mínimas liberadas (`CONTAINERS`, `IMAGES`, `VOLUMES`, `INFO`, `PING`, `POST`, `DELETE`)
 
-Único container **do compose** com acesso ao Docker socket; o openwa o usa via `DOCKER_HOST=tcp://openwa-docker-proxy:2375`. (Os containers de modelo criados pelo llama-swap usam o socket diretamente pelo daemon, via CLI `docker` no host.)
+Único container com acesso ao Docker socket **de escopo restrito** (allowlist de endpoints); o openwa o usa via `DOCKER_HOST=tcp://openwa-docker-proxy:2375`. O outro container que fala com o socket é o **llama-swap**, mas em escopo total (`/var/run/docker.sock` r/w) e por necessidade: é ele quem executa `docker run`/`docker rm` dos containers de modelo.
 
 ### mcp-playwright — Playwright MCP (ferramenta de navegador)
 
@@ -621,17 +622,41 @@ liberação é bidirecional e automática, sem job em background:
 
 ---
 
-## Serving fora do compose — llama-swap (processo de host)
+## Serving — llama-swap (serviço do compose)
 
 O llama-swap é um binário em `bin/llama-swap` (instalado por
-`./llama-swap/install.sh`), iniciado por `./manage.sh start` com
-`-listen 127.0.0.1:8081 -config llama-swap/config.yaml`. Para cada modelo
+`./llama-swap/install.sh`) que roda **dentro de um container** desde
+2026-11-16 (`docker-compose.yml` → serviço `llama-swap`). Para cada modelo
 requerido ele executa o `cmd` da entry (um `docker run --rm --name
 ls-<Modelo> ...`), aguarda o health check e roteia a API; ao trocar de
 modelo, o container anterior é encerrado (`cmdStop: docker rm -f
 ls-<Modelo>`) — **só 1 modelo carregado por vez**, descarregado também após
 `ttl: 300` s ocioso.
 
+Como o proxy virou container:
+
+- **Imagem**: `docker:cli` (só o CLI do Docker, sem daemon). O binário é Go
+  estático e entra por bind do repo — não há imagem própria para rebuildar a
+  cada `install.sh`.
+- **Socket**: `/var/run/docker.sock` montado r/w — é o mecanismo pelo qual
+  ele dispara os containers de modelo (primeiro container do stack, além do
+  `openwa-docker-proxy`, com acesso ao socket).
+- **Rede**: `network_mode: host`, para o bind em `127.0.0.1:8081` valer no
+  host e ser alcançado por webui/terminal/hermes (todos em rede host).
+- **Mount crítico**: o repo é montado em `/home/jocic/oraculo` (MESMO
+  caminho do host) e `working_dir` aponta para ele. Os mounts relativos do
+  config (`-v ./models:/models`, `-v ./data/llama-pdcache:/kvcache`) são
+  resolvidos pelo CLI contra esse CWD e o daemon aplica o caminho do HOST —
+  sem essa simetria os GGUFs não aparecem nos containers de modelo.
+- **Entrypoint**: `llama-swap/entrypoint.sh` remove containers `ls-*`
+  órfãos (rodando **ou parados**) antes de subir — eles são **irmãos**, não
+  filhos: sobrevivem a crash/SIGKILL do proxy e bloqueariam a carga seguinte
+  por conflito de nome — e faz `exec` no binário, para que o SIGTERM do
+  `docker stop` chegue ao PID 1 e o shutdown seja limpo.
+- **Boot**: `restart: unless-stopped` + `docker.service` enabled → o proxy
+  sobe sozinho ao ligar o PC (não precisa mais `./manage.sh start`).
+- **Logs**: `docker logs llama-swap` / `./manage.sh logs` (antes eram
+  `logs/llama-swap.log` + pidfile do processo de host).
 - **Engines**: imagem stock `ghcr.io/ggml-org/llama.cpp:full-cuda` (macro
   `docker-stock`) e imagens locais do fork PrismML
   `llama.cpp-prismml:latest` (build em `engines/llama.cpp-prismml/`, commit
@@ -652,7 +677,7 @@ Detalhes de entries/parâmetros: [`llama-swap/config.yaml`](llama-swap/config.ya
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Host                                                            │
-│   llama-swap (proxy, 127.0.0.1:8081) — processo de host          │
+│   llama-swap (container, 127.0.0.1:8081) — network_mode: host    │
 │   open-webui (8080, network_mode: host)                          │
 │   containers efêmeros ls-<Modelo> (127.0.0.1:58xx→8080)          │
 │     ↑ criados/destruídos pelo llama-swap (fora do compose)       │
@@ -669,14 +694,15 @@ Detalhes de entries/parâmetros: [`llama-swap/config.yaml`](llama-swap/config.ya
 
 ## Gerenciamento
 
-### Docker Compose (serviços auxiliares)
+### Docker Compose (stack)
 
 ```bash
-# Iniciar todos os serviços do compose
+# Subir todos os serviços (inclui o llama-swap)
 docker compose up -d
 
-# Parar todos os serviços
-docker compose down
+# Parar os serviços auxiliares (llama-swap fica de fora se você usar o manage.sh)
+docker compose stop open-webui open-terminal searxng comfyui \
+  mcp-playwright mcp-memory mcp-comfyui 9router openwa openwa-docker-proxy
 
 # Parar e remover volumes (CUIDADO: perde dados)
 docker compose down -v
@@ -691,14 +717,22 @@ docker compose logs -f
 docker compose restart open-webui
 ```
 
-### Script de gerenciamento (llama-swap — serving)
+### Script de gerenciamento (llama-swap + serviços)
 
 ```bash
-./manage.sh start     # inicia o llama-swap em background (pidfile + logs/llama-swap.log)
-./manage.sh stop      # encerra via pidfile (SIGTERM → SIGKILL)
+./manage.sh start     # sobe llama-swap + serviços (docker compose up -d)
+./manage.sh stop      # para tudo (llama-swap + auxiliares) e limpa ls-* órfãos
 ./manage.sh restart   # para e inicia de novo
-./manage.sh status    # mostra se está rodando
+./manage.sh status    # container llama-swap + docker compose ps
+./manage.sh logs      # logs do proxy em tempo real (docker logs -f llama-swap)
+./manage.sh swap {start|stop|restart}    # só o llama-swap
+./manage.sh services {start|stop}        # só os serviços auxiliares
 ```
+
+> O stack inteiro (llama-swap incluído) sobe sozinho no boot, graças ao
+> `restart: always/unless-stopped` de cada serviço + `docker.service`
+> enabled. O `./manage.sh start` é necessário apenas depois de um `stop`
+> manual.
 
 ---
 
@@ -794,9 +828,11 @@ oraculo/
 │
 ├── llama-swap/
 │   ├── install.sh            # instala o binário de release em bin/
+│   ├── entrypoint.sh         # wrapper do container: limpa ls-* órfãos + exec do proxy
 │   └── config.yaml           # entries dos modelos (fonte da verdade)
-├── bin/llama-swap            # binário (gitignored)
-├── logs/                     # llama-swap.log + pidfile (gitignored)
+├── bin/llama-swap            # binário (gitignored), montado no container do proxy
+├── logs/                     # logs de scripts de host (hermes-gate, gitignored);
+│                             # o llama-swap agora loga em stdout (docker logs)
 ├── engines/llama.cpp-prismml/# engine Docker dedicada do fork PrismML (Bonsai)
 │
 ├── data/                     # Estado dos serviços (gitignored): open-webui/,
@@ -846,7 +882,7 @@ docker inspect ls-<Modelo> | grep -A5 GPU
 ls -la models/<dir-do-modelo>/
 
 # Ver o log do proxy (swap, health checks, erros de carga)
-tail -n 50 logs/llama-swap.log
+docker logs --tail 50 llama-swap
 
 # Ver o log do container do modelo (enquanto Up)
 docker logs ls-<Modelo>
@@ -881,7 +917,7 @@ rm -rf models/NOME_DO_MODELO/
 
 ```bash
 # Logs do proxy llama-swap (e dos modelos: cada container efêmero)
-tail -f logs/llama-swap.log
+./manage.sh logs            # = docker logs -f --tail 200 llama-swap
 docker logs ls-<Modelo>
 
 # Logs do open-webui
@@ -914,7 +950,7 @@ docker logs open-terminal | grep -i "api key"
 ### Open WebUI não conecta ao llama-swap
 
 ```bash
-# Verificar se o proxy está rodando (processo de host, não do compose)
+# Verificar se o proxy está rodando (container llama-swap)
 ./manage.sh status
 
 # Verificar se a API está respondendo

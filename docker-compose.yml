@@ -1,5 +1,40 @@
 services:
   # =========================================================
+  # llama-swap — proxy multi-engine (127.0.0.1:8081)
+  # =========================================================
+  # Dispara um container EFÊMERO por modelo (`docker run --rm --gpus all`)
+  # e faz o swap — por isso precisa do socket do Docker e de
+  # network_mode: host (bind em 127.0.0.1:8081 + acesso pelos demais
+  # serviços, que também usam a rede host).
+  # Imagem docker:cli = só o CLI (sem daemon); o binário vem de
+  # bin/llama-swap (baixado por llama-swap/install.sh). É Go estático →
+  # roda no Alpine da imagem sem libc extra.
+  # MOUNT CRÍTICO: o repo aparece no MESMO caminho absoluto do host e o
+  # working_dir aponta para ele — os mounts relativos do config.yaml
+  # (`-v ./models:/models`, `-v ./data/llama-pdcache:/kvcache`) são
+  # resolvidos pelo CLI contra o CWD e o daemon usa o caminho do HOST.
+  # Sem essa simetria de caminhos os GGUFs não aparecem nos modelos.
+  # SUBSTITUIU o processo de HOST (nohup + logs/llama-swap.pid) em
+  # 2026-11-16: agora sobe junto com o PC (docker.service enabled +
+  # restart) — não é mais necessário `./manage.sh start`.
+  # Logs: `docker logs llama-swap` (ou `./manage.sh logs`).
+  # Pré-requisito: ./llama-swap/install.sh (bin/llama-swap existe).
+  # =========================================================
+  llama-swap:
+    image: docker:cli
+    container_name: llama-swap
+    restart: unless-stopped
+    network_mode: host
+    working_dir: /home/jocic/oraculo
+    # entrypoint versionado: limpa containers ls-* órfãos (irmãos, não
+    # filhos) e faz exec do binário com -listen/-config. Ver
+    # llama-swap/entrypoint.sh.
+    entrypoint: ["/bin/sh", "/home/jocic/oraculo/llama-swap/entrypoint.sh"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/home/jocic/oraculo:ro
+
+  # =========================================================
   # open-webui — Interface web para LLMs
   # =========================================================
   open-webui:

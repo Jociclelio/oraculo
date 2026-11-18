@@ -16,12 +16,14 @@ containers efêmeros de **llama.cpp** para inferência GPU) e interface
 
 ---
 
-## Serving — llama-swap (processo de host)
+## Serving — llama-swap (container do compose)
 
 O antigo serviço Docker `llama-cpp` (container fixo + `models.ini`) foi
 substituído pelo **[llama-swap](https://github.com/mostlygeek/llama-swap)**:
-um proxy que roda no **host** em `127.0.0.1:8081` e gerencia **um container
-Docker efêmero por modelo** (`docker run --rm`, nome `ls-<Modelo>`):
+um proxy que escuta em `127.0.0.1:8081` e gerencia **um container Docker
+efêmero por modelo** (`docker run --rm`, nome `ls-<Modelo>`). Desde
+2026-11-16 ele mesmo roda como container do compose (imagem `docker:cli` +
+Docker socket + `network_mode: host`), então **sobe sozinho com o PC**:
 
 - **Swap automático**: pedir um modelo descarrega o anterior (só 1 carregado
   por vez — equivalente ao antigo `--models-max 1`);
@@ -124,15 +126,21 @@ models/
 ### 5. Iniciar os serviços
 
 ```bash
-# Sobe TUDO: llama-swap (proxy de serving, porta 8081) + serviços auxiliares
-# (Open WebUI, Open Terminal, SearXNG, ComfyUI, MCPs, OpenWa via compose)
+# Sobe TUDO: llama-swap (container do proxy de serving, porta 8081) +
+# serviços auxiliares (Open WebUI, Open Terminal, SearXNG, ComfyUI, MCPs,
+# OpenWa) via docker compose
 ./manage.sh start
 ```
+
+> **Depois da primeira subida não é mais preciso rodar isto no boot**: todos
+> os serviços, incluindo o llama-swap, têm `restart: always/unless-stopped` e
+> o `docker.service` está enabled — o stack inteiro volta sozinho ao ligar o
+> PC. `./manage.sh start` só serve depois de um `stop` manual.
 
 ### 6. Verificar que está rodando
 
 ```bash
-# Status: llama-swap (pidfile em logs/llama-swap.pid) + docker compose ps
+# Status: llama-swap (container) + docker compose ps
 ./manage.sh status
 
 # Testar API (lista as entries do config.yaml)
@@ -161,7 +169,7 @@ oraculo/
 │   └── searxng/          #   settings.yml (secret_key)
 ├── models/               # GGUFs (re-baixáveis — ver MODELS_INSTALL.md)
 ├── engines/              # builds das engines dedicadas (prismml, ada, pdcache)
-├── llama-swap/           # config.yaml — fonte da verdade dos modelos
+├── llama-swap/           # config.yaml (fonte da verdade) + entrypoint.sh do container
 ├── logs/  mcp-data/  comfyui/  bin/
 ├── manage.sh  docker-compose.yml  .env
 └── AGENTS.md  README.md  DOCKER.md
@@ -368,13 +376,13 @@ Detalhes (modelos, workflows, mapeamento de nós): `DOCKER.md` e
 
 | Comando | Descrição |
 |---------|-----------|
-| `./manage.sh start` | Iniciar TUDO: llama-swap em background + `docker compose up -d` |
-| `./manage.sh stop` | Desligar TUDO: llama-swap (SIGTERM → SIGKILL) + `docker compose down` + remove containers de modelo `ls-*` (sem isso eles viram órfãos retendo VRAM) |
+| `./manage.sh start` | Iniciar TUDO: `docker compose up -d` (llama-swap + serviços auxiliares) |
+| `./manage.sh stop` | Desligar TUDO: para o container llama-swap + os auxiliares e remove containers de modelo `ls-*` (sem isso eles viram órfãos retendo VRAM) |
 | `./manage.sh restart` | Parar e iniciar novamente (tudo) |
 | `./manage.sh status` | llama-swap + `docker compose ps` |
 | `./manage.sh swap {start\|stop\|restart}` | Só o llama-swap (não toca no compose) |
 | `./manage.sh services {start\|stop}` | Só os serviços auxiliares (compose) |
-| `tail -f logs/llama-swap.log` | Logs do proxy llama-swap (swap, health checks) |
+| `./manage.sh logs` | Logs do proxy llama-swap em tempo real (`docker logs -f llama-swap`) |
 | `docker logs ls-<Modelo>` | Logs do container do modelo carregado no momento |
 | `docker logs open-webui` | Ver logs do open-webui |
 | `./manage.sh unload` | Descarregar modelos `ls-*` (libera VRAM p/ ComfyUI) |
@@ -533,7 +541,7 @@ docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu22.04 nvidia-smi
 ls -la models/<dir-do-modelo>/
 
 # Ver o log do llama-swap (swap, health checks, erros de carga)
-tail -n 50 logs/llama-swap.log
+docker logs --tail 50 llama-swap
 
 # Ver o log do container do modelo (enquanto estiver Up)
 docker logs ls-<Modelo>
