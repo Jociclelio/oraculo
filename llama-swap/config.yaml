@@ -180,6 +180,11 @@ macros:
   "docker-stop": >
     docker rm -f ls-${MODEL_ID}
 
+  # Strata (engine dedicada Qwen3.8-Flash-Next): stop GRACIOSO — o drain +
+  # unload da VRAM leva até ~2 min; docker rm -f mataria na força (exit 137).
+  "docker-stop-strata": >
+    docker stop -t 110 ls-${MODEL_ID}
+
 models:
   # ---------------------------------------------------------------------
   # Gemma 4 12B IT (QAT UD Q4_K_XL) — multimodal (texto)
@@ -760,6 +765,70 @@ models:
       -c 131072 -ngl 99 -ncmoe 44
       -b 4096 -ub 2048 -t 16
     cmdStop: ${docker-stop}
+    ttl: 1800
+
+  # ---------------------------------------------------------------------
+  # STRATA (engine dedicada Niko1221) — Qwen3.8-Flash-Next abliterated no
+  # container oficial ghcr.io/niko1221/strata:latest-cuda13, gerenciado pelo
+  # llama-swap (regra 8 intacta: swap/ttl liberam a VRAM).
+  # Medido 2026-11-18 (prompt real 3,7k): decode ~56-58 t/s, prefill ~933
+  # t/s — ~2,4× o llama.cpp 12464 (23,6/425). Engine da imagem 0.1.59
+  # (DFlash2 drafter) — a nativa 0.1.60 (MTP) fez 62-71 t/s; ver bench no
+  # AGENTS.md.
+  # - Mounts: Strata-data nativo (~/.local/share/strata — modelo baixado,
+  #   MTP/rt, packs) + GGUFs do oraculo no MESMO caminho absoluto (simetria
+  #   de paths) + estado persistente em data/strata/.
+  # - ENTRYPOINT CUSTOM (llama-swap/strata-entrypoint.sh): o launch
+  #   --no-tui daemoniza e retorna; o wrapper mantém o container vivo,
+  #   monitora `launch --status` e faz stop gracioso no SIGTERM.
+  #   --no-api-key + --access local: o llama-swap não injeta Authorization.
+  # - ABIERATED Q2_0 NÃO usa pack residente (roda streamando do GGUF — o
+  #   pack do ISTA NÃO vale para o abliterated: native_experts.txt não
+  #   bate, erro ArenaExpertSource). DFlash2 = 1 request por vez (ok, -np 1).
+  # ---------------------------------------------------------------------
+  Strata_Abl_Q2_0:
+    cmd: |
+      docker run --rm --name ls-${MODEL_ID} --gpus all --network host
+      --ulimit memlock=-1 --shm-size 2g
+      -v /home/jocic/.local/share/strata/Strata-data:/data/Strata-data
+      -v /home/jocic/oraculo/data/strata/state:/data/state
+      -v /home/jocic/oraculo/data/strata/config:/data/config
+      -v /home/jocic/oraculo/data/strata/home:/data/home
+      -v /home/jocic/oraculo/data/strata/install:/data/install
+      -v /home/jocic/oraculo/models:/home/jocic/oraculo/models:ro
+      -v /home/jocic/oraculo/llama-swap/strata-entrypoint.sh:/strata-entrypoint.sh:ro
+      --entrypoint /bin/sh
+      ghcr.io/niko1221/strata:latest-cuda13
+      /strata-entrypoint.sh ${PORT}
+      --family qwen --model Q2_0
+      --model-path /home/jocic/oraculo/models/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-GGUF/Q2_0
+      --context 128k
+    cmdStop: ${docker-stop-strata}
+    ttl: 1800
+
+  # IQ3_S abliterated no Strata: a IQ3 usa PACK RESIDENTE (experts.bin
+  # ~50 GB construído na 1ª partida a partir do GGUF abliterated — o pack
+  # do ISTA não vale — erro ArenaExpertSource; ver seção SC117 no
+  # MODELS_INSTALL.md). O 1º request pode levar ~30-60 min
+  # (construção do pack); depois a carga é normal.
+  Strata_Abl_IQ3_S:
+    cmd: |
+      docker run --rm --name ls-${MODEL_ID} --gpus all --network host
+      --ulimit memlock=-1 --shm-size 2g
+      -v /home/jocic/.local/share/strata/Strata-data:/data/Strata-data
+      -v /home/jocic/oraculo/data/strata/state:/data/state
+      -v /home/jocic/oraculo/data/strata/config:/data/config
+      -v /home/jocic/oraculo/data/strata/home:/data/home
+      -v /home/jocic/oraculo/data/strata/install:/data/install
+      -v /home/jocic/oraculo/models:/home/jocic/oraculo/models:ro
+      -v /home/jocic/oraculo/llama-swap/strata-entrypoint.sh:/strata-entrypoint.sh:ro
+      --entrypoint /bin/sh
+      ghcr.io/niko1221/strata:latest-cuda13
+      /strata-entrypoint.sh ${PORT}
+      --family qwen --model IQ3_S
+      --model-path /home/jocic/oraculo/models/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-GGUF/IQ3_S
+      --context 128k
+    cmdStop: ${docker-stop-strata}
     ttl: 1800
 
 

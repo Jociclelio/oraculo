@@ -932,6 +932,76 @@ sha256sum models/Qwen3.8-Flash-Next-GSQ-RCO-abliterated-GGUF/*/*.gguf
 
 ---
 
+## Strata (engine dedicada Niko1221 — entries `Strata_Abl_Q2_0` / `Strata_Abl_IQ3_S`, 2026-11-18)
+
+A engine dedicada ao Qwen3.8-Flash-Next **voltou ao zoo como container
+Docker oficial** (`ghcr.io/niko1221/strata:latest-cuda13`, engine 0.1.59),
+gerenciada pelo llama-swap como qualquer entry. Head-to-head na mesma
+máquina (RTX 3060 12 GB + 64 GB RAM, prompt real 3,7k):
+
+| Engine | Decode | Prefill (1º req) |
+|---|---|---|
+| **Strata 0.1.59 (container)** | **~55-58 t/s** | **~930-1000 t/s** |
+| Strata 0.1.60 (nativo, MTP) | 62-71 t/s | ~1000 t/s |
+| llama.cpp 12464 | ~23,6 t/s | ~425 t/s |
+
+Gap consistente com o report da comunidade no mesmo hardware (42-46 t/s
+decode em 0.1.41). O ganho é da engine: drafter MTP/DFlash2 na VRAM, expert
+cache adaptativo, CPU computa experts in place sobreposto à GPU, KV int8 com
+streaming, kernels específicos por sm.
+
+### Instalação/infra
+
+```bash
+# 1. Terminal (opcional, para CLI/monitor no host):
+curl -fsSL https://github.com/Niko1221/Strata/releases/latest/download/install.sh | sh
+
+# 2. Setup do modelo (baixa GGUFs para ~/.local/share/strata/Strata-data,
+#    prepara drafter e MTP/rt; cria o dir install/ que o setup esquece):
+mkdir -p ~/.local/share/strata/install
+strata install --family qwen --model Q2_0 --yes
+
+# 3. Engine (o install NÃO baixa o engine):
+strata update
+```
+
+> **Bug do setup**: `write_setup_config` não cria `~/.local/share/strata/install/`
+> e crasha no fim (FileNotFoundError). `mkdir -p` antes resolve; re-run é
+> incremental (downloads em cache).
+
+### Integração no oraculo
+
+- **Entrypoint custom** `llama-swap/strata-entrypoint.sh`: o
+  `strata launch --no-tui` daemoniza o servidor e RETORNA — o wrapper mantém
+  o container vivo, monitora `launch --status` e faz stop gracioso
+  (`launch --stop`) no SIGTERM. `--no-api-key --access local` (o llama-swap
+  não injeta Authorization no upstream; `/health` responde sem key).
+- **Macro** `docker-stop-strata`: `docker stop -t 110` (drain + unload da
+  VRAM pode levar minutos; `docker rm -f` do macro padrão mata na força).
+- **Mounts**: `~/.local/share/strata/Strata-data:/data/Strata-data` (modelo
+  baixado, MTP/rt, packs) + GGUFs do oraculo no MESMO caminho absoluto
+  (simetria de paths) + estado persistente em `data/strata/{state,config,home,install}`.
+- **Pack por variante**: o pack residente (`packs/<model>`, com
+  `native_experts.txt`) é válido SÓ para os GGUFs que o geraram — o pack do
+  ISTA Q2_0 NÃO serve para o abliterated (erro `ArenaExpertSource: the
+  pack's native_experts.txt does not match the model: blk.0`). Q2_0 roda sem
+  pack (streama do GGUF); IQ3_S constrói o pack (~50 GB) automaticamente na
+  1ª partida. Renomeie/mova `packs/q2_0` (`q2_0-ista`) para alternar variantes.
+- **DFlash2** (engine da imagem) responde 1 request por vez — irrelevante
+  para o padrão `-np 1` do zoo.
+- Armadilha de container: NÃO passe `--gpu N` — a numeração do monitor do
+  launch diverge do índice CUDA dentro do container e o engine acorda sem
+  GPU (`ggml_cuda_init: no CUDA-capable device`); deixe o auto (default).
+
+### Armadilha do `hf download` (GGUFs grandes)
+
+Em downloads de dezenas de GB o `hf` pode congelar numa conexão morta (sem
+timeout) e, ao religar, IGNORA os `.incomplete` antigos (sufixo aleatório) e
+recomeça do zero. Retomada confiável: mover o `.incomplete` para o nome
+final e `curl -L -C - -o <arquivo> "<URL resolve/main/...>?download=true"`.
+
+---
+
 ## Modelos de Difusão (ComfyUI)
 
 Os modelos de imagem do ComfyUI vivem em `models/comfyui/` (montado em
