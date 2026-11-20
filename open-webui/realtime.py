@@ -628,6 +628,7 @@ async def realtime_call(ws: WebSocket):
                         'output_modalities': ['text', 'audio'],
                         'instructions': (
                             (config.get('audio.realtime.prompt_template') or DEFAULT_REALTIME_CALL_PROMPT_TEMPLATE)
+                            + '\n\nSpeak and respond in Brazilian Portuguese (pt-BR), using natural Brazilian vocabulary and pronunciation, unless the user explicitly asks for another language.'
                             + (AVATAR_CALL_INSTRUCTIONS if protocol.animation_tools else '')
                         ),
                         'audio': {
@@ -644,7 +645,14 @@ async def realtime_call(ws: WebSocket):
                                 },
                                 **(config.get('audio.realtime.input_params') or {}),
                             },
-                            'output': {'format': {'type': 'audio/pcm', 'rate': 24000}, 'voice': voice},
+                            # llama.cpp documents `pt` as its supported LFM3
+                            # TTS language code; the instruction above narrows
+                            # Portuguese to Brazilian Portuguese.
+                            'output': {
+                                'format': {'type': 'audio/pcm', 'rate': 24000},
+                                'voice': voice,
+                                'language': 'pt',
+                            },
                         },
                         'tools': [CHAT_TOOL, *protocol.animation_tools],
                         'tool_choice': 'auto',
