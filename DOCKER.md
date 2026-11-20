@@ -74,6 +74,8 @@ Interface web para interagir com os modelos. Configurada para conectar ao proxy 
 
 > **Modo LIVE (voz)**: o LFM3-Omni-2B **ouve o microfone nativamente** (sem STT) e responde **com texto E fala** pelo endpoint `/v1/realtime` do llama-server (protocolo OpenAI Realtime, PCM base64). Usar: abrir um chat com `LFM3_Omni_2B` selecionado e clicar no botão de **call**; o modelo carrega sozinho se estiver frio (testado). As chaves `audio.realtime.*` vivem no `webui.db` (regra 6) — seedadas uma vez; ajustes posteriores de env NÃO vencem o banco (editar em Admin > Configurações > Áudio ou no DB diretamente).
 
+**Compatibilidade do modo LIVE:** o Open WebUI espera a API OpenAI Realtime completa; o endpoint realtime do llama.cpp é parcial. O router oficial foi copiado para `open-webui/realtime.py` e adaptado: injeta o snapshot do chat uma vez como mensagem `user` (llama.cpp rejeita `role=system` e não suporta `conversation.item.delete`); descarta `conversation.item.truncate`; detecta início/fim de fala localmente por energia PCM (20 ms frames, limiares RMS configuráveis por `ORACULO_VAD_*` no processo) e envia `commit` + `response.create` ao fim do silêncio (700 ms por default). O transcript sintético é vazio de propósito: o cliente Open WebUI só usa o evento para destravar a resposta, enquanto o LFM3 ouve o áudio diretamente. O fork está bind-mounted em `/app/backend/open_webui/routers/audio/realtime.py`; após atualizar a imagem, compare e re-aplique as adaptações antes de recriar o serviço.
+
 > **Importante**: `WEBUI_SECRET_KEY` é obrigatório em Docker. Sem ele, ferramentas MCP conectadas via OAuth perdem tokens entre reinicializações.
 
 ### open-terminal — Substrato de execução agêntica

@@ -69,6 +69,10 @@ services:
       # nomeados (2026-10-14): webui.db visível/backapeável, sem precedência
       # oculta do banco sobre o env.
       - ./data/open-webui:/app/backend/data
+      # Fork local do bridge realtime (2026-11-20): adapta o protocolo
+      # Open WebUI ao realtime limitado do llama.cpp (VAD local, contexto
+      # role=user, sem eventos delete/truncate). Re-portar ao atualizar imagem.
+      - ./open-webui/realtime.py:/app/backend/open_webui/routers/audio/realtime.py:ro
     depends_on:
       - searxng
 
