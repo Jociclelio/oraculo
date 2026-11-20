@@ -54,6 +54,7 @@ macros:
   #   threads = 5 -> -t 5; cache-ram = 2048 -> --cache-ram.
   "docker-stock": >
     docker run --rm --name ls-${MODEL_ID} --gpus all
+    --cpuset-cpus=0-15
     --entrypoint /app/llama-server
     -p 127.0.0.1:${PORT}:8080
     -v ./models:/models
@@ -73,6 +74,7 @@ macros:
   # servidor diretamente com as flags de cada entry.
   "docker-prismml": >
     docker run --rm --name ls-${MODEL_ID} --gpus all
+    --cpuset-cpus=0-15
     --entrypoint /usr/local/bin/llama-server
     -p 127.0.0.1:${PORT}:8080
     -v ./models:/models
@@ -157,6 +159,7 @@ macros:
   #   prefill de MoE na CPU 20x mais lento, ver regra 9).
   "docker-pdcache": >
     docker run --rm --name ls-${MODEL_ID} --gpus all
+    --cpuset-cpus=0-15
     --ulimit memlock=-1
     --entrypoint /usr/local/bin/llama-server
     -p 127.0.0.1:${PORT}:8080
