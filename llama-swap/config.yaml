@@ -835,6 +835,28 @@ models:
     ttl: 1800
 
 
+  # ---------------------------------------------------------------------
+  # LFM3-Omni-2B (LiquidAI) — omni-modal EDGE (texto + imagem + vídeo +
+  # áudio IN, responde em texto E FALA), arch `lfm3a`; 2B denso — sem
+  # -ncmoe/--load-mode none. Suporte llama.cpp desde b11960 (v0.8.0); a
+  # build 12464 tem o projetor (tools/mtmd/models/lfm3a.cpp). Modelo
+  # NON-REASONING: --reasoning off + temp 0 (card oficial). Entrada de
+  # áudio via --audio (ASR etc.) e conversa de voz em tempo real na
+  # API /v1/realtime (WebSocket) do llama-server — a validar quando
+  # houver microfone no fluxo. Q4_K_M 1,1 GB + mmproj 0,29 GB — sobra
+  # VRAM de sobra; sampling: greedy p/ texto, áudio temp 0.4 / rep 1.2.
+  # ---------------------------------------------------------------------
+  LFM3_Omni_2B:
+    cmd: |
+      ${docker-stock}
+      -m /models/LFM3-Omni-2B-GGUF/LFM3-Omni-2B-Q4_K_M.gguf
+      --mmproj /models/LFM3-Omni-2B-GGUF/mmproj-LFM3-Omni-2B-Q4_K_M.gguf
+      --reasoning off
+      -c 131072 -ngl 99
+      --temp 0
+    cmdStop: ${docker-stop}
+    ttl: 1800
+
   # Variantes de contexto longo (_96k/_128k) REMOVIDAS em 2026-10-15: o floor
   # subiu para 128k em todas as entries base (KV quantizado q5_1/iq4_nl),
   # tornando as variantes redundantes. Se algum modelo não couber em 128k,
