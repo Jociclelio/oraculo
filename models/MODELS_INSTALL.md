@@ -1003,6 +1003,35 @@ final e `curl -L -C - -o <arquivo> "<URL resolve/main/...>?download=true"`.
 
 ---
 
+## LFM3-Omni-2B (LiquidAI — omni-modal edge, entry `LFM3_Omni_2B`, 2026-11-20)
+
+Modelo omni-modal **2B denso** (arch `lfm3a`): entende **texto, imagem, vídeo e
+áudio** e responde em texto — e em **fala** (conversa de voz em tempo real na
+`/v1/realtime` WebSocket do `llama serve`; não testado no oraculo — sem
+microfone no fluxo). Suporte llama.cpp desde **b11960** (v0.8.0) — projetor
+`tools/mtmd/models/lfm3a.cpp` presente na build 12464. NON-REASONING: usar
+`--reasoning off` + `--temp 0` (sampling do card; áudio: temp 0.4 / rep 1.2).
+
+```bash
+hf download LiquidAI/LFM3-Omni-2B-GGUF \
+  LFM3-Omni-2B-Q4_K_M.gguf mmproj-LFM3-Omni-2B-Q4_K_M.gguf \
+  --local-dir models/LFM3-Omni-2B-GGUF
+```
+
+| Arquivo | Tamanho | Uso |
+|---------|---------|-----|
+| `LFM3-Omni-2B-Q4_K_M.gguf` | ~1,1 GB | entry `LFM3_Omni_2B` |
+| `mmproj-LFM3-Omni-2B-Q4_K_M.gguf` | ~0,29 GB | projetor visão+áudio |
+
+**VRAM total ~3,7 GB** — a menor pegada multimodal do zoo (100% VRAM, denso,
+sem -ncmoe/mlock). Validado 2026-11-20 (build 12464): texto **208 t/s**,
+visão correta (formas/cores/posições, resposta em 1,1 s),
+`/v1/audio/transcriptions` funcional de ponta a ponta (ASR). Entrada de
+áudio no CLI: `--audio fala.wav -p "<__media__>"`. Substitui na função edge
+a `LFM3_1.7B` (removida 2026-10-30).
+
+---
+
 ## Modelos de Difusão (ComfyUI)
 
 Os modelos de imagem do ComfyUI vivem em `models/comfyui/` (montado em
