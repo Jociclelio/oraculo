@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>LFM3-Omni · Live Voice</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, sans-serif; background: #0b1020; color: #e7ecf5; margin: 0;
+         display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+  h1 { font-size: 1.1rem; font-weight: 600; margin: 1rem 0 .2rem; }
+  #status { font-size: .8rem; color: #8fa0bf; margin-bottom: .8rem; }
+  #orb { width: 180px; height: 180px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+         font-size: 2.6rem; cursor: pointer; user-select: none; transition: all .25s; margin: .5rem 0;
+         background: radial-gradient(circle at 35% 35%, #2c3e66, #17203a); border: 2px solid #31446e; }
+  #orb.listen { border-color: #35d07f; box-shadow: 0 0 24px #35d07f55; }
+  #orb.speak  { border-color: #7c5cff; box-shadow: 0 0 32px #7c5cff88; animation: pulse 1s infinite; }
+  #orb.error  { border-color: #ff5c5c; }
+  @keyframes pulse { 50% { transform: scale(1.06); } }
+  #transcript { width: min(680px, 92vw); height: 38vh; overflow-y: auto; background: #101830;
+                border: 1px solid #223; border-radius: 12px; padding: .8rem 1rem; font-size: .92rem; }
+  .user b { color: #7cc7ff; } .assistant b { color: #c99cff; }
+  .asr { color: #9fb3d9; font-style: italic; }
+  #bar { display: flex; gap: .5rem; width: min(680px, 92vw); margin: .6rem 0 1rem; }
+  #txt { flex: 1; background: #0d1530; border: 1px solid #223; color: #e7ecf5; border-radius: 10px; padding: .6rem .8rem; }
+  button { background: #2c3e66; color: #e7ecf5; border: 1px solid #31446e; border-radius: 10px; padding: .6rem 1rem; cursor: pointer; }
+  button:disabled { opacity: .4; }
+  #mode { font-size: .75rem; color: #8fa0bf; margin-bottom: .4rem; }
+  select { background: #0d1530; color: #e7ecf5; border: 1px solid #223; border-radius: 8px; padding: .3rem; }
+</style>
+</head>
+<body>
+<h1>LFM3-Omni-2B · conversa de voz ao vivo</h1>
+<div id="status">desconectado</div>
+<div id="mode">WS: <input id="wsurl" value="ws://127.0.0.1:8081/v1/realtime" size="34">
+  taxa <select id="rate"><option>16000</option><option>24000</option><option>48000</option></select> Hz
+  <label><input type="checkbox" id="auto" checked> VAD auto</label></div>
+<div id="orb" title="clique para falar (push-to-talk)">🎙️</div>
+<div id="transcript"></div>
+<div id="bar">
+  <input id="txt" placeholder="ou digite e Enter…">
+  <button id="send">enviar</button>
+  <button id="clear">limpar</button>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const status = s => $('status').textContent = s;
+let ws = null, sessionReady = false, inputRate = 16000, outRate = 24000;
+let audioCtx = null, workletNode = null, mediaStream = null;
+let talking = false, speechBuf = [], silenceMs = 0, voicedMs = 0, ptt = false;
+let playCtx = null, playTime = 0, curText = "";
+
+function log(cls, html) {
+  const d = document.createElement('div'); d.className = cls; d.innerHTML = html;
+  $('transcript').appendChild(d); $('transcript').scrollTop = 1e9;
+  return d;
+}
+
+function connect() {
+  status('conectando…');
+  ws = new WebSocket($('wsurl').value);
+  ws.onopen = () => {
+    status('sessão…');
+    ws.send(JSON.stringify({type: 'session.update', session: {
+      type: 'realtime',
+      instructions: 'Você é um assistente de voz em português brasileiro. Responda de forma curta e natural, como uma conversa falada.',
+      output_modalities: ['text', 'audio'],
+      audio: { input:  { format: {type: 'audio/pcm', rate: inputRate},
+                        transcription: {language: 'pt'} },
+               output: { language: 'pt' } }
+    }}));
+  };
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    switch (m.type) {
+      case 'session.updated': {
+        sessionReady = true;
+        const out = m.session?.audio?.output?.format?.rate;
+        if (out) outRate = out;
+        status('pronto — fale ou digite (model: omni, out ' + outRate + ' Hz)');
+        $('orb').classList.remove('error');
+        break;
+      }
+      case 'input_audio_buffer.committed': status('pensando…'); break;
+      case 'conversation.item.input_audio_transcription.delta':
+        if (!window._asr || !document.body.contains(window._asr)) window._asr = log('asr', '🎧 …');
+        window._asr.textContent = '🎧 ' + (window._asrRaw = (window._asrRaw || '') + (m.delta || ''));
+        break;
+      case 'response.created':
+        window._asrRaw = ''; window._asr = null;
+        curText = ''; $('orb').classList.add('speak');
+        status('modelo falando…'); break;
+      case 'response.output_text.delta':
+        if (!window._asst || !document.body.contains(window._asst)) window._asst = log('assistant', '<b>omni:</b> ');
+        curText += (m.delta || ''); window._asst.innerHTML = '<b>omni:</b> ' + curText;
+        $('transcript').scrollTop = 1e9; break;
+      case 'response.output_audio.delta': {
+        const raw = atob(m.delta), buf = new Int16Array(raw.length / 2);
+        for (let i = 0; i < buf.length; i++) buf[i] = raw.charCodeAt(2*i) | (raw.charCodeAt(2*i+1) << 8);
+        playPCM(buf); break;
+      }
+      case 'response.done':
+        $('orb').classList.remove('speak');
+        status('pronto — fale ou digite'); window._asst = null; break;
+      case 'error': status('erro: ' + (m.error?.message || '?')); console.error(m);
+    }
+  };
+  ws.onclose = () => { status('desconectado — reconectando em 2 s'); sessionReady = false; setTimeout(connect, 2000); };
+  ws.onerror = () => status('erro de conexão');
+}
+
+function sendText(t) {
+  if (!sessionReady || !t.trim()) return;
+  log('user', '<b>você:</b> ' + t);
+  ws.send(JSON.stringify({type: 'conversation.item.create',
+    item: {type: 'message', role: 'user', content: [{type: 'input_text', text: t}]}}));
+  ws.send(JSON.stringify({type: 'response.create'}));
+}
+
+// --- áudio: mic → PCM16 mono @inputRate → base64 ---
+async function startMic() {
+  mediaStream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}});
+  audioCtx = new AudioContext({sampleRate: inputRate});
+  const src = audioCtx.createMediaStreamSource(mediaStream);
+  await audioCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([`
+    class Feed extends AudioWorkletProcessor {
+      process(inputs) {
+        const ch = inputs[0][0];
+        if (ch) this.port.postMessage(ch.slice(0));
+        return true;
+      }
+    } registerProcessor('feed', Feed);`], {type: 'application/javascript'})));
+  workletNode = new AudioWorkletNode(audioCtx, 'feed');
+  workletNode.port.onmessage = e => onSamples(e.data);
+  src.connect(workletNode); // sem saída: sem eco
+}
+
+function onSamples(f32) {
+  if (!sessionReady) return;
+  // PCM16
+  const pcm = new Int16Array(f32.length);
+  let energy = 0;
+  for (let i = 0; i < f32.length; i++) { pcm[i] = Math.max(-1, Math.min(1, f32[i])) * 32767; energy += f32[i]*f32[i]; }
+  const rms = Math.sqrt(energy / f32.length);
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(pcm.buffer)));
+  if (talking || ptt) {
+    ws.send(JSON.stringify({type: 'input_audio_buffer.append', audio: b64}));
+    if (ptt) return;
+    // VAD: fala detectada → reseta silêncio; silêncio > 700 ms → commit + responde
+    if (rms > 0.012) { voicedMs += 1000 * f32.length / inputRate; silenceMs = 0; $('orb').classList.add('listen'); }
+    else {
+      silenceMs += 1000 * f32.length / inputRate;
+      if (voicedMs > 200 && silenceMs > 700) {
+        ws.send(JSON.stringify({type: 'input_audio_buffer.commit'}));
+        ws.send(JSON.stringify({type: 'response.create'}));
+        voicedMs = 0; silenceMs = 0; $('orb').classList.remove('listen');
+      } else if (voicedMs === 0 && silenceMs > 2000) {
+        $('orb').classList.remove('listen');
+      }
+    }
+  }
+}
+
+// --- playback do PCM do modelo ---
+function playPCM(int16) {
+  if (!playCtx) playCtx = new AudioContext({sampleRate: outRate});
+  if (playCtx.sampleRate !== outRate) { // resample grosseiro via AudioBuffer (o contexto resample ao dar play)
+    const ab = playCtx.createBuffer(1, int16.length, outRate);
+    const ch = ab.getChannelData(0);
+    for (let i = 0; i < int16.length; i++) ch[i] = int16[i] / 32768;
+    const s = playCtx.createBufferSource(); s.buffer = ab; s.connect(playCtx.destination);
+    s.start(Math.max(playCtx.currentTime, playTime)); playTime = Math.max(playCtx.currentTime, playTime) + ab.duration;
+  } else {
+    const ab = playCtx.createBuffer(1, int16.length, outRate);
+    const ch = ab.getChannelData(0);
+    for (let i = 0; i < int16.length; i++) ch[i] = int16[i] / 32768;
+    const s = playCtx.createBufferSource(); s.buffer = ab; s.connect(playCtx.destination);
+    s.start(Math.max(playCtx.currentTime, playTime)); playTime = Math.max(playCtx.currentTime, playTime) + ab.duration;
+  }
+}
+
+// --- controles ---
+let micOn = false;
+$('orb').onclick = async () => {
+  if (!sessionReady) return;
+  if (!micOn) { await startMic(); micOn = true; talking = true; $('orb').style.filter = 'brightness(1.3)'; status('microfone aberto — fale! (auto-commit em pausas)'); }
+  else { ptt = !ptt; status(ptt ? 'push-to-talk: SEGURE o botão…' : 'VAD auto ativo'); }
+};
+$('orb').onmousedown = () => { if (ptt && sessionReady) { ptt = true; } };
+$('orb').onmouseup = () => { if (ptt && sessionReady) { ws.send(JSON.stringify({type: 'input_audio_buffer.commit'})); ws.send(JSON.stringify({type: 'response.create'})); } };
+$('send').onclick = () => { sendText($('txt').value); $('txt').value = ''; };
+$('txt').onkeydown = e => { if (e.key === 'Enter') { sendText($('txt').value); $('txt').value = ''; } };
+$('clear').onclick = () => { $('transcript').innerHTML = ''; if (sessionReady) ws.send(JSON.stringify({type: 'input_audio_buffer.clear'})); };
+$('rate').onchange = e => { inputRate = +e.target.value; if (micOn) { micOn = false; talking = false; workletNode?.disconnect(); mediaStream?.getTracks().forEach(t => t.stop()); status('taxa alterada — clique no orbe para reabrir o mic'); } };
+
+connect();
+</script>
+</body>
+</html>

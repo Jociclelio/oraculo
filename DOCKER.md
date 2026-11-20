@@ -67,6 +67,12 @@ Interface web para interagir com os modelos. Configurada para conectar ao proxy 
 | `WEBUI_SECRET_KEY` | (gerado) | Chave secreta para persistência de tokens OAuth/MCP |
 | `WEBSEARCH_ENGINE` | `searxng` | Motor de busca web nativo (usa o SearXNG) |
 | `SEARXNG_QUERY_URL` | `http://localhost:8888/search?q=<query>` | Endpoint de busca do SearXNG |
+| `AUDIO_REALTIME_ENABLED` | `true` | Modo LIVE (conversa de voz realtime, 2026-11-20) — botão de call do chat |
+| `AUDIO_REALTIME_OPENAI_API_BASE_URL` | `http://localhost:8081/v1` | Bridge realtime → llama-swap (protocolo OpenAI Realtime; o llama-swap roteia com `?model=` no WS) |
+| `AUDIO_REALTIME_MODEL` / `AUDIO_REALTIME_VOICE` | `LFM3_Omni_2B` / `female` | Modelo omni + voz TTS nativa (`female`/`male` — ver `/props` do modelo) |
+| `AUDIO_REALTIME_OPENAI_API_KEY` / `AUDIO_REALTIME_TRANSCRIPTION_MODEL` | `dummy-oraculo-local` / `LFM3_Omni_2B` | Chave dummy (llama-swap não exige auth) + modelo de transcrição |
+
+> **Modo LIVE (voz)**: o LFM3-Omni-2B **ouve o microfone nativamente** (sem STT) e responde **com texto E fala** pelo endpoint `/v1/realtime` do llama-server (protocolo OpenAI Realtime, PCM base64). Usar: abrir um chat com `LFM3_Omni_2B` selecionado e clicar no botão de **call**; o modelo carrega sozinho se estiver frio (testado). As chaves `audio.realtime.*` vivem no `webui.db` (regra 6) — seedadas uma vez; ajustes posteriores de env NÃO vencem o banco (editar em Admin > Configurações > Áudio ou no DB diretamente). Alternativa standalone: `webui/voice.html` (cliente realtime minimalista, servir por http local).
 
 > **Importante**: `WEBUI_SECRET_KEY` é obrigatório em Docker. Sem ele, ferramentas MCP conectadas via OAuth perdem tokens entre reinicializações.
 

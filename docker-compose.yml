@@ -50,6 +50,20 @@ services:
       - SEARXNG_QUERY_URL=http://localhost:8888/search?q=<query>
       # Conexão pré-configurada com o open-terminal (Admin > Integrations)
       - TERMINAL_SERVER_CONNECTIONS=[{"id":"oraculo-terminal","url":"http://localhost:8000","key":"${OPEN_TERMINAL_API_KEY}","name":"Oraculo Terminal","auth_type":"bearer","config":{"access_grants":[]}}]
+      # =========================================================
+      # Modo LIVE (conversa de voz em tempo real) — botão de call do chat.
+      # Requer o modelo omni CARREGADO (o bridge roteia via llama-swap com
+      # ?model=; dispare um chat antes de ligar a call se estiver frio).
+      # Atenção regra 6: estes valores semeiam o webui.db no 1º boot com
+      # a feature — mudanças posteriores de env NÃO vencem o banco (ajuste
+      # em Admin > Configurações > Áudio, ou limpe as chaves no webui.db).
+      # =========================================================
+      - AUDIO_REALTIME_ENABLED=true
+      - AUDIO_REALTIME_OPENAI_API_BASE_URL=http://localhost:8081/v1
+      - AUDIO_REALTIME_OPENAI_API_KEY=dummy-oraculo-local
+      - AUDIO_REALTIME_MODEL=LFM3_Omni_2B
+      - AUDIO_REALTIME_VOICE=female
+      - AUDIO_REALTIME_TRANSCRIPTION_MODEL=LFM3_Omni_2B
     volumes:
       # Estado do serviço no repo (data/open-webui) — migração dos volumes
       # nomeados (2026-10-14): webui.db visível/backapeável, sem precedência
